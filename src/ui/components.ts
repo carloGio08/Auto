@@ -104,6 +104,7 @@ export function stepper<T>(
 }
 
 /** Slider 0..1 with keyboard/gamepad adjust. */
+/** Slider with keyboard/gamepad adjust. 0..1 ranges show a percentage, others a multiplier. */
 export function slider(
   label: string,
   value: number,
@@ -121,14 +122,12 @@ export function slider(
     'aria-label': label,
     'data-adjust': '',
   }) as HTMLInputElement;
-  const out = h(
-    'span',
-    { class: 'slider-value' },
-    `${Math.round(((value - min) / (max - min)) * 100)}%`,
-  );
+  const format = (v: number): string =>
+    min === 0 && max === 1 ? `${Math.round(v * 100)}%` : `${v.toFixed(2)}×`;
+  const out = h('span', { class: 'slider-value' }, format(value));
   const update = (): void => {
     const v = Number(input.value);
-    out.textContent = `${Math.round(((v - min) / (max - min)) * 100)}%`;
+    out.textContent = format(v);
     onChange(v);
   };
   input.addEventListener('input', update);
