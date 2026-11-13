@@ -2,7 +2,6 @@ import type { GameContext } from '../../core/context';
 import type { ModeId, TimeOfDayId, TrackDef, WeatherId } from '../../data/types';
 import { isTrackUnlocked } from '../../game/progression';
 import type { I18nKey } from '../../i18n/en';
-import { formatTime } from '../../math/util';
 import { h } from '../dom';
 import { button, header, medalBadge, stepper } from '../components';
 import { icon } from '../icons';
@@ -29,7 +28,7 @@ export function createTrackSelect(
     tracks.find((tr) => tr.id === save.lastTrack && isTrackUnlocked(ctx, tr.id)) ?? tracks[0];
   const choice: TrackChoice = {
     trackId: selected.id,
-    mode: 'timeAttack',
+    mode: 'freeDescent',
     time: save.lastTime,
     weather: save.lastWeather,
   };
@@ -37,7 +36,7 @@ export function createTrackSelect(
   const details = h('div', { class: 'track-details' });
   const cards = tracks.map((tr) => {
     const unlocked = isTrackUnlocked(ctx, tr.id);
-    const rec = save.records[`${tr.id}:timeAttack`];
+    const rec = save.records[`${tr.id}:freeDescent`];
     const card = h(
       'button',
       { class: `track-card ${unlocked ? '' : 'locked'}`, type: 'button', 'aria-pressed': 'false' },
@@ -46,11 +45,7 @@ export function createTrackSelect(
       h(
         'span',
         { class: 'track-best' },
-        unlocked
-          ? rec?.bestTime !== null && rec?.bestTime !== undefined
-            ? formatTime(rec.bestTime)
-            : '—'
-          : '',
+        unlocked ? (rec && rec.runs > 0 ? String(rec.bestScore) : '—') : '',
       ),
       unlocked
         ? medalBadge(rec?.medal ?? 'none', '')
@@ -80,13 +75,13 @@ export function createTrackSelect(
       h(
         'div',
         { class: 'medal-times' },
-        h('span', {}, medalBadge('gold', ''), formatTime(m.gold)),
-        h('span', {}, medalBadge('silver', ''), formatTime(m.silver)),
-        h('span', {}, medalBadge('bronze', ''), formatTime(m.bronze)),
+        h('span', {}, medalBadge('gold', ''), String(m.gold)),
+        h('span', {}, medalBadge('silver', ''), String(m.silver)),
+        h('span', {}, medalBadge('bronze', ''), String(m.bronze)),
       ),
       stepper(
         t('tracks.mode'),
-        (['timeAttack', 'freeRide'] as ModeId[]).map((id) => ({
+        (['freeDescent'] as ModeId[]).map((id) => ({
           value: id,
           label: t(`mode.${id}.name` as I18nKey),
         })),

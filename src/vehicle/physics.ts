@@ -19,7 +19,7 @@ export interface DriveInput {
   steer: number;
   handbrake: boolean;
   nitro: boolean;
-  /** Parking brake on all wheels with full grip (countdown, menus). */
+  /** Parking brake on all wheels with full grip (start, menus). */
   hold?: boolean;
 }
 
@@ -108,13 +108,6 @@ export class VehiclePhysics {
   invalid = false;
   /** Total distance travelled (m). */
   odometer = 0;
-  /**
-   * Inputs held at take-off do not act as air control until released and pressed again:
-   * holding the throttle over a jump must not nose-dive the car.
-   */
-  private latchThrottle = false;
-  private latchBrake = false;
-  private wasGrounded = true;
   /** Seed for per-surface micro bumps. */
   private bumpPhase = 0;
 
@@ -338,10 +331,8 @@ export class VehiclePhysics {
       if (!w.contact) {
         w.load = 0;
         w.skid = Math.max(0, w.skid - dt * 5);
-        // Free wheel: spin decays, driven wheels spin up with throttle.
-        w.spinRate = w.driven
-          ? lerp(w.spinRate, input.throttle * 60, dt * 2)
-          : w.spinRate * (1 - dt * 0.5);
+        // Free wheel: keeps spinning by inertia, slowly decaying (no input in the air).
+        w.spinRate *= 1 - dt * 0.35;
         w.spin += w.spinRate * dt;
         continue;
       }
@@ -484,7 +475,7 @@ export class VehiclePhysics {
       dt * 6,
     );
 
-    // --- Drift assist & air control ----------------------------------------------------------
+    // --- Drift assist (ground only) ----------------------------------------------------------
     if (grounded && input.handbrake && speed > 6 && !input.hold) {
       angAccAir.addScaledVector(up, -input.steer * drv.handbrakeYaw);
     }
@@ -502,47 +493,13 @@ export class VehiclePhysics {
           angAccAir.addScaledVector(up, -Math.sign(yawRate) * (Math.abs(yawRate) - 2.2) * 6);
       }
     }
-    if (!grounded) {
-      if (this.wasGrounded) {
-        this.latchThrottle = input.throttle > 0.1;
-        this.latchBrake = input.brake > 0.1;
-      }
-      if (input.throttle < 0.1) this.latchThrottle = false;
-      if (input.brake < 0.1) this.latchBrake = false;
-      if (!this.chassisContact) this.airTime += dt;
-      else this.airTime = 0;
-      const ac = def.airControl;
-      const pitchIn =
-        (this.latchThrottle ? 0 : input.throttle) - (this.latchBrake ? 0 : input.brake);
-      const rollIn = input.handbrake ? 0 : input.steer;
-      const yawIn = input.handbrake ? -input.steer : 0;
-      angAccAir.addScaledVector(left, pitchIn * drv.airPitchAccel * ac);
-      angAccAir.addScaledVector(fwd, rollIn * drv.airRollAccel * ac);
-      angAccAir.addScaledVector(up, yawIn * drv.airYawAccel * ac * 2);
-      if (Math.abs(pitchIn) < 0.1 && Math.abs(rollIn) < 0.1) {
-        // Soft self-righting: rotate "up" towards world up, damp the spin.
-        tmpA.crossVectors(up, worldUp);
-        angAccAir.addScaledVector(tmpA, drv.airSelfRight * 2);
-        angAccAir.addScaledVector(this.angularVelocity, -0.8);
-      }
-    } else {
-      this.airTime = 0;
-    }
-    this.wasGrounded = grounded;
+    // In the air there is no player control at all: rotation comes only from physics.
+    if (!grounded && !this.chassisContact) this.airTime += dt;
+    else this.airTime = 0;
 
-    // Upside down on the ground → flip back after a delay.
-    if (up.y < 0.25 && speed < 6) {
-      this.upsideDownTime += dt;
-      if (this.upsideDownTime > drv.flipBackDelay) {
-        tmpA.crossVectors(up, worldUp).normalize();
-        if (tmpA.lengthSq() < 0.5) tmpA.copy(fwd);
-        this.angularVelocity.copy(tmpA).multiplyScalar(4.5);
-        this.velocity.y = Math.max(this.velocity.y, 5);
-        this.upsideDownTime = 0;
-      }
-    } else {
-      this.upsideDownTime = Math.max(0, this.upsideDownTime - dt);
-    }
+    // Upside-down timer (the session resets the car after a few seconds, see config).
+    if (up.y < 0.25 && speed < 2) this.upsideDownTime += dt;
+    else this.upsideDownTime = 0;
 
     // --- Water ---------------------------------------------------------------------------------
     const water = world.waterLevel(this.position.x, this.position.z);

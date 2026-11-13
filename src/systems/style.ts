@@ -27,14 +27,7 @@ export class StyleSystem extends BaseSystem {
       if (airTime < g.minAirTime) return;
       const big = airTime > 1.5;
       this.trick(big ? 'trick.bigAir' : 'trick.air', Math.round(airTime * 160 + distance * 4));
-      if (perfect) {
-        this.trick('trick.perfectLanding', 250);
-        if (airTime > g.slowMoMinAirTime)
-          this.session.events.emit('fx:slowmo', {
-            duration: g.slowMoDuration,
-            scale: g.slowMoScale,
-          });
-      }
+      if (perfect) this.trick('trick.perfectLanding', 250);
     });
     this.onEvent('vehicle:flip', ({ kind, count }) => {
       const key: I18nKey =
@@ -53,7 +46,6 @@ export class StyleSystem extends BaseSystem {
     this.onEvent('vehicle:crash', () => this.lose());
     this.onEvent('run:reset', () => this.lose());
     this.onEvent('run:finish', () => this.bank());
-    this.onEvent('run:timeout', () => this.bank());
   }
 
   private trick(label: I18nKey, points: number, suffix = ''): void {

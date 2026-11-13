@@ -42,12 +42,6 @@ describe.each([...tracks, ...dailies].map((t) => [t.id, t] as const))(
       expect(steep).toBe(0);
     });
 
-    it('has checkpoints in order before the finish', () => {
-      const cps = course.checkpoints;
-      for (let i = 1; i < cps.length; i++) expect(cps[i]).toBeGreaterThan(cps[i - 1]);
-      expect(cps[cps.length - 1]).toBeLessThan(course.finishS);
-    });
-
     it('answers nearest-segment queries like a brute-force search', () => {
       const q = createRoadQuery();
       for (let k = 0; k < 300; k++) {

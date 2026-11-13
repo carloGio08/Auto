@@ -46,7 +46,6 @@ export const pineRidge: TrackDef = {
     { from: 0.22, to: 0.33, surface: 'grass', kickers: 1 },
     { from: 0.72, to: 0.83, surface: 'gravel', kickers: 2 },
   ],
-  checkpoints: [0.2, 0.4, 0.6, 0.8],
   hazards: [
     { kind: 'log', at: 0.31, offset: 2 },
     { kind: 'mudPool', at: 0.5 },
@@ -56,7 +55,5 @@ export const pineRidge: TrackDef = {
   props: { trees: 1, rocks: 0.6, bushes: 1 },
   defaultTime: 'day',
   defaultWeather: 'clear',
-  startTime: 35,
-  checkpointBonus: 18,
-  medals: { gold: 68, silver: 78, bronze: 92 },
+  medals: { gold: 12000, silver: 7000, bronze: 3000 },
 };

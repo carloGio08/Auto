@@ -48,14 +48,6 @@ export const config = {
     gripScale: 1.0,
     /** Rolling resistance coefficient. */
     rollingResistance: 0.012,
-    /** Airborne control torques (normalised by inertia, rad/s²). */
-    airPitchAccel: 7,
-    airRollAccel: 6,
-    airYawAccel: 2.5,
-    /** Soft self-righting while airborne without input (rad/s² per rad). */
-    airSelfRight: 1.8,
-    /** Seconds upside down on the ground before the car flips back automatically. */
-    flipBackDelay: 1.1,
     /** Reverse engages when braking below this speed (m/s). */
     reverseThreshold: 1.2,
   },
@@ -91,10 +83,6 @@ export const config = {
     nearMissMinSpeed: 16,
     /** Impact speed (m/s) above which a collision is a crash (combo lost, shake). */
     crashImpactSpeed: 9,
-    /** Slow motion after big jumps. */
-    slowMoScale: 0.35,
-    slowMoDuration: 0.55,
-    slowMoMinAirTime: 1.4,
     /** Landing counts as perfect when the car is within this angle of the ground normal. */
     perfectLandingAngle: 0.3,
     /** Nitro tank (seconds of boost) and refill rates. */
@@ -111,12 +99,18 @@ export const config = {
     coinsPerThousandScore: 12,
     coinValue: 5,
     crystalScore: 250,
-    /** Countdown before the start (seconds). */
-    countdown: 3,
-    /** Seconds after which the reset button respawns at the last checkpoint. */
+    /** Minimum seconds between two resets. */
     resetCooldown: 0.6,
-    /** Time penalty for a manual reset in time attack (seconds). */
-    resetPenalty: 2,
+    /** Safe respawn spots: sampling interval (s), history length, stability limits. */
+    safeSpot: {
+      interval: 2,
+      history: 6,
+      maxSpeed: 30,
+      minUp: 0.85,
+      minGroundNormalY: 0.82,
+    },
+    /** Automatic reset: upside-down and stopped (s), deep water (s), lost off the map (s). */
+    autoReset: { upsideDown: 4, water: 1.5, offMap: 0.5 },
   },
 
   world: {
@@ -197,9 +191,7 @@ export const config = {
 
   /** Feature flags: toggle whole features without touching code. */
   features: {
-    ghost: true,
     dynamicResolution: true,
-    slowMotion: true,
     speedLines: true,
     music: true,
     tilt: true,

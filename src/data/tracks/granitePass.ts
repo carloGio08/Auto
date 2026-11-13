@@ -52,7 +52,6 @@ export const granitePass: TrackDef = {
     { from: 0.45, to: 0.56, surface: 'rock', kickers: 2 },
     { from: 0.8, to: 0.9, surface: 'mud', kickers: 1 },
   ],
-  checkpoints: [0.17, 0.34, 0.5, 0.67, 0.84],
   hazards: [
     { kind: 'icePatch', at: 0.08 },
     { kind: 'rockslide', at: 0.36 },
@@ -64,8 +63,6 @@ export const granitePass: TrackDef = {
   props: { trees: 0.7, rocks: 1, bushes: 0.6 },
   defaultTime: 'sunset',
   defaultWeather: 'clear',
-  startTime: 34,
-  checkpointBonus: 18,
-  medals: { gold: 90, silver: 102, bronze: 116 },
+  medals: { gold: 12000, silver: 7000, bronze: 3000 },
   unlockAfter: 'pine_ridge',
 };

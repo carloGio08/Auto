@@ -23,41 +23,38 @@ export function checkAchievements(ctx: GameContext): AchievementDef[] {
   return unlocked;
 }
 
-/** Applies the result of a finished (or timed-out) run to the save file. */
+/** Applies the result of a descent to the save file (score based, no times). */
 export function finalizeRun(ctx: GameContext, session: RunSession): RunSummary {
   const save = ctx.save.data;
   const { cfg } = session;
   const finished = session.phase === 'finished';
   const record = ctx.save.record(cfg.track.id, cfg.mode.id);
-  const previousBest = record.bestTime;
+  const previousBest = record.runs > 0 ? record.bestScore : null;
   record.runs++;
   let newRecord = false;
   if (finished && cfg.mode.recordsEnabled) {
-    if (record.bestTime === null || session.time < record.bestTime) {
-      record.bestTime = session.time;
-      newRecord = true;
+    if (session.score > record.bestScore) {
+      record.bestScore = session.score;
+      newRecord = previousBest !== null;
     }
-    if (session.score > record.bestScore) record.bestScore = session.score;
     if (MEDAL_RANK[session.medal] > MEDAL_RANK[record.medal]) {
       if (session.medal === 'gold') save.stats.goldMedals++;
       record.medal = session.medal;
     }
     if (cfg.mode.id === 'daily') {
       const key = todayKey();
-      if (save.daily.date !== key) save.daily = { date: key, bestTime: null, medal: 'none' };
-      if (save.daily.bestTime === null || session.time < save.daily.bestTime)
-        save.daily.bestTime = session.time;
+      if (save.daily.date !== key) save.daily = { date: key, bestScore: 0, medal: 'none' };
+      save.daily.bestScore = Math.max(save.daily.bestScore, session.score);
       if (MEDAL_RANK[session.medal] > MEDAL_RANK[save.daily.medal])
         save.daily.medal = session.medal;
     }
   }
-  // Coins: collected coins + style score bonus + medal bonus (half if not finished).
+  // Coins: collected coins + style score bonus + medal bonus.
   const medalBonus = { none: 0, bronze: 100, silver: 200, gold: 350 }[session.medal];
-  let coins =
+  const coins =
     session.coins +
     Math.floor((session.score / 1000) * config.gameplay.coinsPerThousandScore) +
     medalBonus;
-  if (!finished) coins = Math.floor(coins * 0.5);
   save.coins += coins;
   save.stats.totalCoins += coins;
   if (finished) save.stats.runsFinished++;
@@ -67,7 +64,6 @@ export function finalizeRun(ctx: GameContext, session: RunSession): RunSummary {
   const extra = session.systems.flatMap((s) => s.summary?.() ?? []);
   return {
     finished,
-    time: session.time,
     score: session.score,
     medal: session.medal,
     coinsEarned: coins,
@@ -76,6 +72,7 @@ export function finalizeRun(ctx: GameContext, session: RunSession): RunSummary {
     previousBest,
     topSpeed: session.vehicle.telemetry.topSpeed,
     bestAir: session.vehicle.telemetry.bestAir,
+    stats: { ...session.stats, distance: session.vehicle.physics.odometer },
     extra,
   };
 }
@@ -84,6 +81,6 @@ export function finalizeRun(ctx: GameContext, session: RunSession): RunSummary {
 export function isTrackUnlocked(ctx: GameContext, trackId: string): boolean {
   const track = ctx.registries.tracks.get(trackId);
   if (!track.unlockAfter) return true;
-  const rec = ctx.save.data.records[`${track.unlockAfter}:timeAttack`];
-  return !!rec && MEDAL_RANK[rec.medal] >= 1;
+  const rec = ctx.save.data.records[`${track.unlockAfter}:freeDescent`];
+  return !!rec && rec.runs > 0 && rec.bestScore > 0;
 }

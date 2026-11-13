@@ -29,7 +29,7 @@ export interface SaveData {
   lastTrack: string;
   lastTime: TimeOfDayId | 'default';
   lastWeather: WeatherId | 'default';
-  daily: { date: string; bestTime: number | null; medal: MedalId };
+  daily: { date: string; bestScore: number; medal: MedalId };
   /** True once the player has seen the controls tutorial overlay. */
   seenTutorial: boolean;
 }
@@ -64,7 +64,7 @@ export function defaultSave(): SaveData {
     lastTrack: 'pine_ridge',
     lastTime: 'default',
     lastWeather: 'default',
-    daily: { date: '', bestTime: null, medal: 'none' },
+    daily: { date: '', bestScore: 0, medal: 'none' },
     seenTutorial: false,
   };
 }
@@ -108,7 +108,7 @@ export const migrations: Record<number, (old: AnySave) => AnySave> = {
     schemaVersion: 3,
     stats: { ...defaultStats(), ...((old.stats as object) ?? {}) },
     carColors: old.carColors ?? {},
-    daily: { date: '', bestTime: null, medal: 'none' },
+    daily: { date: '', bestScore: 0, medal: 'none' },
     seenTutorial: false,
   }),
 };

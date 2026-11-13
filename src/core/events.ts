@@ -6,11 +6,9 @@ import type { SurfaceId } from '../data/types';
  */
 export interface GameEvents {
   // Run lifecycle
-  'run:countdown': { value: number };
   'run:start': { trackId: string; modeId: string };
-  'run:finish': { time: number; score: number };
-  'run:timeout': { distance: number };
-  'run:reset': { toCheckpoint: number; manual: boolean };
+  'run:finish': { score: number };
+  'run:reset': { manual: boolean };
   // Vehicle telemetry
   'vehicle:airborne': { speed: number };
   'vehicle:landed': { airTime: number; impact: number; perfect: boolean; distance: number };
@@ -21,7 +19,6 @@ export interface GameEvents {
   'vehicle:splash': { speed: number };
   'vehicle:surface': { surface: SurfaceId };
   // Gameplay
-  'checkpoint:passed': { index: number; total: number; bonus: number; split: number };
   'collectible:picked': { kind: 'coin' | 'crystal'; value: number };
   'nitro:changed': { amount: number; active: boolean };
   'nitro:fill': { amount: number; reason: string };
@@ -34,7 +31,6 @@ export interface GameEvents {
   'achievement:unlocked': { id: string };
   // Presentation
   'ui:toast': { text: string; tone?: 'good' | 'bad' | 'info' | 'gold' };
-  'fx:slowmo': { duration: number; scale: number };
   'fx:shake': { amount: number };
   'fx:flash': { color: string; strength: number };
   haptic: { pattern: number | number[] };

@@ -56,17 +56,11 @@ describe('content registries', () => {
     (_id, t) => {
       expect(hasKey(t.nameKey)).toBe(true);
       expect(hasKey(t.descriptionKey)).toBe(true);
-      expect(t.medals.gold).toBeLessThan(t.medals.silver);
-      expect(t.medals.silver).toBeLessThan(t.medals.bronze);
-      // The time budget must allow a bronze run.
-      expect(t.startTime + t.checkpointBonus * t.checkpoints.length).toBeGreaterThan(
-        t.medals.bronze,
-      );
+      expect(t.medals.gold).toBeGreaterThan(t.medals.silver);
+      expect(t.medals.silver).toBeGreaterThan(t.medals.bronze);
       expect(t.surfaces.every((z) => z.surface in surfaces && z.from < z.to)).toBe(true);
       expect(
-        [...t.checkpoints, ...t.jumps.map((j) => j.at), ...t.hazards.map((h) => h.at)].every(
-          (f) => f >= 0 && f <= 1,
-        ),
+        [...t.jumps.map((j) => j.at), ...t.hazards.map((h) => h.at)].every((f) => f >= 0 && f <= 1),
       ).toBe(true);
       if (t.unlockAfter) expect(reg.tracks.has(t.unlockAfter)).toBe(true);
     },

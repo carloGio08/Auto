@@ -57,6 +57,7 @@ export const icons: Record<string, string> = {
   drift2: svg(
     '<path d="M4 18c3-6 6-9 10-9h6" stroke-width="2.5"/><path d="M16 5l4 4-4 4" stroke-width="2.5"/>',
   ),
+  arrowUp: svg('<path d="M12 3l7 9h-4.5v9h-5v-9H5z" fill="currentColor" stroke="none"/>'),
   check: svg('<path d="M4 12l5 5L20 6"/>'),
   car: svg(
     '<path d="M3 13l2-5h14l2 5v5H3z"/><circle cx="7.5" cy="18" r="2" fill="currentColor"/><circle cx="16.5" cy="18" r="2" fill="currentColor"/><path d="M3 13h18"/>',

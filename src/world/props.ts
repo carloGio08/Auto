@@ -344,7 +344,7 @@ export class Props {
       course.road.pointAt(course.archS, pt);
       out.push([pt.x, pt.z, 16]);
     }
-    for (const s of [course.startS, course.finishS, ...course.checkpoints]) {
+    for (const s of [course.startS, course.finishS]) {
       course.road.pointAt(s, pt);
       out.push([pt.x, pt.z, 12]);
     }

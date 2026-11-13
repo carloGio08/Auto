@@ -1,26 +1,23 @@
 import type { GameContext } from '../core/context';
 import type { RunSession } from '../game/session';
-import { formatTime } from '../math/util';
 import { h, setText } from './dom';
 import { icon } from './icons';
 
 /**
- * In-race DOM HUD: time, speed, nitro, combo, altitude/progress bar, trick popups and
- * on-screen touch controls. Only cheap property writes happen per frame.
+ * In-run DOM HUD: speed, altitude, compass towards the base, descent bar, nitro, combo,
+ * trick popups and on-screen touch controls. No timer. Only cheap writes per frame.
  */
 export class Hud {
   readonly el: HTMLElement;
-  private readonly time: HTMLElement;
-  private readonly timeLabel: HTMLElement;
-  private readonly split: HTMLElement;
-  private readonly cp: HTMLElement;
+  private readonly altitude: HTMLElement;
+  private readonly baseDistance: HTMLElement;
+  private readonly compassArrow: HTMLElement;
   private readonly speed: HTMLElement;
   private readonly nitroFill: HTMLElement;
   private readonly nitroWrap: HTMLElement;
   private readonly combo: HTMLElement;
   private readonly comboMult: HTMLElement;
   private readonly comboPts: HTMLElement;
-  private readonly comboTimer: HTMLElement;
   private readonly score: HTMLElement;
   private readonly coins: HTMLElement;
   private readonly crystals: HTMLElement;
@@ -35,6 +32,8 @@ export class Hud {
   private nitroActive = false;
   private comboShown = 0;
   private hintTimer = 7;
+  private lastAltitude = -1;
+  private lastDistance = -1;
 
   constructor(
     private readonly ctx: GameContext,
@@ -42,11 +41,15 @@ export class Hud {
     onPause: () => void,
   ) {
     const t = ctx.i18n.t;
-    const timed = session.cfg.mode.timed;
-    this.time = h('div', { class: 'hud-time' }, '0:00.00');
-    this.timeLabel = h('div', { class: 'hud-label' }, timed ? t('hud.time') : t('hud.freeRide'));
-    this.split = h('div', { class: 'hud-split' });
-    this.cp = h('div', { class: 'hud-cp' });
+    this.altitude = h('div', { class: 'hud-alt' }, '0 m');
+    this.baseDistance = h('div', { class: 'hud-base-dist' });
+    this.compassArrow = h('div', { class: 'compass-arrow', html: icon('arrowUp') });
+    const compass = h(
+      'div',
+      { class: 'hud-compass', title: t('hud.toBase') },
+      h('div', { class: 'compass-ring' }),
+      this.compassArrow,
+    );
     this.speed = h('div', { class: 'hud-speed-value' }, '0');
     this.nitroFill = h('div', { class: 'hud-nitro-fill' });
     this.nitroWrap = h(
@@ -57,25 +60,18 @@ export class Hud {
     );
     this.comboMult = h('div', { class: 'combo-mult' });
     this.comboPts = h('div', { class: 'combo-pts' });
-    this.comboTimer = h('div', { class: 'combo-timer' });
-    this.combo = h('div', { class: 'hud-combo' }, this.comboMult, this.comboPts, this.comboTimer);
+    this.combo = h('div', { class: 'hud-combo' }, this.comboMult, this.comboPts);
     this.score = h('div', { class: 'hud-score' }, '0');
     this.coins = h('span', {}, '0');
     this.crystals = h('span', {}, '0');
     this.marker = h('div', { class: 'alt-marker', html: icon('car') });
     const bar = h(
       'div',
-      { class: 'alt-bar' },
+      { class: 'alt-bar', title: t('hud.descent') },
       h('div', { class: 'alt-top' }),
       h('div', { class: 'alt-track' }),
-      h('div', { class: 'alt-lake' }),
       this.marker,
     );
-    const L = session.course.finishS - session.course.startS;
-    for (const s of session.course.checkpoints) {
-      const f = (s - session.course.startS) / L;
-      bar.append(h('div', { class: 'alt-cp', style: `top:${(f * 100).toFixed(1)}%` }));
-    }
     this.center = h('div', { class: 'hud-center' });
     this.tricks = h('div', { class: 'hud-tricks' });
     const pauseBtn = h('button', {
@@ -94,7 +90,18 @@ export class Hud {
     this.el = h(
       'div',
       { class: `hud ${touchMode ? 'is-touch' : ''}` },
-      h('div', { class: 'hud-tl' }, this.timeLabel, this.time, this.split, this.cp),
+      h(
+        'div',
+        { class: 'hud-tl' },
+        compass,
+        h(
+          'div',
+          {},
+          h('div', { class: 'hud-label' }, t('hud.altitude')),
+          this.altitude,
+          this.baseDistance,
+        ),
+      ),
       h('div', { class: 'hud-tc' }, this.combo, this.tricks),
       h(
         'div',
@@ -175,19 +182,9 @@ export class Hud {
     const ev = this.session.events;
     const t = this.ctx.i18n.t;
     this.offs.push(
-      ev.on('run:countdown', ({ value }) =>
-        this.flashCenter(value > 0 ? String(value) : t('hud.go'), value > 0 ? 'count' : 'go', 0.9),
-      ),
-      ev.on('checkpoint:passed', ({ index, total, bonus, split }) => {
-        this.flashCenter(
-          bonus > 0 ? t('hud.checkpoint', { bonus }) : `${index + 1}/${total}`,
-          'good',
-          1.4,
-        );
-        setText(this.split, t('hud.split', { time: formatTime(split) }));
-      }),
+      ev.on('run:start', () => this.flashCenter(t('hud.go'), 'go', 1.4)),
       ev.on('run:finish', () => this.flashCenter(t('hud.finish'), 'gold', 3)),
-      ev.on('run:timeout', () => this.flashCenter(t('hud.timeout'), 'bad', 3)),
+      ev.on('run:reset', () => this.ctx.ui.toast(t('toast.reset'), 'info', 1200)),
       ev.on('style:trick', ({ label, points }) => this.popTrick(label, points)),
       ev.on('style:combo', ({ multiplier, pending }) => {
         this.comboShown = multiplier;
@@ -243,22 +240,39 @@ export class Hud {
 
   update(dt: number): void {
     const s = this.session;
-    const timed = s.cfg.mode.timed;
-    const shown = timed ? (s.phase === 'countdown' ? s.timeLeft : s.timeLeft) : s.time;
-    setText(this.time, formatTime(shown));
-    this.time.classList.toggle('low', timed && s.timeLeft < 10 && s.phase === 'running');
-    const cps = s.course.checkpoints.length;
-    let passed = 0;
-    for (const c of s.course.checkpoints) if (s.progressS >= c) passed++;
-    setText(this.cp, cps ? `CP ${passed}/${cps}` : '');
-    setText(this.speed, String(Math.round(s.vehicle.physics.speed * 3.6)));
+    const ph = s.vehicle.physics;
+    const p = s.vehicle.renderPosition;
+    const alt = Math.round(p.y);
+    if (alt !== this.lastAltitude) {
+      this.lastAltitude = alt;
+      setText(this.altitude, `${alt} m`);
+    }
+    // Compass: angle of the base relative to the camera's view direction.
+    const base = s.base;
+    const dx = base.x - p.x;
+    const dz = base.z - p.z;
+    const cam = s.camera.camera;
+    const camYaw = Math.atan2(-cam.matrixWorld.elements[8], -cam.matrixWorld.elements[10]);
+    const rel = Math.atan2(dx, dz) - camYaw;
+    this.compassArrow.style.transform = `rotate(${(-rel * 180) / Math.PI}deg)`;
+    const dist = Math.round(Math.hypot(dx, dz) / 100) / 10;
+    if (dist !== this.lastDistance) {
+      this.lastDistance = dist;
+      setText(this.baseDistance, this.ctx.i18n.t('hud.baseDistance', { km: dist.toFixed(1) }));
+    }
+    setText(this.speed, String(Math.round(ph.speed * 3.6)));
     setText(this.score, String(s.score));
     setText(this.coins, String(s.coins));
     setText(this.crystals, String(s.crystals));
     this.nitroFill.style.transform = `scaleX(${this.nitro.toFixed(3)})`;
     this.nitroWrap.classList.toggle('active', this.nitroActive);
     this.nitroWrap.classList.toggle('full', this.nitro > 0.99);
-    this.marker.style.top = `${(s.progress * 100).toFixed(2)}%`;
+    // Descent bar: summit at the top, base at the bottom.
+    const f = Math.min(
+      1,
+      Math.max(0, (s.summitAltitude - p.y) / Math.max(1, s.summitAltitude - base.y)),
+    );
+    this.marker.style.top = `${(f * 100).toFixed(2)}%`;
     if (this.centerTimer > 0) {
       this.centerTimer -= this.ctx.loop.realDt;
       if (this.centerTimer <= 0) this.center.classList.remove('show');

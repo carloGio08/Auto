@@ -4,7 +4,6 @@ import { StateMachine, type GameState } from '../src/core/stateMachine';
 import { GameLoop } from '../src/core/loop';
 import { I18n, detectLanguage } from '../src/core/i18n';
 import { medalFor } from '../src/systems/medals';
-import { formatTime } from '../src/math/util';
 
 describe('event bus', () => {
   it('delivers, unsubscribes and supports once', () => {
@@ -79,16 +78,11 @@ describe('i18n', () => {
 });
 
 describe('helpers', () => {
-  it('awards medals by time', () => {
-    const m = { gold: 60, silver: 70, bronze: 80 };
-    expect(medalFor(59, m)).toBe('gold');
-    expect(medalFor(65, m)).toBe('silver');
-    expect(medalFor(80, m)).toBe('bronze');
-    expect(medalFor(81, m)).toBe('none');
-  });
-
-  it('formats times', () => {
-    expect(formatTime(83.456)).toBe('1:23.45');
-    expect(formatTime(NaN)).toBe('--:--.--');
+  it('awards medals by score', () => {
+    const m = { gold: 9000, silver: 5000, bronze: 2000 };
+    expect(medalFor(9500, m)).toBe('gold');
+    expect(medalFor(6000, m)).toBe('silver');
+    expect(medalFor(2000, m)).toBe('bronze');
+    expect(medalFor(1999, m)).toBe('none');
   });
 });

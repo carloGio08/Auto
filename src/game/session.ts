@@ -27,11 +27,10 @@ export interface RunConfig {
   weather: WeatherId;
 }
 
-export type RunPhase = 'countdown' | 'running' | 'finished' | 'timeout';
+export type RunPhase = 'running' | 'finished';
 
 export interface RunSummary {
   finished: boolean;
-  time: number;
   score: number;
   medal: MedalId;
   coinsEarned: number;
@@ -40,10 +39,34 @@ export interface RunSummary {
   previousBest: number | null;
   topSpeed: number;
   bestAir: number;
+  stats: DescentStats;
   extra: { label: string; value: string }[];
 }
 
+/** Numbers shown on the results screen (no times). */
+export interface DescentStats {
+  /** Metres driven. */
+  distance: number;
+  /** Altitude difference between the start and the lowest point reached. */
+  altitudeDrop: number;
+  treesBroken: number;
+  longestDrift: number;
+  longestJump: number;
+}
+
+/** A position where the car was stable, used for resets. */
+export interface SafeSpot {
+  x: number;
+  y: number;
+  z: number;
+  heading: number;
+}
+
 const tmpV = new Vector3();
+const tmpN = new Vector3();
+const fwd = new Vector3();
+const up = new Vector3();
+const left = new Vector3();
 
 /**
  * Everything that exists for one run on one track: world, vehicle, camera, effects, audio
@@ -60,23 +83,28 @@ export class RunSession {
   readonly audio: AudioDirector;
   systems: GameSystem[] = [];
 
-  phase: RunPhase = 'countdown';
-  countdown = config.gameplay.countdown;
-  /** Elapsed racing time (s). */
+  phase: RunPhase = 'running';
+  /** Elapsed simulation time (s); internal only, never shown as a timer. */
   time = 0;
-  /** Remaining time in timed modes (s). */
-  timeLeft: number;
   score = 0;
   coins = 0;
   crystals = 0;
-  /** Furthest distance reached along the road (m) and the respawn point. */
+  /** Furthest distance reached along the main trail (m), for the descent bar. */
   progressS: number;
-  respawnS: number;
+  /** Recent safe spots, newest last. Resets go back through them. */
+  readonly safeSpots: SafeSpot[] = [];
   finishTimer = 0;
   summary: RunSummary | null = null;
+  readonly stats: DescentStats = {
+    distance: 0,
+    altitudeDrop: 0,
+    treesBroken: 0,
+    longestDrift: 0,
+    longestJump: 0,
+  };
   /** Set by the medals system on finish. */
   medal: MedalId = 'none';
-  /** Drive input actually applied (after countdown/finish overrides). */
+  /** Drive input actually applied (after finish overrides). */
   readonly input: DriveState & { hold: boolean } = {
     throttle: 0,
     brake: 0,
@@ -88,10 +116,13 @@ export class RunSession {
   /** When set, an autopilot drives the car (e2e tests, `?autopilot`). */
   autopilot: Autopilot | null = null;
   private readonly q = createRoadQuery();
-  private offRoadTime = 0;
-  private slowMoLeft = 0;
+  private safeTimer = 0;
+  private waterTime = 0;
+  private offMapTime = 0;
   private resetCooldown = 0;
-  private lastCountdownValue = -1;
+  /** Consecutive manual resets in a short time walk further back through the history. */
+  private lastResetAt = -99;
+  private resetDepth = 0;
   private readonly offs: (() => void)[] = [];
 
   private constructor(
@@ -114,10 +145,8 @@ export class RunSession {
     this.camera.mode = save.settings.camera;
     this.effects = new Effects(this, ctx.renderer.preset);
     this.audio = new AudioDirector(ctx.audio, this.events);
-    this.timeLeft = cfg.mode.timed ? cfg.track.startTime : Infinity;
     this.progressS = course.startS;
-    this.respawnS = course.startS;
-    this.placeCar(course.startS);
+    this.placeAtStart();
     this.createSystems();
     this.offs.push(
       this.events.on('style:comboBanked', ({ points }) => (this.score += points)),
@@ -125,10 +154,11 @@ export class RunSession {
         if (kind === 'coin') this.coins += value;
         else this.crystals++;
       }),
-      this.events.on('fx:slowmo', ({ duration, scale }) => {
-        if (!config.features.slowMotion) return;
-        this.slowMoLeft = duration;
-        this.ctx.loop.timeScale = scale;
+      this.events.on('vehicle:drift', ({ duration }) => {
+        this.stats.longestDrift = Math.max(this.stats.longestDrift, duration);
+      }),
+      this.events.on('vehicle:landed', ({ distance }) => {
+        this.stats.longestJump = Math.max(this.stats.longestJump, distance);
       }),
       this.events.on('fx:shake', ({ amount }) => this.camera.addShake(amount)),
       this.events.on('vehicle:crash', ({ impact }) =>
@@ -157,28 +187,43 @@ export class RunSession {
 
   private createSystems(): void {
     for (const id of this.cfg.mode.systems) {
-      if (id === 'ghost' && !config.features.ghost) continue;
       const sys = createSystem(id);
       sys.init(this);
       this.systems.push(sys);
     }
   }
 
-  /** Puts the car at rest on the road at distance s. */
-  private placeCar(s: number): void {
-    const p = this.course.road.pointAt(s, createRoadPoint());
-    const g = this.course.terrain.sample(p.x, p.z, p.y + 3, createGroundSample());
-    this.vehicle.physics.reset(p.x, g.height + 0.75, p.z, Math.atan2(p.tx, p.tz), g.normal);
+  /** Puts the car at rest at the start of the main trail. */
+  private placeAtStart(): void {
+    const p = this.course.road.pointAt(this.course.startS, createRoadPoint());
+    this.place({ x: p.x, y: p.y, z: p.z, heading: Math.atan2(p.tx, p.tz) }, true);
+    this.safeSpots.length = 0;
+    this.safeSpots.push({ x: p.x, y: p.y, z: p.z, heading: Math.atan2(p.tx, p.tz) });
+  }
+
+  private place(spot: SafeSpot, snapCamera: boolean): void {
+    const g = this.course.terrain.sample(spot.x, spot.z, spot.y + 3, createGroundSample());
+    this.vehicle.physics.reset(spot.x, g.height + 0.9, spot.z, spot.heading, g.normal);
     this.vehicle.telemetry.reset();
     this.vehicle.sync(1, this.course.terrain, 0, false);
-    this.camera.snap(this.vehicle, this.course.terrain);
+    if (snapCamera) this.camera.snap(this.vehicle, this.course.terrain);
   }
 
   get length(): number {
     return this.course.finishS - this.course.startS;
   }
 
-  /** 0..1 progress for the altitude bar. */
+  /** Centre of the arrival zone at the base (compass target). */
+  get base(): { x: number; y: number; z: number } {
+    return this.course.base;
+  }
+
+  /** Altitude of the start (top of the descent bar). */
+  get summitAltitude(): number {
+    return this.course.startAltitude;
+  }
+
+  /** 0..1 progress along the main trail. */
   get progress(): number {
     return Math.min(1, Math.max(0, (this.progressS - this.course.startS) / this.length));
   }
@@ -187,16 +232,51 @@ export class RunSession {
     this.audio.startEngine(this.vehicle);
   }
 
-  /** Respawn at the last checkpoint. */
+  /**
+   * Puts the car back on the last safe spot, facing downhill. Pressing reset again shortly
+   * after walks further back through the history (escape from bad spots).
+   */
   respawn(manual: boolean): void {
-    if (this.resetCooldown > 0 || this.phase === 'finished' || this.phase === 'timeout') return;
+    if (this.resetCooldown > 0 || this.phase === 'finished') return;
     this.resetCooldown = config.gameplay.resetCooldown;
-    this.placeCar(this.respawnS);
-    this.offRoadTime = 0;
-    if (manual && this.cfg.mode.timed && this.phase === 'running')
-      this.timeLeft = Math.max(0.5, this.timeLeft - config.gameplay.resetPenalty);
-    this.events.emit('run:reset', { toCheckpoint: this.respawnS, manual });
+    if (this.time - this.lastResetAt < 6) this.resetDepth++;
+    else this.resetDepth = 0;
+    this.lastResetAt = this.time;
+    const n = this.safeSpots.length;
+    const spot = this.safeSpots[Math.max(0, n - 1 - this.resetDepth)];
+    this.place(spot, false);
+    this.waterTime = 0;
+    this.offMapTime = 0;
+    this.events.emit('run:reset', { manual });
     this.systems.forEach((s) => s.onReset?.());
+  }
+
+  /** Samples a safe spot every few seconds while the car is stable on gentle dry ground. */
+  private sampleSafeSpot(dt: number): void {
+    const cfg = config.gameplay.safeSpot;
+    this.safeTimer += dt;
+    if (this.safeTimer < cfg.interval) return;
+    const ph = this.vehicle.physics;
+    ph.axes(fwd, up, left);
+    if (
+      ph.wheelsInContact < 3 ||
+      up.y < cfg.minUp ||
+      ph.speed > cfg.maxSpeed ||
+      ph.submerged > 0 ||
+      ph.angularVelocity.lengthSq() > 1.5
+    )
+      return;
+    const p = ph.position;
+    const terrain = this.course.terrain;
+    terrain.normal(p.x, p.z, tmpN, p.y + 2);
+    if (tmpN.y < cfg.minGroundNormalY) return;
+    if (terrain.waterLevel(p.x, p.z) > terrain.groundHeight(p.x, p.z, p.y + 2) - 0.5) return;
+    this.safeTimer = 0;
+    // Face downhill: the horizontal component of the ground normal points down the slope.
+    const downhill =
+      Math.hypot(tmpN.x, tmpN.z) > 0.02 ? Math.atan2(tmpN.x, tmpN.z) : Math.atan2(fwd.x, fwd.z);
+    this.safeSpots.push({ x: p.x, y: p.y, z: p.z, heading: downhill });
+    if (this.safeSpots.length > cfg.history) this.safeSpots.shift();
   }
 
   fixedUpdate(dt: number, drive: DriveState): void {
@@ -212,15 +292,7 @@ export class RunSession {
       inp.handbrake = drive.handbrake;
       inp.nitro = drive.nitro;
     }
-    if (this.phase === 'countdown') {
-      // Hold the car with the handbrake (braking at rest would engage reverse).
-      inp.throttle = 0;
-      inp.brake = 0;
-      inp.handbrake = false;
-      inp.hold = true;
-      inp.steer = 0;
-      inp.nitro = false;
-    } else if (this.phase !== 'running') {
+    if (this.phase !== 'running') {
       inp.throttle = 0;
       inp.brake = 0.5;
       inp.handbrake = false;
@@ -229,7 +301,7 @@ export class RunSession {
     const colliders = this.world.colliders;
     v.step(dt, inp, this.course.terrain, () => colliders.resolveVehicle(v.physics, this.time));
     if (v.physics.invalid) {
-      this.placeCar(this.respawnS);
+      this.respawn(false);
       return;
     }
     this.trackProgress(dt);
@@ -238,69 +310,45 @@ export class RunSession {
   }
 
   private trackProgress(dt: number): void {
-    const p = this.vehicle.physics.position;
+    const ph = this.vehicle.physics;
+    const p = ph.position;
     const q = this.course.road.query(p.x, p.z, this.q);
     if (this.phase === 'running') {
       if (q.found && q.distance < 45 && q.s > this.progressS - 40 && q.s < this.progressS + 330) {
         this.progressS = Math.max(this.progressS, q.s);
       }
       if (this.progressS >= this.course.finishS) this.finish();
+      this.sampleSafeSpot(dt);
+      this.stats.altitudeDrop = Math.max(this.stats.altitudeDrop, this.summitAltitude - p.y);
     }
-    // Automatic respawn when lost, drowned or stuck far off-road.
-    const lost = !q.found || q.distance > 90;
-    const drowned = this.vehicle.physics.submerged > 0.7;
+    // Automatic resets: upside down and stopped, deep water, lost off the map.
+    const ar = config.gameplay.autoReset;
     const terrainY = this.course.terrain.height(p.x, p.z);
-    const below = p.y < terrainY - 4 && !(q.found && q.distance < q.halfWidth + 1);
-    if (lost || drowned || below) this.offRoadTime += dt;
-    else this.offRoadTime = Math.max(0, this.offRoadTime - dt);
-    if (this.offRoadTime > (drowned ? 1.6 : 3)) this.respawn(false);
+    const lost = !q.found || q.distance > 400 || p.y < terrainY - 6;
+    this.offMapTime = lost ? this.offMapTime + dt : 0;
+    this.waterTime = ph.submerged > 0.7 ? this.waterTime + dt : 0;
+    if (
+      ph.upsideDownTime > ar.upsideDown ||
+      this.waterTime > ar.water ||
+      this.offMapTime > ar.offMap
+    ) {
+      this.respawn(false);
+    }
   }
 
   private finish(): void {
     if (this.phase !== 'running') return;
     this.phase = 'finished';
-    this.events.emit('run:finish', { time: this.time, score: this.score });
+    this.events.emit('run:finish', { score: this.score });
   }
 
   update(dt: number, alpha: number): void {
     const realDt = this.ctx.loop.realDt;
     this.resetCooldown = Math.max(0, this.resetCooldown - dt);
-    // Slow motion runs on real time.
-    if (this.slowMoLeft > 0) {
-      this.slowMoLeft -= realDt;
-      if (this.slowMoLeft <= 0) this.ctx.loop.timeScale = 1;
-    }
-    if (this.phase === 'countdown') {
-      this.countdown -= dt;
-      const value = Math.ceil(this.countdown);
-      if (value !== this.lastCountdownValue) {
-        this.lastCountdownValue = value;
-        this.events.emit('run:countdown', { value: Math.max(0, value) });
-      }
-      if (this.countdown <= 0) {
-        this.phase = 'running';
-        this.events.emit('run:start', { trackId: this.cfg.track.id, modeId: this.cfg.mode.id });
-      }
-    } else if (this.phase === 'running') {
-      this.time += dt;
-      if (this.cfg.mode.timed) {
-        this.timeLeft -= dt;
-        if (this.timeLeft <= 0) {
-          this.timeLeft = 0;
-          this.phase = 'timeout';
-          this.events.emit('run:timeout', { distance: this.progressS });
-        }
-      }
-    } else {
-      this.finishTimer += realDt;
-    }
+    if (this.phase === 'running') this.time += dt;
+    else this.finishTimer += realDt;
     const v = this.vehicle;
-    v.sync(
-      alpha,
-      this.course.terrain,
-      this.time,
-      this.input.brake > 0.1 && this.phase !== 'countdown',
-    );
+    v.sync(alpha, this.course.terrain, this.time, this.input.brake > 0.1);
     v.updateAudio();
     this.camera.update(realDt, v, this.course.terrain);
     for (const s of this.systems) s.update?.(dt, alpha);
@@ -312,11 +360,8 @@ export class RunSession {
   restart(): void {
     this.systems.forEach((s) => s.dispose());
     this.systems = [];
-    this.phase = 'countdown';
-    this.countdown = config.gameplay.countdown;
-    this.lastCountdownValue = -1;
+    this.phase = 'running';
     this.time = 0;
-    this.timeLeft = this.cfg.mode.timed ? this.cfg.track.startTime : Infinity;
     this.score = 0;
     this.coins = 0;
     this.crystals = 0;
@@ -324,13 +369,18 @@ export class RunSession {
     this.summary = null;
     this.medal = 'none';
     this.progressS = this.course.startS;
-    this.respawnS = this.course.startS;
-    this.ctx.loop.timeScale = 1;
-    this.slowMoLeft = 0;
+    Object.assign(this.stats, {
+      distance: 0,
+      altitudeDrop: 0,
+      treesBroken: 0,
+      longestDrift: 0,
+      longestJump: 0,
+    });
+    this.vehicle.physics.odometer = 0;
     this.effects.clear();
     this.vehicle.telemetry.topSpeed = 0;
     this.vehicle.telemetry.bestAir = 0;
-    this.placeCar(this.course.startS);
+    this.placeAtStart();
     this.createSystems();
   }
 

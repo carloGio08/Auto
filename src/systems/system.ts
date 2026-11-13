@@ -15,7 +15,7 @@ export interface GameSystem {
   fixedUpdate?(dt: number): void;
   /** Per-frame logic (visuals, HUD data). */
   update?(dt: number, alpha: number): void;
-  /** Called after the car is respawned at a checkpoint. */
+  /** Called after the car is respawned at a safe spot. */
   onReset?(): void;
   /** Contributes lines to the results screen. */
   summary?(): { label: string; value: string }[];

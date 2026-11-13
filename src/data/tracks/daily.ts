@@ -23,10 +23,6 @@ export function createDailyTrack(dateKey: string): TrackDef {
   const zoneSurfaces: SurfaceId[] = ['ice', 'mud', 'gravel', 'snow', 'rock'];
   const hazardKinds: HazardKind[] = ['boulder', 'log', 'rockslide', 'mudPool', 'icePatch'];
 
-  const checkpoints: number[] = [];
-  const cpCount = legs - 1;
-  for (let i = 1; i <= cpCount; i++) checkpoints.push(+(i / (cpCount + 1)).toFixed(3));
-
   const jumps = Array.from({ length: rng.int(3, 5) }, (_, i) => ({
     at: +(0.12 + (i + rng.next() * 0.6) * (0.8 / 5)).toFixed(3),
     height: +rng.range(1.5, 3).toFixed(2),
@@ -59,11 +55,7 @@ export function createDailyTrack(dateKey: string): TrackDef {
 
   const slope = rng.range(0.33, 0.4);
   const estimatedLength = legs * 240 + 160;
-  const par = estimatedLength / 17.5;
-  const bronze = Math.round(par * 1.3);
-  const startTime = 34;
-  // Enough total time for a bronze run plus a margin.
-  const checkpointBonus = Math.ceil((bronze * 1.15 - startTime) / Math.max(1, cpCount));
+  const goldScore = Math.round(estimatedLength * 8);
 
   return {
     id: `daily_${dateKey}`,
@@ -99,14 +91,15 @@ export function createDailyTrack(dateKey: string): TrackDef {
     bumps: [{ from: 0.6, to: 0.64, amplitude: 0.4 }],
     arch: +rng.range(0.25, 0.7).toFixed(3),
     shortcuts,
-    checkpoints,
     hazards,
     collectibles: { coins: 60 + legs * 4, crystals: 6 },
     props: { trees: rng.range(0.6, 1), rocks: rng.range(0.6, 1), bushes: rng.range(0.5, 1) },
     defaultTime: rng.pick(times),
     defaultWeather: rng.pick(weatherPool),
-    startTime,
-    checkpointBonus,
-    medals: { gold: Math.round(par), silver: Math.round(par * 1.14), bronze },
+    medals: {
+      gold: goldScore,
+      silver: Math.round(goldScore * 0.6),
+      bronze: Math.round(goldScore * 0.25),
+    },
   };
 }

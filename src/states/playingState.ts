@@ -140,11 +140,7 @@ export class PlayingState implements GameState<StateId> {
     }
     s.update(this.paused ? 0 : dt, alpha);
     this.hud.update(dt);
-    if (
-      (s.phase === 'finished' || s.phase === 'timeout') &&
-      !this.resultsShown &&
-      s.finishTimer > 2.2
-    ) {
+    if (s.phase === 'finished' && !this.resultsShown && s.finishTimer > 2.2) {
       this.resultsShown = true;
       s.summary = finalizeRun(ctx, s);
       ctx.input.drivingEnabled = false;
@@ -157,7 +153,7 @@ export class PlayingState implements GameState<StateId> {
   /** Builds loading params for the track after this one (or null at the end). */
   nextTrack(): {
     trackId: string;
-    mode: 'timeAttack' | 'daily';
+    mode: 'freeDescent' | 'daily';
     time: 'default';
     weather: 'default';
     track?: ReturnType<typeof createDailyTrack>;
@@ -175,7 +171,7 @@ export class PlayingState implements GameState<StateId> {
     const i = all.findIndex((t) => t.id === s.cfg.track.id);
     const next = all[i + 1];
     return next && isTrackUnlocked(this.ctx, next.id)
-      ? { trackId: next.id, mode: 'timeAttack', time: 'default', weather: 'default' }
+      ? { trackId: next.id, mode: 'freeDescent', time: 'default', weather: 'default' }
       : null;
   }
 

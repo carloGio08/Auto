@@ -1,5 +1,4 @@
 import type { GameContext } from '../../core/context';
-import { formatTime } from '../../math/util';
 import { h } from '../dom';
 import { header, medalBadge } from '../components';
 import { icon } from '../icons';
@@ -12,7 +11,7 @@ export function createRecords(ctx: GameContext, onClose: () => void): Screen {
   const tk = ctx.i18n.tk;
   const save = ctx.save.data;
   const tracks = ctx.registries.tracks.all().map((tr) => {
-    const rec = save.records[`${tr.id}:timeAttack`];
+    const rec = save.records[`${tr.id}:freeDescent`];
     return h(
       'div',
       { class: 'record-row' },
@@ -21,11 +20,9 @@ export function createRecords(ctx: GameContext, onClose: () => void): Screen {
       h(
         'span',
         { class: 'record-time' },
-        rec?.bestTime !== null && rec?.bestTime !== undefined
-          ? formatTime(rec.bestTime)
-          : t('records.noTime'),
+        rec && rec.runs > 0 ? String(rec.bestScore) : t('records.noTime'),
       ),
-      h('span', { class: 'record-score' }, rec ? String(rec.bestScore) : ''),
+      h('span', { class: 'record-score' }, rec ? `×${rec.runs}` : ''),
     );
   });
   const achievements = ctx.registries.achievements.all().map((a) => {

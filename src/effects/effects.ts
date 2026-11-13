@@ -25,7 +25,6 @@ export class Effects {
   readonly postfx: PostFx;
   private readonly offs: (() => void)[] = [];
   private emitAcc = 0;
-  private slowmo = 0;
 
   constructor(
     private readonly session: RunSession,
@@ -55,9 +54,7 @@ export class Effects {
       }),
       ev.on('vehicle:splash', () => this.splash()),
       ev.on('collectible:picked', ({ kind }) => this.pickup(kind === 'crystal')),
-      ev.on('checkpoint:passed', () => this.postfx.doFlash('rgba(120,255,190,0.25)', 0.5)),
       ev.on('fx:flash', ({ color, strength }) => this.postfx.doFlash(color, strength)),
-      ev.on('fx:slowmo', ({ duration }) => (this.slowmo = duration)),
     );
   }
 
@@ -244,8 +241,7 @@ export class Effects {
     const speed = car.speed;
     const intensity = Math.max(0, (speed - 30) / 25) + (car.nitroActive ? 0.6 : 0);
     this.speedLines?.update(realDt, intensity, speed);
-    this.slowmo = Math.max(0, this.slowmo - realDt);
-    this.postfx.update(realDt, car.nitroActive, this.slowmo > 0);
+    this.postfx.update(realDt, car.nitroActive);
   }
 
   clear(): void {

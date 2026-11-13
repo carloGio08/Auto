@@ -251,41 +251,27 @@ export interface TrackDef {
   bumps: { from: TrackFraction; to: TrackFraction; amplitude: number }[];
   arch?: TrackFraction;
   shortcuts: ShortcutDef[];
-  checkpoints: TrackFraction[];
   hazards: HazardPlacement[];
   collectibles: { coins: number; crystals: number };
   props: { trees: number; rocks: number; bushes: number };
   defaultTime: TimeOfDayId;
   defaultWeather: WeatherId;
-  /** Starting time and seconds added at each checkpoint (time attack). */
-  startTime: number;
-  checkpointBonus: number;
-  /** Medal thresholds in seconds (lower is better). */
+  /** Medal thresholds in style score (higher is better). */
   medals: { gold: number; silver: number; bronze: number };
   /** Track id whose bronze medal unlocks this track. */
   unlockAfter?: string;
 }
 
-export type SystemId =
-  | 'checkpoints'
-  | 'nitro'
-  | 'style'
-  | 'hazards'
-  | 'collectibles'
-  | 'ghost'
-  | 'medals'
-  | 'achievements';
+export type SystemId = 'nitro' | 'style' | 'hazards' | 'collectibles' | 'medals' | 'achievements';
 
-export type ModeId = 'timeAttack' | 'freeRide' | 'daily';
+export type ModeId = 'freeDescent' | 'daily';
 
 export interface ModeDef {
   id: ModeId;
   nameKey: string;
   descriptionKey: string;
   systems: SystemId[];
-  /** Whether a countdown timer can end the run. */
-  timed: boolean;
-  /** Whether a ghost and records are saved. */
+  /** Whether best scores are saved. */
   recordsEnabled: boolean;
 }
 

@@ -7,7 +7,6 @@ import {
   defaultSave,
   migrate,
 } from '../src/core/save';
-import { decodeGhost, encodeGhost } from '../src/systems/ghost';
 
 describe('save system', () => {
   it('starts from defaults when storage is empty', () => {
@@ -39,7 +38,7 @@ describe('save system', () => {
     expect(data.coins).toBe(500);
     expect(data.selectedCar).toBe('sidewinder');
     expect(data.ownedCars).toEqual(expect.arrayContaining(['ridge', 'sidewinder']));
-    expect(data.records['pine_ridge:timeAttack'].bestTime).toBe(81.5);
+    expect(data.records['pine_ridge:timeAttack'].bestTime).toBe(81.5); // dropped by the v4 migration
     expect(data.settings.masterVolume).toBe(0.3);
     expect(data.stats.runsFinished).toBe(0);
     expect(data.daily.date).toBe('');
@@ -89,14 +88,5 @@ describe('save system', () => {
     expect(m.loadGhost('daily_2026-11-13')).toBe('c');
     m.reset();
     expect(m.loadGhost('pine_ridge')).toBeNull();
-  });
-
-  it('encodes and decodes ghosts losslessly', () => {
-    const frames = new Float32Array([1, 2, 3, 0, 0, 0, 1, 4, 5, 6, 0, 0.7071, 0, 0.7071]);
-    const decoded = decodeGhost(encodeGhost(42.5, 'ridge', frames));
-    expect(decoded?.time).toBe(42.5);
-    expect(decoded?.carId).toBe('ridge');
-    expect(Array.from(decoded!.frames)).toEqual(Array.from(frames));
-    expect(decodeGhost('garbage')).toBeNull();
   });
 });

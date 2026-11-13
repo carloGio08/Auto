@@ -15,11 +15,9 @@ export class AudioDirector {
   ) {
     const sfx = () => this.audio.sfx;
     this.offs.push(
-      events.on('run:countdown', ({ value }) => sfx()?.countdown(value === 0)),
       events.on('collectible:picked', ({ kind }) =>
         kind === 'coin' ? sfx()?.coin() : sfx()?.crystal(),
       ),
-      events.on('checkpoint:passed', () => sfx()?.checkpoint()),
       events.on('style:trick', () => sfx()?.trick(this.combo)),
       events.on('style:combo', ({ multiplier }) => (this.combo = multiplier)),
       events.on('style:comboLost', () => {

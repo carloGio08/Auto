@@ -103,10 +103,6 @@ export class Sfx {
     [523, 659, 784, 1046].forEach((f, i) => this.tone(f, 0.18, 'triangle', 0.11, i * 0.07));
   }
 
-  countdown(final: boolean): void {
-    this.tone(final ? 880 : 440, final ? 0.5 : 0.2, 'square', 0.08);
-  }
-
   coin(): void {
     if (!this.gate('coin', 0.03)) return;
     this.tone(988, 0.07, 'square', 0.06);
@@ -115,11 +111,6 @@ export class Sfx {
 
   crystal(): void {
     [1046, 1318, 1568, 2093].forEach((f, i) => this.tone(f, 0.25, 'sine', 0.09, i * 0.05));
-  }
-
-  checkpoint(): void {
-    [659, 880, 1108].forEach((f) => this.tone(f, 0.45, 'triangle', 0.07));
-    this.tone(1318, 0.5, 'sine', 0.06, 0.12);
   }
 
   trick(level: number): void {

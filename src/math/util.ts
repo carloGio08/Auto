@@ -18,12 +18,3 @@ export const wrapAngle = (a: number): number => {
   return a - Math.PI;
 };
 export const isFiniteNumber = (v: number): boolean => Number.isFinite(v);
-
-/** Formats seconds as m:ss.cc */
-export function formatTime(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return '--:--.--';
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  const c = Math.floor((seconds * 100) % 100);
-  return `${m}:${s.toString().padStart(2, '0')}.${c.toString().padStart(2, '0')}`;
-}

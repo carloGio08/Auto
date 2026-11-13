@@ -62,7 +62,7 @@ export class MainMenuState implements GameState<StateId> {
                 : ctx.registries.tracks.all()[0].id;
             const params: LoadingParams = {
               trackId,
-              mode: 'timeAttack',
+              mode: 'freeDescent',
               time: save.lastTime,
               weather: save.lastWeather,
             };

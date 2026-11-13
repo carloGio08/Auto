@@ -36,11 +36,13 @@ export class Course {
   readonly terrain: Terrain;
   readonly startS = 12;
   readonly finishS: number;
-  readonly checkpoints: number[];
   readonly collectibles: CollectiblePlacement[] = [];
   readonly rails: RailPlacement[] = [];
   readonly signs: SignPlacement[] = [];
   readonly archS: number | null;
+  /** Arrival zone at the base and altitude of the start. */
+  readonly base: { x: number; y: number; z: number };
+  readonly startAltitude: number;
 
   constructor(readonly track: TrackDef) {
     const centerline = generateCenterline(track.layout, track.seed);
@@ -58,7 +60,9 @@ export class Course {
     this.terrain = new Terrain(this.mountain, this.road, shortcuts);
     const L = this.road.length;
     this.finishS = L - 45;
-    this.checkpoints = track.checkpoints.map((f) => clamp(f * L, 30, this.finishS - 30));
+    const fp = this.road.pointAt(this.finishS, createRoadPoint());
+    this.base = { x: fp.x, y: fp.y, z: fp.z };
+    this.startAltitude = this.road.pointAt(this.startS, createRoadPoint()).y;
     const archS = track.arch !== undefined ? track.arch * L : null;
     this.archS = archS !== null && !this.road.isBridgeAt(archS, 30) ? archS : null;
     this.buildRails();

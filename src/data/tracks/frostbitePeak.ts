@@ -54,7 +54,6 @@ export const frostbitePeak: TrackDef = {
     { from: 0.62, to: 0.72, surface: 'rock', kickers: 1 },
     { from: 0.85, to: 0.94, surface: 'gravel', kickers: 2 },
   ],
-  checkpoints: [0.14, 0.28, 0.42, 0.56, 0.7, 0.85],
   hazards: [
     { kind: 'icePatch', at: 0.22 },
     { kind: 'rockslide', at: 0.31 },
@@ -68,8 +67,6 @@ export const frostbitePeak: TrackDef = {
   props: { trees: 0.8, rocks: 0.9, bushes: 0.5 },
   defaultTime: 'dawn',
   defaultWeather: 'snow',
-  startTime: 36,
-  checkpointBonus: 20,
-  medals: { gold: 115, silver: 130, bronze: 148 },
+  medals: { gold: 12000, silver: 7000, bronze: 3000 },
   unlockAfter: 'granite_pass',
 };
