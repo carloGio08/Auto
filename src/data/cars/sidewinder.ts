@@ -24,7 +24,7 @@ export const sidewinder: CarDef = {
       antiRollFront: 11000,
       antiRollRear: 5000,
     },
-    tires: { grip: 1.04, rearBias: 0.84, corneringStiffness: 10 },
+    tires: { grip: 1.04, rearBias: 0.89, corneringStiffness: 10 },
     engine: { power: 175000, maxForce: 9500, drive: 'rwd', brakeForce: 13000, reverseForce: 5000 },
     aero: { drag: 2.6, downforce: 1.2 },
     steering: { maxAngle: 0.68 },

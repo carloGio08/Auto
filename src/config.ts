@@ -39,7 +39,9 @@ export const config = {
     /** Low speed threshold under which lateral sliding is cancelled (m/s). */
     lowSpeedCancel: 3,
     /** Rear lateral grip multiplier while the handbrake is held. */
-    handbrakeGrip: 0.42,
+    handbrakeGrip: 0.3,
+    /** Yaw acceleration from steering while the handbrake is held (rad/s²): the drift flick. */
+    handbrakeYaw: 2.6,
     /** Yaw torque assist while drifting, makes drifts easier to hold (N·m per rad of slip). */
     driftAssist: 2.4,
     /** Global grip multiplier – raise for more control, lower for more chaos. */

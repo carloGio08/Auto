@@ -328,6 +328,11 @@ export class VehiclePhysics {
 
     // --- Suspension + tyre forces ------------------------------------------------------------
     const staticLoad = (this.mass * config.physics.gravity) / 4;
+    // Arcade traction assist: past ~30° of body slip the drive force is trimmed so the rear
+    // tyres keep some lateral grip and big drifts stay catchable.
+    const bodySlip =
+      speed > 4 ? Math.abs(Math.atan2(this.velocity.dot(left), Math.abs(vFwd) + 0.5)) : 0;
+    const tractionAssist = clamp(1 - (bodySlip - 0.5) * 1.3, 0.35, 1);
     for (let i = 0; i < 4; i++) {
       const w = this.wheels[i];
       if (!w.contact) {
@@ -411,7 +416,7 @@ export class VehiclePhysics {
           def.engine.power / Math.max(Math.abs(vFwd), 6),
           def.engine.maxForce,
         );
-        if (input.throttle > 0) fx += (input.throttle * engineF) / drivenCount;
+        if (input.throttle > 0) fx += (input.throttle * engineF * tractionAssist) / drivenCount;
         if (input.brake > 0 && vFwd < drv.reverseThreshold)
           fx -= (input.brake * def.engine.reverseForce) / drivenCount;
       }
@@ -480,6 +485,9 @@ export class VehiclePhysics {
     );
 
     // --- Drift assist & air control ----------------------------------------------------------
+    if (grounded && input.handbrake && speed > 6 && !input.hold) {
+      angAccAir.addScaledVector(up, -input.steer * drv.handbrakeYaw);
+    }
     if (grounded && speed > config.gameplay.driftMinSpeed) {
       const lat = this.velocity.dot(left);
       const beta = Math.atan2(lat, Math.max(Math.abs(vFwd), 1));

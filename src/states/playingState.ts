@@ -2,7 +2,7 @@ import type { GameContext, StateId } from '../core/context';
 import type { GameState } from '../core/stateMachine';
 import { vibrate } from '../core/device';
 import type { RunSession } from '../game/session';
-import { finalizeRun } from '../game/progression';
+import { finalizeRun, isTrackUnlocked } from '../game/progression';
 import { Autopilot } from '../vehicle/autopilot';
 import { TouchSource } from '../input/touch';
 import { Hud } from '../ui/hud';
@@ -61,11 +61,13 @@ export class PlayingState implements GameState<StateId> {
     );
     document.addEventListener('visibilitychange', this.onVisibility);
     window.addEventListener('resize', this.onResize);
-    // Debug hook for automated tests.
-    (window as unknown as { __md?: object }).__md = {
-      session: this.session,
-      finish: () => (this.session.progressS = this.session.course.finishS + 1),
-    };
+    // Debug hook for automated tests (dev builds or ?e2e only).
+    if (import.meta.env.DEV || new URLSearchParams(location.search).has('e2e')) {
+      (window as unknown as { __md?: object }).__md = {
+        session: this.session,
+        finish: () => (this.session.progressS = this.session.course.finishS + 1),
+      };
+    }
   }
 
   private mountHud(): void {
@@ -168,7 +170,7 @@ export class PlayingState implements GameState<StateId> {
     const all = this.ctx.registries.tracks.all();
     const i = all.findIndex((t) => t.id === s.cfg.track.id);
     const next = all[i + 1];
-    return next
+    return next && isTrackUnlocked(this.ctx, next.id)
       ? { trackId: next.id, mode: 'timeAttack', time: 'default', weather: 'default' }
       : null;
   }

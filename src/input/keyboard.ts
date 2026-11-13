@@ -6,6 +6,8 @@ import type { InputManager, InputSource, RawInput } from './inputManager';
 export class KeyboardSource implements InputSource {
   readonly id = 'keyboard';
   private readonly down = new Set<string>();
+  /** Keys pressed since the last poll: a tap shorter than a frame still counts once. */
+  private readonly tapped = new Set<string>();
   /** When set, the next key press is delivered here instead of to the game (rebinding). */
   captureNext: ((code: string) => void) | null = null;
 
@@ -31,6 +33,7 @@ export class KeyboardSource implements InputSource {
     )
       return;
     this.down.add(e.code);
+    if (!e.repeat) this.tapped.add(e.code);
     this.manager.lastDevice = 'keyboard';
     // Prevent page scrolling with arrows/space while playing.
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code))
@@ -43,15 +46,17 @@ export class KeyboardSource implements InputSource {
 
   private readonly onBlur = (): void => {
     this.down.clear();
+    this.tapped.clear();
   };
 
   private isHeld(action: ActionId): boolean {
-    for (const code of this.manager.bindings[action]) if (this.down.has(code)) return true;
+    for (const code of this.manager.bindings[action])
+      if (this.down.has(code) || this.tapped.has(code)) return true;
     return false;
   }
 
   update(_dt: number, out: RawInput): void {
-    if (this.down.size === 0) return;
+    if (this.down.size === 0 && this.tapped.size === 0) return;
     for (const a of ACTIONS) if (this.isHeld(a)) out.held.add(a);
     if (this.isHeld('throttle')) out.throttle = Math.max(out.throttle, 1);
     if (this.isHeld('brake')) out.brake = Math.max(out.brake, 1);
@@ -60,6 +65,7 @@ export class KeyboardSource implements InputSource {
       out.steer += steer;
       out.steerDigital = true;
     }
+    this.tapped.clear();
   }
 
   dispose(): void {

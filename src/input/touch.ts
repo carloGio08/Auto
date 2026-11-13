@@ -8,6 +8,8 @@ import type { InputManager, InputSource, RawInput } from './inputManager';
 export class TouchSource implements InputSource {
   readonly id = 'touch';
   private readonly pointers = new Map<number, ActionId>();
+  /** Buttons touched since the last poll (very short taps on slow frames). */
+  private readonly tapped = new Set<ActionId>();
   /** Steering from tilt or analog sources is added by TiltSource; this handles buttons only. */
 
   constructor(
@@ -44,6 +46,7 @@ export class TouchSource implements InputSource {
     e.preventDefault();
     this.manager.lastDevice = 'touch';
     this.pointers.set(e.pointerId, a);
+    this.tapped.add(a);
     try {
       (e.target as Element).releasePointerCapture?.(e.pointerId);
     } catch {
@@ -68,6 +71,8 @@ export class TouchSource implements InputSource {
   };
 
   update(_dt: number, out: RawInput): void {
+    for (const a of this.tapped) if (![...this.pointers.values()].includes(a)) out.held.add(a);
+    this.tapped.clear();
     for (const a of this.pointers.values()) {
       out.held.add(a);
       if (a === 'throttle') out.throttle = Math.max(out.throttle, 1);

@@ -38,12 +38,12 @@ export class MenuBackdrop {
     this.world = new World({
       course,
       time: timesOfDay.sunset,
-      weather: { ...weathers.clear, fogDensity: 1.5 },
+      weather: { ...weathers.clear, fogDensity: 1.15 },
       preset: ctx.renderer.preset,
     });
     this.world.buildNow();
     // Park the car on the outside of the first bend, facing down the mountain.
-    const p = course.road.pointAt(course.startS + 30, createRoadPoint());
+    const p = course.road.pointAt(course.startS + 82, createRoadPoint());
     const side = -1;
     const off = side * (p.halfWidth - 1.5);
     this.carPos.set(p.x + p.tz * off, 0, p.z - p.tx * off);
@@ -86,24 +86,31 @@ export class MenuBackdrop {
     this.time += dt;
     this.parallaxX += (this.targetPX - this.parallaxX) * damp(2, dt);
     this.parallaxY += (this.targetPY - this.parallaxY) * damp(2, dt);
-    // Slow pendulum pan around the car, looking down the valley.
-    const base = Math.atan2(this.downhill.x, this.downhill.z) + Math.PI + 0.5;
-    const a = base + Math.sin(this.time * 0.07) * 0.6 + this.parallaxX * 0.12;
-    const r = 8.5 + Math.sin(this.time * 0.05) * 1.5;
+    // Slow pendulum pan behind the car, looking down the valley (+Z), car in the right third.
+    const a = Math.sin(this.time * 0.07) * 0.35 + this.parallaxX * 0.1;
+    const dirX = Math.sin(a);
+    const dirZ = Math.cos(a);
+    const r = 11 + Math.sin(this.time * 0.05) * 1.5;
     const cam = this.camera;
+    const leftX = dirZ;
+    const leftZ = -dirX;
+    const side = 2.2 * Math.min(1.6, cam.aspect / 1.4);
     cam.position.set(
-      this.carPos.x + Math.sin(a) * r,
-      this.carPos.y + 2.4 - this.parallaxY * 0.6,
-      this.carPos.z + Math.cos(a) * r,
+      this.carPos.x - dirX * r - leftX * side,
+      this.carPos.y + 4.6 - this.parallaxY * 0.8,
+      this.carPos.z - dirZ * r - leftZ * side,
     );
     const gy = this.world.course.terrain.groundHeight(
       cam.position.x,
       cam.position.z,
       cam.position.y + 3,
     );
-    cam.position.y = Math.max(cam.position.y, gy + 1.2);
-    this.lookTarget.copy(this.carPos).addScaledVector(this.downhill, 6);
-    this.lookTarget.y += 0.6;
+    cam.position.y = Math.max(cam.position.y, gy + 1.5);
+    this.lookTarget.set(
+      this.carPos.x + dirX * 30 + leftX * side * 3.2,
+      this.carPos.y - 6,
+      this.carPos.z + dirZ * 30 + leftZ * side * 3.2,
+    );
     cam.lookAt(this.lookTarget);
     this.world.update(dt, cam.position, this.carPos, 3);
   }

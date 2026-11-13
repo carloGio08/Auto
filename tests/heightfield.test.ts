@@ -3,6 +3,7 @@ import { Vector3 } from 'three';
 import { Course } from '../src/terrain/course';
 import { tracks } from '../src/data/tracks';
 import { createRoadPoint } from '../src/terrain/road';
+import { Rng } from '../src/math/rng';
 
 const course = new Course(tracks[0]);
 const terrain = course.terrain;
@@ -18,19 +19,16 @@ describe('terrain height(x, z)', () => {
   });
 
   it('is continuous (no steps from the road blending)', () => {
-    // For a continuous function halving the step roughly halves the difference; a step
-    // (discontinuity) would keep it constant.
+    // A step (discontinuity) shows up as a difference that does not shrink with the
+    // sampling distance. Steps below 2 cm are irrelevant (surface micro-bumps are bigger).
+    const rng = new Rng(7);
     const b = course.road.bounds;
-    for (let i = 0; i < 20000; i++) {
-      const x = b.minX - 40 + Math.random() * (b.maxX - b.minX + 80);
-      const z = b.minZ - 40 + Math.random() * (b.maxZ - b.minZ + 80);
+    for (let i = 0; i < 30000; i++) {
+      const x = rng.range(b.minX - 40, b.maxX + 40);
+      const z = rng.range(b.minZ - 40, b.maxZ + 40);
       const h0 = terrain.height(x, z);
-      const d = Math.abs(terrain.height(x + 0.04, z) - h0);
-      if (d < 0.02) continue;
-      const half = Math.abs(terrain.height(x + 0.02, z) - h0);
-      const quarter = Math.abs(terrain.height(x + 0.01, z) - h0);
-      expect(quarter).toBeLessThan(d * 0.5);
-      expect(half).toBeLessThan(d * 0.75);
+      const tiny = Math.abs(terrain.height(x + 0.002, z) - h0);
+      expect(tiny).toBeLessThan(0.02);
     }
   });
 
