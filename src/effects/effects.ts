@@ -190,9 +190,8 @@ export class Effects {
       const kind = surf.particle;
       if (kind === 'none') continue;
       const c = PARTICLE_COLORS[kind];
-      const intensity =
-        w.skid * 1.4 +
-        (Math.max(0, speed - 12) / 40) * (kind === 'snow' || kind === 'dust' ? 0.6 : 0.3);
+      // Mostly when sliding; a light trail at speed. Rear wheels only for the speed trail.
+      const intensity = w.skid * 1.1 + (w.front ? 0 : (Math.max(0, speed - 14) / 60) * 0.35);
       if (Math.random() > intensity) continue;
       fwd.set(0, 0, 1).applyQuaternion(car.quaternion);
       tmp.copy(w.contactPoint);
@@ -202,15 +201,15 @@ export class Effects {
         tmp.y + 0.15,
         tmp.z,
         -fwd.x * back + (Math.random() - 0.5) * 2,
-        0.6 + Math.random() * 1.6 + (kind === 'snow' ? 1.5 : 0),
+        0.4 + Math.random() * 1.2 + (kind === 'snow' ? 0.8 : 0),
         -fwd.z * back + (Math.random() - 0.5) * 2,
         c.r,
         c.g,
         c.b,
-        0.6 + Math.random() * 0.7 + w.skid * 0.6,
-        0.8 + Math.random() * 0.8,
+        0.35 + Math.random() * 0.35 + w.skid * 0.35,
+        0.6 + Math.random() * 0.6,
         kind === 'snow' ? 2 : 0.6,
-        3,
+        1.8,
       );
     }
     // Nitro exhaust.

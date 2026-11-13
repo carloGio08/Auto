@@ -66,13 +66,21 @@ look smooth while the simulation stays deterministic. The hot path reuses pre-al
    (`slope * z` profile with a summit dome near the start), ridged fractal noise for ridges and
    gullies, low-frequency fbm for broad shapes, and a valley/lake basin at the bottom.
 2. **River channel**: a polyline carved into `N` (smooth V-shaped profile).
-3. **Road carve**: for every point we find the closest road segment through a uniform spatial
-   grid (O(1) lookup). With lateral distance `d`, road half width `w`, shoulder `s`:
+3. **Road carve**: for every point we find the closest road point through a uniform spatial
+   grid (O(1) lookup). The projection uses normals interpolated between vertex normals
+   (solving a quadratic per segment), so ownership of space is continuous on the inside of
+   bends. With lateral distance `d`, road half width `w` and an adaptive shoulder
+   `s = clamp(1.25·|R − N|, 9, 30)` (embankments widen with the cut/fill height):
 
    ```
-   t = smoothstep(w, w + s, d)
-   H = mix(roadHeightWithCrown(d), N(x,z), t)
+   t  = smoothstep(w, w + s, d)
+   Hr = (R1·k1 + R2·k2) / (k1 + k2),   k = 1 / (max(d − w, 0) + 0.3)²
+   H  = mix(Hr, N(x,z), t)
    ```
+
+   `R2` is the closest point on a _different_ part of the road (e.g. the next switchback
+   leg). Its weight fades in with the separation along the road, which keeps `height()`
+   continuous between legs (verified by tests).
 
    Bridges disable the carve (the road deck is a separate collision surface), so the river
    valley stays open beneath them.
@@ -149,7 +157,13 @@ slopes.
 - Aerodynamic drag `-c_d · v|v|`, downforce `-up · c_df · v²`, gravity `g` (tuneable, > 9.81 for
   snappier jumps).
 - Air control: pitch/roll torques from throttle/brake/steer while airborne, plus a soft
-  self-righting torque when there is no input. Upside-down on the ground for >1.2 s → flip back.
+  self-righting torque when there is no input. Inputs held at take-off are latched and only
+  act after being released and pressed again (holding throttle over a jump must not
+  nose-dive the car). Upside-down on the ground for >1.1 s → flip back.
+- Handbrake: rear grip × `handbrakeGrip`, rear brakes locked, plus a steering yaw "flick";
+  an arcade traction assist trims drive force beyond ~30° of body slip so drifts stay
+  catchable. A separate `hold` input (all-wheel parking brake) keeps the car still during the
+  countdown, because braking at rest engages reverse.
 - Chassis contact: eight box corners are tested against `height()`; penetrating points receive
   a restitution/friction impulse and positional correction — the car can roll and land on its
   roof without tunnelling.
@@ -208,7 +222,9 @@ frame with cached values (no layout thrash: only `textContent` and `transform` w
 
 ## 9. Testing
 
-Vitest covers: `height()` (finite, continuous, road carve), road generation (spacing, monotonic
-`s`, no NaN, descending), suspension (10 000 steps stable, drop from 15 m without explosion),
-save migrations, content registry validation. `scripts/e2e-screenshots.mjs` drives the built game
+Vitest covers: `height()` (finite, continuous, matches the road, bridge decks above water),
+road generation for every track and several daily seeds (spacing, grade, checkpoints, query vs
+brute force), suspension (10 000 steps stable, settling, drop from 15 m without explosion),
+handling per car (0–100, braking, lateral grip, drift recovery), an autopilot that must drive
+a whole track, save migrations, content registry validation and core utilities. `scripts/e2e-screenshots.mjs` drives the built game
 with Playwright through menu → race → results and captures screenshots.

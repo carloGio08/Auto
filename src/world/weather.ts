@@ -1,5 +1,4 @@
 import {
-  AdditiveBlending,
   BufferGeometry,
   Float32BufferAttribute,
   Points,
@@ -37,11 +36,10 @@ export class Snowfall {
       geo,
       new PointsMaterial({
         map: sprite,
-        size: 0.35,
+        size: 0.55,
         transparent: true,
         opacity: 0.9,
         depthWrite: false,
-        blending: AdditiveBlending,
         color: '#ffffff',
       }),
     );

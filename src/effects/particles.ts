@@ -96,7 +96,7 @@ export class ParticlePool {
   }
 
   setViewportScale(heightPx: number): void {
-    this.material.uniforms.uScale.value = heightPx * 0.9;
+    this.material.uniforms.uScale.value = heightPx * 0.6;
   }
 
   emit(
@@ -158,7 +158,7 @@ export class ParticlePool {
       this.pos[k] += this.vel[k] * dt;
       this.pos[k + 1] += this.vel[k + 1] * dt;
       this.pos[k + 2] += this.vel[k + 2] * dt;
-      this.alpha[i] = Math.min(1, t * 2.2) * 0.9;
+      this.alpha[i] = Math.min(1, t * 2.2) * 0.7;
       this.size[i] = this.baseSize[i] * (1 + (1 - t) * this.growth[i]);
     }
     this.active = alive;
