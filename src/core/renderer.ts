@@ -1,0 +1,129 @@
+import {
+  ACESFilmicToneMapping,
+  PCFSoftShadowMap,
+  SRGBColorSpace,
+  WebGLRenderer,
+  type Camera,
+  type Scene,
+} from 'three';
+import { config, type QualityPreset, type QualityPresetId } from '../config';
+import type { QualitySetting } from './settings';
+import type { DeviceInfo } from './device';
+
+const ORDER: QualityPresetId[] = ['low', 'medium', 'high'];
+
+/**
+ * Wraps WebGLRenderer: sizing, pixel-ratio cap, quality presets, dynamic resolution scaling
+ * and automatic quality degradation when the frame budget is exceeded.
+ */
+export class Renderer {
+  readonly gl: WebGLRenderer;
+  setting: QualitySetting;
+  preset: QualityPreset;
+  presetId: QualityPresetId;
+  /** Dynamic resolution scale (0.55..1). */
+  scale = 1;
+  private timer = 0;
+  private slowStreak = 0;
+  private fastStreak = 0;
+  private readonly listeners = new Set<(id: QualityPresetId) => void>();
+  private readonly autoCeiling: QualityPresetId;
+  width = 1;
+  height = 1;
+
+  constructor(
+    readonly canvas: HTMLCanvasElement,
+    setting: QualitySetting,
+    device: DeviceInfo,
+  ) {
+    this.setting = setting;
+    this.autoCeiling = device.lowEnd ? 'low' : device.mobile ? 'medium' : 'high';
+    this.presetId = setting === 'auto' ? this.autoCeiling : setting;
+    this.preset = config.graphics.presets[this.presetId];
+    this.gl = new WebGLRenderer({
+      canvas,
+      antialias: !device.mobile && this.presetId === 'high',
+      powerPreference: 'high-performance',
+      stencil: false,
+    });
+    this.gl.outputColorSpace = SRGBColorSpace;
+    this.gl.toneMapping = ACESFilmicToneMapping;
+    this.gl.toneMappingExposure = 1.05;
+    this.gl.shadowMap.enabled = true;
+    this.gl.shadowMap.type = PCFSoftShadowMap;
+    this.resize();
+  }
+
+  onQualityChange(fn: (id: QualityPresetId) => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  applySetting(setting: QualitySetting): void {
+    this.setting = setting;
+    this.setPreset(setting === 'auto' ? this.autoCeiling : setting);
+    this.scale = 1;
+    this.resize();
+  }
+
+  private setPreset(id: QualityPresetId): void {
+    if (id === this.presetId) return;
+    this.presetId = id;
+    this.preset = config.graphics.presets[id];
+    this.listeners.forEach((l) => l(id));
+    this.resize();
+  }
+
+  resize(): void {
+    const w = Math.max(1, window.innerWidth);
+    const h = Math.max(1, window.innerHeight);
+    this.width = w;
+    this.height = h;
+    const ratio = Math.min(window.devicePixelRatio || 1, this.preset.pixelRatioCap, 2) * this.scale;
+    this.gl.setPixelRatio(Math.max(0.5, ratio));
+    this.gl.setSize(w, h, false);
+  }
+
+  /** Called every frame with the smoothed frame time. Only adapts while `adaptive` is true. */
+  adapt(frameMs: number, dt: number, adaptive: boolean): void {
+    if (!adaptive || !config.features.dynamicResolution) return;
+    this.timer += dt;
+    const dr = config.graphics.dynamicResolution;
+    if (this.timer < dr.interval) return;
+    this.timer = 0;
+    if (frameMs > dr.downMs) {
+      this.fastStreak = 0;
+      if (this.scale > dr.minScale) {
+        this.scale = Math.max(dr.minScale, this.scale - 0.1);
+        this.resize();
+      } else if (this.setting === 'auto' && ++this.slowStreak >= 3) {
+        const idx = ORDER.indexOf(this.presetId);
+        if (idx > 0) {
+          this.slowStreak = 0;
+          this.scale = 0.85;
+          this.setPreset(ORDER[idx - 1]);
+        }
+      }
+    } else if (frameMs < dr.upMs) {
+      this.slowStreak = 0;
+      if (this.scale < 1) {
+        this.scale = Math.min(1, this.scale + 0.05);
+        this.resize();
+      } else if (this.setting === 'auto' && ++this.fastStreak >= 8) {
+        const idx = ORDER.indexOf(this.presetId);
+        if (idx < ORDER.indexOf(this.autoCeiling)) {
+          this.fastStreak = 0;
+          this.setPreset(ORDER[idx + 1]);
+        }
+      }
+    }
+  }
+
+  render(scene: Scene, camera: Camera): void {
+    this.gl.render(scene, camera);
+  }
+
+  dispose(): void {
+    this.gl.dispose();
+  }
+}

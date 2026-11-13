@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#1a2236" />
+    <meta
+      name="description"
+      content="Mountain Drop – a low-poly downhill driving game: drifts, jumps and shortcuts from the summit to the lake."
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Mountain Drop" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+    <link rel="apple-touch-icon" href="./icon.svg" />
+    <title>Mountain Drop</title>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="fx"></div>
+    <div id="hud"></div>
+    <div id="ui"></div>
+    <div id="boot-splash" class="boot-splash">
+      <div class="splash-title">Mountain Drop</div>
+      <div class="spinner"></div>
+    </div>
+    <div class="rotate-hint" aria-hidden="true">
+      <svg
+        viewBox="0 0 24 24"
+        width="64"
+        height="64"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+      >
+        <rect x="7" y="2" width="10" height="20" rx="2" />
+        <path d="M2 14a10 10 0 0 0 6 7M22 10a10 10 0 0 0-6-7" />
+      </svg>
+      <p lang="en">Rotate your device to landscape</p>
+      <p lang="it">Ruota il dispositivo in orizzontale</p>
+    </div>
+    <noscript>Mountain Drop needs JavaScript.</noscript>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
