@@ -59,6 +59,10 @@ export class PlayingState implements GameState<StateId> {
         ({ impact }) => ctx.save.data.settings.haptics && impact > 3 && vibrate(25),
       ),
     );
+    // Quality changes (settings or automatic downgrade) apply to the running world.
+    this.offs.push(
+      ctx.renderer.onQualityChange(() => this.session.world.setQuality(ctx.renderer.preset)),
+    );
     document.addEventListener('visibilitychange', this.onVisibility);
     window.addEventListener('resize', this.onResize);
     // Debug hook for automated tests (dev builds or ?e2e only).

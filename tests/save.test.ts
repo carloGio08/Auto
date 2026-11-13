@@ -78,6 +78,19 @@ describe('save system', () => {
     expect(migrate({ schemaVersion: 999 }).schemaVersion).toBe(CURRENT_SCHEMA);
   });
 
+  it('keeps only the latest daily-challenge ghost', () => {
+    const storage = new MemoryStorage();
+    const m = new SaveManager(storage);
+    m.saveGhost('pine_ridge', 'a');
+    m.saveGhost('daily_2026-11-12', 'b');
+    m.saveGhost('daily_2026-11-13', 'c');
+    expect(m.loadGhost('pine_ridge')).toBe('a');
+    expect(m.loadGhost('daily_2026-11-12')).toBeNull();
+    expect(m.loadGhost('daily_2026-11-13')).toBe('c');
+    m.reset();
+    expect(m.loadGhost('pine_ridge')).toBeNull();
+  });
+
   it('encodes and decodes ghosts losslessly', () => {
     const frames = new Float32Array([1, 2, 3, 0, 0, 0, 1, 4, 5, 6, 0, 0.7071, 0, 0.7071]);
     const decoded = decodeGhost(encodeGhost(42.5, 'ridge', frames));

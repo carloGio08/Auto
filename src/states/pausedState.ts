@@ -37,7 +37,11 @@ export class PausedState implements GameState<StateId> {
 
   update(): void {
     // Resume with the pause key as well.
-    if (this.ctx.input.pressed('pause') && !this.ctx.ui.modalOpen) this.ctx.states.pop();
+    // Only when the pause menu itself is on top (not the settings modal opened from it).
+    if (this.ctx.input.pressed('pause') && this.ctx.ui.modalCount <= 1) {
+      this.ctx.input.consume('pause');
+      this.ctx.states.pop();
+    }
   }
 
   exit(): void {

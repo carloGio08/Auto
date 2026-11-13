@@ -233,6 +233,15 @@ export class SaveManager {
     try {
       this.storage.setItem(GHOST_PREFIX + trackId, encoded);
       const index = this.ghostIndex;
+      // Daily challenge ghosts expire: keep only the current day's one.
+      if (trackId.startsWith('daily_')) {
+        for (const id of [...index]) {
+          if (id.startsWith('daily_') && id !== trackId) {
+            this.storage.removeItem(GHOST_PREFIX + id);
+            index.delete(id);
+          }
+        }
+      }
       index.add(trackId);
       this.storage.setItem(GHOST_PREFIX + '__index', JSON.stringify([...index]));
     } catch (err) {

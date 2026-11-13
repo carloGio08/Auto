@@ -84,6 +84,10 @@ export class UIManager {
     return this.modals.length > 0;
   }
 
+  get modalCount(): number {
+    return this.modals.length;
+  }
+
   toast(text: string, tone: 'good' | 'bad' | 'info' | 'gold' = 'info', ms = 2200): void {
     const el = h('div', { class: `toast toast-${tone}` }, text);
     this.toasts.append(el);
