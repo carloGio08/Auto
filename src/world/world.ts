@@ -141,7 +141,8 @@ export class World {
     this.applyFog();
     this.lighting.setShadows(preset.shadows, preset.shadowMapSize);
     this.props.setQuality(preset);
-    this.terrainMesh.setResolution(preset.terrainCells);
+    // Terrain detail is kept until the next descent: rebuilding every patch mid-run (e.g. on
+    // an automatic downgrade) would show coarse ground under the jeep for a while.
   }
 
   /**

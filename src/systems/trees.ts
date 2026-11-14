@@ -28,7 +28,10 @@ export class TreesSystem extends BaseSystem {
   private onHit(c: Collider, impactSpeed: number, car: VehiclePhysics): boolean {
     const world = this.session.world;
     const t = world.props.treeOf(c);
-    if (!t || !treeBreaks(t.tier, car.mass, impactSpeed)) return false;
+    if (!t) return false;
+    // Already snapped this step (the chassis is tested as two circles): just pass through.
+    if (world.props.broken.has(t.id)) return true;
+    if (!treeBreaks(t.tier, car.mass, impactSpeed)) return false;
     const def = treeTiers[t.tier];
     world.props.breakTree(t);
     // Robustness: the jeep loses a share of its speed.

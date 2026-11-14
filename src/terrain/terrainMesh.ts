@@ -69,17 +69,6 @@ export class TerrainMesh {
     this.lakeLevel = terrain.mountain.def.lake.level;
   }
 
-  /** Changes the patch resolution (quality); rebuilds progressively. */
-  setResolution(cellsPerPatch: number): void {
-    if (cellsPerPatch === this.n) return;
-    this.n = cellsPerPatch;
-    for (const node of this.nodes.values()) this.free(node);
-    this.nodes.clear();
-    this.build = null;
-    this.queue.length = 0;
-    this.shown.clear();
-  }
-
   private node(level: number, i: number, j: number): QuadNode {
     const key = level * 1e8 + i * 1e4 + j;
     let nd = this.nodes.get(key);
