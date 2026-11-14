@@ -4,6 +4,7 @@ import { surfaces } from '../data/surfaces';
 import type { SurfaceDef } from '../data/types';
 import type { RunSession } from '../game/session';
 import { clamp } from '../math/util';
+import { ContactShadow } from './contactShadow';
 import { PostFx } from './postfx';
 import { shardKinds as K } from './shardKinds';
 import { ShardSystem, type ShardKind } from './shards';
@@ -37,6 +38,7 @@ export class Effects {
   };
   readonly speedLines: SpeedLines | null;
   readonly postfx: PostFx;
+  readonly contact: ContactShadow;
   private readonly offs: (() => void)[] = [];
   private emitAcc = 0;
   private steamAcc = 0;
@@ -74,6 +76,7 @@ export class Effects {
         ? new TireTracks(session.course.terrain, pal, TRACK_CAPACITY[trackSetting])
         : null;
     if (this.tracks) world.scene.add(this.tracks.mesh);
+    this.contact = new ContactShadow(world.scene, session.course.terrain);
     this.speedLines = config.features.speedLines ? new SpeedLines() : null;
     if (this.speedLines) {
       this.speedLines.attach(session.camera.camera);
@@ -314,6 +317,8 @@ export class Effects {
     this.speedLines?.update(realDt, intensity, speed);
     this.postfx.update(realDt, car.nitroActive);
     this.tracks?.update(car.position.x, car.position.z);
+    const v = this.session.vehicle;
+    this.contact.update(v.renderPosition, v.renderQuaternion);
   }
 
   clear(): void {
@@ -325,6 +330,7 @@ export class Effects {
     this.offs.forEach((o) => o());
     this.shards.dispose();
     this.tracks?.dispose();
+    this.contact.dispose();
     this.speedLines?.dispose();
     this.postfx.dispose();
   }

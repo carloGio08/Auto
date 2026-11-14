@@ -21,7 +21,7 @@ export class Renderer {
   setting: QualitySetting;
   preset: QualityPreset;
   presetId: QualityPresetId;
-  /** Dynamic resolution scale (0.55..1). */
+  /** Dynamic resolution scale (minScale..1, never below 0.85: the image stays sharp). */
   scale = 1;
   private timer = 0;
   private slowStreak = 0;
@@ -48,7 +48,9 @@ export class Renderer {
     this.preset = config.graphics.presets[this.presetId];
     this.gl = new WebGLRenderer({
       canvas,
-      antialias: !device.mobile && this.presetId === 'high',
+      // MSAA on every preset: a crisp, unaliased image is never traded for speed (presets
+      // degrade density and distance instead).
+      antialias: true,
       powerPreference: 'high-performance',
       stencil: false,
     });
@@ -85,8 +87,9 @@ export class Renderer {
     const h = Math.max(1, window.innerHeight);
     this.width = w;
     this.height = h;
+    // Default min(devicePixelRatio, 2); the canvas is drawn at its CSS size (no CSS upscaling).
     const ratio = Math.min(window.devicePixelRatio || 1, this.preset.pixelRatioCap, 2) * this.scale;
-    this.gl.setPixelRatio(Math.max(0.5, ratio));
+    this.gl.setPixelRatio(Math.max(0.85, ratio));
     this.gl.setSize(w, h, false);
   }
 

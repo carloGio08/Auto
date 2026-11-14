@@ -270,7 +270,7 @@ export class World {
     this.terrainMesh.update(camera.x, camera.y, camera.z, buildBudgetMs);
     this.props.update(camera.x, camera.z, focus.x, focus.z);
     this.sky.update(dt, camera);
-    this.lighting.follow(focus);
+    this.lighting.follow(focus, camera);
     this.water.update(dt);
     this.snow?.update(dt, camera, this.elapsed);
   }

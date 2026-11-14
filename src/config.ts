@@ -192,10 +192,10 @@ export const config = {
         triangleBudget: 650_000,
         /** Cells per patch side at most (smaller patches: less waste, more draw calls). */
         patchCells: 48,
-        pixelRatioCap: 1,
-        shadows: false,
-        shadowMapSize: 512,
-        antialias: false,
+        pixelRatioCap: 1.5,
+        shadows: true,
+        shadowMapSize: 1024,
+        antialias: true,
         viewDistance: 1500,
         propDistance: 420,
         /** Trees: detailed within (m), canopy masses up to (m), undergrowth within (m),
@@ -218,10 +218,10 @@ export const config = {
         lod0Radius: 180,
         triangleBudget: 1_300_000,
         patchCells: 64,
-        pixelRatioCap: 1.5,
+        pixelRatioCap: 2,
         shadows: true,
         shadowMapSize: 1024,
-        antialias: false,
+        antialias: true,
         viewDistance: 2300,
         propDistance: 650,
         /** Trees: detailed within (m), canopy masses up to (m), undergrowth within (m),
@@ -266,15 +266,22 @@ export const config = {
       },
     },
     dynamicResolution: {
-      minScale: 0.55,
+      /** Never below 0.85: blur is not an acceptable way to save frame time. */
+      minScale: 0.85,
       targetMs: 16.9,
       downMs: 18.8,
       upMs: 14.5,
       /** Seconds between adjustments. */
       interval: 1,
     },
-    /** Shadow frustum half-size around the car (m). */
-    shadowExtent: 60,
+    /**
+     * Shadow frustum half-size (m), centred `shadowAhead` m in front of the car along the view
+     * so the road ahead gets shadows; bias tuned for the terrain (no acne, no peter-panning).
+     */
+    shadowExtent: 75,
+    shadowAhead: 40,
+    shadowBias: -0.00035,
+    shadowNormalBias: 0.05,
   },
 
   audio: {
@@ -296,6 +303,14 @@ export const config = {
     testCoins: 100000 as number,
     /** Lets achievement-locked jeeps be bought for testing. */
     unlockAll: true as boolean,
+  },
+
+  /** Visual benchmark view (`?shot=benchmark`): fixed point of the main trail and look. */
+  benchmark: {
+    /** Metres from the summit along the main trail. */
+    trailDistance: 6200,
+    time: 'day' as const,
+    weather: 'clear' as const,
   },
 
   /** Feature flags: toggle whole features without touching code. */

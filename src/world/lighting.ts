@@ -38,8 +38,10 @@ export class Lighting {
     cam.bottom = -s;
     cam.near = 10;
     cam.far = 420;
-    this.sun.shadow.bias = -0.0006;
-    this.sun.shadow.normalBias = 0.04;
+    this.sun.shadow.bias = config.graphics.shadowBias;
+    this.sun.shadow.normalBias = config.graphics.shadowNormalBias;
+    // Soft PCF edges (PCFSoftShadowMap filters over a few texels).
+    this.sun.shadow.radius = 2;
     this.setShadows(shadows, shadowMapSize);
     this.ambient = new HemisphereLight(
       new Color(time.ambientSky),
@@ -58,11 +60,27 @@ export class Lighting {
     }
   }
 
-  /** Keeps the shadow frustum centred on the focus point (snapped to texels to avoid shimmer). */
-  follow(focus: Vector3): void {
-    const texel = (config.graphics.shadowExtent * 2) / this.sun.shadow.mapSize.x;
-    const fx = Math.round(focus.x / texel) * texel;
-    const fz = Math.round(focus.z / texel) * texel;
+  /**
+   * Keeps the shadow frustum on the focus point, shifted ahead along the view (from `eye`
+   * towards the focus) so the road in front of the car is covered too; snapped to texels to
+   * avoid shimmering edges.
+   */
+  follow(focus: Vector3, eye?: Vector3): void {
+    const g = config.graphics;
+    let cx = focus.x;
+    let cz = focus.z;
+    if (eye) {
+      const dx = focus.x - eye.x;
+      const dz = focus.z - eye.z;
+      const d = Math.hypot(dx, dz);
+      if (d > 1e-3) {
+        cx += (dx / d) * g.shadowAhead;
+        cz += (dz / d) * g.shadowAhead;
+      }
+    }
+    const texel = (g.shadowExtent * 2) / this.sun.shadow.mapSize.x;
+    const fx = Math.round(cx / texel) * texel;
+    const fz = Math.round(cz / texel) * texel;
     this.target.position.set(fx, focus.y, fz);
     this.sun.position.set(fx + this.offset.x, focus.y + this.offset.y, fz + this.offset.z);
     this.target.updateMatrixWorld();

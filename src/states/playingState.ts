@@ -1,4 +1,6 @@
 import { DebugMap } from '../ui/debugMap';
+import { benchmark } from '../core/benchmark';
+import { config } from '../config';
 import { createRoadPoint } from '../terrain/road';
 import type { GameContext, StateId } from '../core/context';
 import type { GameState } from '../core/stateMachine';
@@ -17,6 +19,8 @@ export class PlayingState implements GameState<StateId> {
   private hud!: Hud;
   private resultsShown = false;
   private paused = false;
+  /** Benchmark view: physics frozen, the jeep stays parked. */
+  private frozen = false;
   private readonly offs: (() => void)[] = [];
   /** Any tap/click skips the opening fly-over. */
   private readonly onSkipTap = (): void => {
@@ -55,7 +59,17 @@ export class PlayingState implements GameState<StateId> {
     if (new URLSearchParams(location.search).has('autopilot'))
       this.session.autopilot = new Autopilot(this.session.course.road);
     const query = new URLSearchParams(location.search);
-    this.session.start(!query.has('autopilot') && !query.has('e2e'));
+    if (benchmark.active) {
+      // Fixed view: default camera, no intro, jeep parked on the trail with physics frozen.
+      const st = ctx.save.data.settings;
+      Object.assign(st, { camera: 'chase', cameraDistance: 1, cameraHeight: 1, cameraShake: 0 });
+      this.session.start(false);
+      const p = this.session.course.road.pointAt(config.benchmark.trailDistance, createRoadPoint());
+      this.session.teleport(p.x, p.z, Math.atan2(p.tx, p.tz));
+      this.session.camera.mode = 'chase';
+      this.frozen = true;
+      document.documentElement.dataset.benchmark = 'running';
+    } else this.session.start(!query.has('autopilot') && !query.has('e2e'));
     window.addEventListener('pointerdown', this.onSkipTap);
     this.offs.push(
       this.session.events.on(
@@ -177,7 +191,7 @@ export class PlayingState implements GameState<StateId> {
   }
 
   fixedUpdate(dt: number): void {
-    if (this.paused) return;
+    if (this.paused || this.frozen) return;
     this.session.fixedUpdate(dt, this.ctx.input.drive);
   }
 

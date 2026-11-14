@@ -3,6 +3,8 @@ import type { GameState } from '../core/stateMachine';
 import { h } from '../ui/dom';
 import type { BackdropHost } from './backdropHost';
 import type { TerrainJob } from '../terrain/terrainService';
+import { benchmark } from '../core/benchmark';
+import { config } from '../config';
 
 /**
  * Shows a splash while the menu mountain is generated in the terrain worker, then builds the
@@ -36,6 +38,18 @@ export class BootState implements GameState<StateId> {
     this.job ??= this.ctx.terrain.prepare(this.ctx.registries.mountains.all()[0]);
     if (this.job.done) {
       this.frames = -1e9;
+      if (benchmark.active) {
+        document.getElementById('boot-splash')?.remove();
+        if (benchmark.quality) this.ctx.renderer.applySetting(benchmark.quality);
+        const b = config.benchmark;
+        this.ctx.states.go('loading', {
+          mountainId: this.ctx.registries.mountains.all()[0].id,
+          mode: 'freeDescent',
+          time: b.time,
+          weather: b.weather,
+        });
+        return;
+      }
       this.backdrop.get();
       document.getElementById('boot-splash')?.remove();
       this.ctx.states.go('mainMenu');
