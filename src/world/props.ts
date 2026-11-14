@@ -9,12 +9,10 @@ import {
 } from 'three';
 import { config, type QualityPreset } from '../config';
 import type { ResolvedPalette } from '../data/palette';
-import { Rng } from '../math/rng';
-import { Simplex2 } from '../math/noise';
-import { smoothstep } from '../math/util';
 import type { Course } from '../terrain/course';
 import type { Collider, CollisionWorld } from './colliders';
 import { PropGeometry, type TreeTier } from './propGeometry';
+import { placeCell, PROP_TYPES, type PropInstance, type PropType } from './propPlacement';
 
 /** Tree record of a loaded cell (also the collider owner). */
 export interface TreeRef {
@@ -29,14 +27,7 @@ export interface TreeRef {
   id: number;
 }
 
-interface Instance {
-  type: number;
-  x: number;
-  y: number;
-  z: number;
-  scale: number;
-  rot: number;
-}
+type Instance = PropInstance;
 
 export interface PropCell {
   cx: number;
@@ -52,23 +43,7 @@ export interface PropCell {
   detailed: boolean;
 }
 
-const TYPES = [
-  'pineYoung0',
-  'pineYoung1',
-  'pineMid0',
-  'pineMid1',
-  'roundMid',
-  'pineOld0',
-  'pineOld1',
-  'pineSnow',
-  'bush0',
-  'bush1',
-  'rock0',
-  'rock1',
-  'rock2',
-  'stump',
-] as const;
-type PropType = (typeof TYPES)[number];
+const TYPES = PROP_TYPES;
 const TREE_TIER: Partial<Record<PropType, TreeTier>> = {
   pineYoung0: 'young',
   pineYoung1: 'young',
@@ -101,8 +76,6 @@ export class Props {
   private readonly cells = new Map<number, PropCell>();
   /** Ids of trees broken during this run (become stumps). */
   readonly broken = new Set<number>();
-  private readonly forest: Simplex2;
-  private readonly clearing: Simplex2;
   private readonly size = config.world.propCellSize;
   instanceCount = 0;
   private shadows: boolean;
@@ -129,12 +102,13 @@ export class Props {
       rock0: () => g.rock(0),
       rock1: () => g.rock(1),
       rock2: () => g.rock(2),
+      rockSlab: () => g.rockSlab(),
+      rockSpire: () => g.rockSpire(),
+      rockRound: () => g.rockRound(),
       stump: () => g.stump(),
     };
     this.geos = TYPES.map((t) => builders[t]());
     this.farGeo = g.farTree();
-    this.forest = new Simplex2(course.def.seed ^ 0xf0e5);
-    this.clearing = new Simplex2(course.def.seed ^ 0xc1ea);
     this.shadows = preset.shadows;
   }
 
@@ -142,108 +116,12 @@ export class Props {
     return (cx + 512) * 1024 + (cz + 512);
   }
 
-  /** Generates the instances (and colliders) of one cell. */
+  /** Generates the instances (and rock colliders) of one cell. */
   private generate(cx: number, cz: number): Instance[] {
-    const course = this.course;
-    const terrain = course.terrain;
-    const def = course.def;
-    const b = def.biomes;
-    const out: Instance[] = [];
-    const rng = new Rng((cx * 73856093) ^ (cz * 19349663) ^ def.seed);
-    const density = this.preset.propDensity;
-    const x0 = cx * this.size;
-    const z0 = cz * this.size;
-    const step = 9;
-    const lake = def.lake.level;
-    const tIndex = (t: PropType): number => TYPES.indexOf(t);
-    for (let gz = 0; gz < this.size; gz += step) {
-      for (let gx = 0; gx < this.size; gx += step) {
-        const x = x0 + gx + rng.range(0, step);
-        const z = z0 + gz + rng.range(0, step);
-        const roll = rng.next();
-        const kindRoll = rng.next();
-        const rot = rng.range(0, Math.PI * 2);
-        const sc = rng.range(0.8, 1.25);
-        if (Math.max(Math.abs(x), Math.abs(z)) > def.halfSize * 1.05) continue;
-        const h = terrain.height(x, z);
-        const rqd = terrain.lastQuery;
-        const roadD = rqd.found ? rqd.distance - rqd.halfWidth : 1e4;
-        if (roadD < 2.5) continue;
-        if (h < lake + 1.5 || terrain.waterLevel(x, z) > h - 0.3) continue;
-        if (Math.hypot(x - course.base.x, z - course.base.z) < course.base.radius + 25) continue;
-        if (Math.hypot(x - course.start.x, z - course.start.z) < 40) continue;
-        // Slope from a cheap finite difference.
-        const hx = terrain.height(x + 1.5, z);
-        const hz = terrain.height(x, z + 1.5);
-        const slope = Math.hypot(hx - h, hz - h) / 1.5;
-        const wob = 28 * Math.sin(x / 240 + z / 610);
-        const alt = h + wob;
-        // Rocks lining the trail edges and on scree/rock slopes.
-        const edge = roadD < 5;
-        const rocky = (alt > b.rockLine && slope > 0.25) || slope > 0.75;
-        const pRock = (edge ? 0.12 : 0) + (rocky ? 0.22 : 0.025);
-        if (roll < pRock * def.props.rocks * density) {
-          const s = edge ? rng.range(0.5, 1.1) : rng.range(0.5, 2.4) * (rocky ? 1.3 : 1);
-          out.push({
-            type: tIndex(kindRoll < 0.33 ? 'rock0' : kindRoll < 0.66 ? 'rock1' : 'rock2'),
-            x,
-            y: h - 0.25 * s,
-            z,
-            scale: s,
-            rot,
-          });
-          if (s > 0.6)
-            this.pendingColliders.push(['rock', x, z, 0.95 * s, h - 1, h + 1.2 * s, null]);
-          continue;
-        }
-        if (alt > b.treeLine + 60 || slope > 0.85) continue;
-        // Forest density: bands by altitude, organic noise, clearings along the trail.
-        const forestN = 0.5 + 0.5 * this.forest.fbm(x / 420, z / 420, 3);
-        let dens: number;
-        if (alt > b.treeLine) dens = 0.08;
-        else if (alt > b.denseForestLine) dens = 0.42;
-        else if (alt > b.valleyLine) dens = 0.75;
-        else dens = 0.18;
-        const clearingMask =
-          roadD < 45 ? smoothstep(-0.2, 0.25, this.clearing.noise(x / 160, z / 160)) : 1;
-        const nearTrail = smoothstep(4, 14, roadD);
-        const p =
-          dens *
-          (0.35 + 0.9 * forestN) *
-          clearingMask *
-          (0.3 + 0.7 * nearTrail) *
-          def.props.trees *
-          density;
-        if (roll < 0.25 + p * 0.75 && roll > 0.25) {
-          // Tier mix: young near the trail (breakable), old deep in the forest.
-          const deep = smoothstep(10, 60, roadD) * (alt < b.denseForestLine ? 1 : 0.6);
-          const t = kindRoll + deep * 0.25;
-          let type: PropType;
-          if (alt > b.treeLine - 80)
-            type = t > 0.75 ? 'pineSnow' : t > 0.4 ? 'pineMid1' : 'pineYoung1';
-          else if (t < 0.32) type = kindRoll < 0.16 ? 'pineYoung0' : 'pineYoung1';
-          else if (t < 0.82)
-            type =
-              alt < b.valleyLine + 150 && kindRoll < 0.55
-                ? 'roundMid'
-                : kindRoll < 0.6
-                  ? 'pineMid0'
-                  : 'pineMid1';
-          else type = kindRoll < 0.9 ? 'pineOld0' : 'pineOld1';
-          out.push({ type: tIndex(type), x, y: h - 0.15, z, scale: sc, rot });
-        } else if (roll > 0.94 && alt < b.treeLine) {
-          out.push({
-            type: tIndex(kindRoll < 0.5 ? 'bush0' : 'bush1'),
-            x,
-            y: h - 0.05,
-            z,
-            scale: sc,
-            rot,
-          });
-        }
-      }
-    }
-    return out;
+    const placed = placeCell(this.course, cx, cz, this.size, this.preset.propDensity);
+    for (const [x, z, r, y0, y1] of placed.rockColliders)
+      this.pendingColliders.push(['rock', x, z, r, y0, y1, null]);
+    return placed.instances;
   }
 
   /** Colliders found while generating (rocks); trees are added with their refs. */

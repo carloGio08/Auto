@@ -4,6 +4,7 @@ import {
   ConeGeometry,
   CylinderGeometry,
   DodecahedronGeometry,
+  IcosahedronGeometry,
   Float32BufferAttribute,
   OctahedronGeometry,
 } from 'three';
@@ -167,6 +168,49 @@ export class PropGeometry {
     g.translate(0, 0.32, 0);
     const tones = [this.pal.rockLight[2], this.pal.rockDark[2], this.pal.scree[2]];
     return merge([paint(g, tones[variant % 3], tones[(variant + 1) % 3], 0.3, variant)]);
+  }
+
+  /** Flat, layered slab (crest outcrops): two stacked tilted plates. */
+  rockSlab(): BufferGeometry {
+    const a = new DodecahedronGeometry(1, 0);
+    wobble(a, 0.18, 931);
+    a.scale(1.5, 0.45, 1.1);
+    a.rotateZ(0.18);
+    a.translate(0, 0.25, 0);
+    const b = new DodecahedronGeometry(0.75, 0);
+    wobble(b, 0.15, 932);
+    b.scale(1.3, 0.5, 1);
+    b.rotateZ(-0.12);
+    b.translate(0.35, 0.68, 0.1);
+    return merge([
+      paint(a, this.pal.rockDark[2], this.pal.rockDark[1], 0.35, 3),
+      paint(b, this.pal.rockLight[1], this.pal.rockLight[2], 0.35, 4),
+    ]);
+  }
+
+  /** Stylised crag: a leaning, faceted spire (steep faces). */
+  rockSpire(): BufferGeometry {
+    const g = new ConeGeometry(0.9, 2.6, 5, 2);
+    wobble(g, 0.16, 941);
+    g.rotateZ(0.12);
+    g.translate(0, 1.15, 0);
+    const foot = new DodecahedronGeometry(0.8, 0);
+    wobble(foot, 0.2, 942);
+    foot.scale(1.3, 0.55, 1.1);
+    foot.translate(0.2, 0.2, 0);
+    return merge([
+      paint(g, this.pal.rockLight[2], this.pal.rockDark[3], 0.4, 5),
+      paint(foot, this.pal.rockDark[2], undefined, 0, 6),
+    ]);
+  }
+
+  /** Rounded stream boulder (water-worn: more facets, lighter top). */
+  rockRound(): BufferGeometry {
+    const g = new IcosahedronGeometry(1, 1);
+    wobble(g, 0.1, 951);
+    g.scale(1.15, 0.62, 0.95);
+    g.translate(0, 0.3, 0);
+    return merge([paint(g, this.pal.scree[2], this.pal.rockLight[1], 0.4, 7)]);
   }
 
   /** Wooden post with a painted red-white waymark band. */
