@@ -1,4 +1,4 @@
-import type { BufferGeometry, Color } from 'three';
+import { Color, type BufferGeometry } from 'three';
 import {
   BoxGeometry,
   ConeGeometry,
@@ -11,6 +11,7 @@ import {
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Rng } from '../math/rng';
 import type { ResolvedPalette } from '../data/palette';
+import type { TreeShape, UndergrowthKind } from '../data/vegetation';
 
 /** Paints a (non-indexed) geometry with one colour; `alt` gives some faces the second tone. */
 function paint(
@@ -120,6 +121,151 @@ export class PropGeometry {
       parts.push(paint(o, greens[(i + variant) % 3], greens[(i + variant + 1) % 3], 0.3, i));
     }
     return merge(parts);
+  }
+
+  /**
+   * Full tree of a species at unit size: 1 m tall, crown 1 m wide, origin at the trunk base
+   * (instances scale it to the real width and height). `snowy` adds snow on the crown.
+   */
+  species(shape: TreeShape, tones: Color[], variant: number, snowy: boolean): BufferGeometry {
+    const parts: BufferGeometry[] = [];
+    const trunk = (h: number, r: number): void => {
+      const t = new CylinderGeometry(r * 0.7, r, h, 5);
+      t.translate(0, h / 2, 0);
+      parts.push(paint(t, this.pal.wood[1]));
+    };
+    const crownCone = (y0: number, h: number, r: number, k: number): void => {
+      const cone = new ConeGeometry(r, h, 6, 1);
+      cone.rotateY(variant * 0.7 + k);
+      cone.translate(0, y0 + h / 2, 0);
+      wobble(cone, 0.03, variant * 13 + k);
+      parts.push(paint(cone, tones[k % tones.length], tones[(k + 1) % tones.length], 0.3, k));
+      if (snowy) {
+        const cap = new ConeGeometry(r * 0.5, h * 0.32, 6, 1);
+        cap.rotateY(variant * 0.7 + k);
+        cap.translate(0, y0 + h * 0.84, 0);
+        parts.push(paint(cap, this.pal.snow[4]));
+      }
+    };
+    if (shape === 'spruce' || shape === 'larch') {
+      const n = shape === 'spruce' ? 5 : 4;
+      trunk(0.22, 0.035);
+      for (let k = 0; k < n; k++) {
+        const f = k / n;
+        crownCone(0.12 + f * 0.7, 0.3 - f * 0.06, 0.5 * (1 - f * 0.75), k);
+      }
+    } else if (shape === 'pine') {
+      trunk(0.45, 0.04);
+      for (let k = 0; k < 3; k++) {
+        const f = k / 3;
+        crownCone(0.38 + f * 0.36, 0.34 - f * 0.08, 0.5 * (1 - f * 0.45), k);
+      }
+    } else if (shape === 'broadleaf') {
+      trunk(0.45, 0.045);
+      const rng = new Rng(300 + variant);
+      for (let i = 0; i < 4; i++) {
+        const o = new OctahedronGeometry(0.27 - i * 0.025, 0);
+        o.scale(1, 1.1, 1);
+        o.rotateY(rng.next() * 3);
+        o.translate(rng.range(-0.14, 0.14), 0.52 + i * 0.12, rng.range(-0.14, 0.14));
+        wobble(o, 0.03, variant * 7 + i);
+        parts.push(paint(o, tones[i % tones.length], tones[(i + 1) % tones.length], 0.3, i));
+      }
+    } else {
+      // Dwarf mountain pine: a low, wide clump.
+      const rng = new Rng(700 + variant);
+      for (let i = 0; i < 4; i++) {
+        const o = new OctahedronGeometry(0.3, 0);
+        o.scale(1, 0.75, 1);
+        o.translate(rng.range(-0.22, 0.22), 0.35 + rng.range(0, 0.2), rng.range(-0.22, 0.22));
+        parts.push(paint(o, tones[i % tones.length], tones[(i + 1) % tones.length], 0.3, i));
+      }
+      if (snowy) {
+        const cap = new OctahedronGeometry(0.28, 0);
+        cap.scale(1, 0.45, 1);
+        cap.translate(0, 0.62, 0);
+        parts.push(paint(cap, this.pal.snow[4]));
+      }
+    }
+    return merge(parts);
+  }
+
+  /** Simplified tree for the middle distance: one crown shape, no trunk detail. */
+  speciesLow(shape: TreeShape, tone: Color): BufferGeometry {
+    let g: BufferGeometry;
+    if (shape === 'broadleaf') {
+      g = new OctahedronGeometry(0.42, 0);
+      g.scale(1, 1.15, 1);
+      g.translate(0, 0.58, 0);
+    } else if (shape === 'dwarf') {
+      g = new OctahedronGeometry(0.5, 0);
+      g.scale(1, 0.6, 1);
+      g.translate(0, 0.32, 0);
+    } else {
+      g = new ConeGeometry(0.42, 0.9, 5, 1);
+      g.translate(0, 0.55, 0);
+    }
+    return merge([paint(g, tone)]);
+  }
+
+  /** Canopy mass of a patch of forest (far LOD): unit radius and height, base at 0. */
+  canopy(): BufferGeometry {
+    const g = new IcosahedronGeometry(1, 0);
+    g.scale(1, 0.5, 1);
+    g.translate(0, 0.5, 0);
+    wobble(g, 0.08, 991);
+    // White: the colour comes from the instance (species mix of the patch).
+    return merge([paint(g, new Color(1, 1, 1))]);
+  }
+
+  /** Undergrowth pieces at unit size. */
+  undergrowth(kind: UndergrowthKind): BufferGeometry {
+    const rng = new Rng(1200 + kind.length);
+    switch (kind) {
+      case 'bush':
+        return this.bush(0);
+      case 'grass': {
+        const parts: BufferGeometry[] = [];
+        for (let i = 0; i < 4; i++) {
+          const blade = new ConeGeometry(0.08, 1, 3, 1);
+          blade.rotateZ(rng.range(-0.35, 0.35));
+          blade.rotateY((i / 4) * Math.PI * 2);
+          blade.translate(rng.range(-0.15, 0.15), 0.45, rng.range(-0.15, 0.15));
+          parts.push(paint(blade, i % 2 ? this.pal.grass[1] : this.pal.dryGrass[1]));
+        }
+        return merge(parts);
+      }
+      case 'fern': {
+        const parts: BufferGeometry[] = [];
+        for (let i = 0; i < 5; i++) {
+          const leaf = new OctahedronGeometry(0.5, 0);
+          leaf.scale(0.22, 0.06, 1);
+          leaf.translate(0, 0, 0.45);
+          leaf.rotateX(-0.45);
+          leaf.rotateY((i / 5) * Math.PI * 2);
+          leaf.translate(0, 0.3, 0);
+          parts.push(paint(leaf, this.pal.undergrowth[2], this.pal.grass[0], 0.3, i));
+        }
+        return merge(parts);
+      }
+      case 'flowerY':
+      case 'flowerP': {
+        const stem = new CylinderGeometry(0.03, 0.03, 0.8, 3);
+        stem.translate(0, 0.4, 0);
+        const head = new OctahedronGeometry(0.16, 0);
+        head.translate(0, 0.85, 0);
+        const c = kind === 'flowerY' ? this.pal.flowers[2] : this.pal.flowers[3];
+        return merge([paint(stem, this.pal.grass[1]), paint(head, c)]);
+      }
+      case 'log': {
+        const t = new CylinderGeometry(0.06, 0.07, 1, 6);
+        t.rotateZ(Math.PI / 2);
+        t.translate(0, 0.06, 0);
+        return merge([paint(t, this.pal.wood[1], this.pal.wood[0], 0.4, 3)]);
+      }
+      case 'stump':
+        return this.stump();
+    }
   }
 
   /** Very cheap far-away tree: one cone. */

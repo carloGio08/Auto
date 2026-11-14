@@ -127,9 +127,12 @@ export class World {
     this.structures.build();
     this.scene.add(this.structures.group);
     yield { stage: 'loading.props', progress: 0.75 };
-    this.props = new Props(course, this.colliders, this.preset, this.palette);
-    this.props.prebuild(st.x, st.z);
+    this.props = new Props(course, this.colliders, this.preset, this.palette, backend);
     this.scene.add(this.props.group);
+    if (async)
+      for (const p of this.props.prebuildAsync(st.x, st.z))
+        yield { stage: 'loading.props', progress: 0.75 + p * 0.12, wait: true };
+    else this.props.prebuild(st.x, st.z);
     yield { stage: 'loading.props', progress: 0.88 };
     const center = new Vector3(0, course.def.baseHeight, 0);
     this.sky = new Sky(this.time, this.weather, this.preset.clouds, course.def.seed, center);
@@ -190,7 +193,7 @@ export class World {
   update(dt: number, camera: Vector3, focus: Vector3 = camera, buildBudgetMs?: number): void {
     this.elapsed += dt;
     this.terrainMesh.update(camera.x, camera.y, camera.z, buildBudgetMs);
-    this.props.update(camera.x, camera.z);
+    this.props.update(camera.x, camera.z, focus.x, focus.z);
     this.sky.update(dt, camera);
     this.lighting.follow(focus);
     this.water.update(dt);

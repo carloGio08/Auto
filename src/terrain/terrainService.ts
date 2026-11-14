@@ -2,6 +2,7 @@ import type { MountainDef } from '../data/types';
 import { buildCourseData, type Course, type CourseData } from './course';
 import { ArrayPool, PatchBuild, type PatchArrays, type PatchRequest } from './patchBuilder';
 import type { PatchPalette } from './splat';
+import { placeCell, type CellData } from '../world/propPlacement';
 import type { WorkerRequest, WorkerResponse } from './terrainWorker';
 
 /** A course generation in progress (or done). Poll it from a state's update. */
@@ -26,6 +27,15 @@ export interface PatchBackend {
   readonly pending: number;
   /** Drops queued requests (positions changed a lot, e.g. a teleport). */
   cancelAll(): void;
+  /** Props placement of a cell (trees, rocks, undergrowth, canopy masses). */
+  requestCell(
+    cx: number,
+    cz: number,
+    size: number,
+    density: number,
+    full: boolean,
+    done: (d: CellData) => void,
+  ): void;
 }
 
 const keyOf = (def: MountainDef): string => `${def.id}:${def.seed}`;
@@ -53,13 +63,33 @@ class LocalBackend implements PatchBackend {
     this.pool.give(r);
   }
 
+  private readonly cellQueue: (() => void)[] = [];
+
+  requestCell(
+    cx: number,
+    cz: number,
+    size: number,
+    density: number,
+    full: boolean,
+    done: (d: CellData) => void,
+  ): void {
+    this.cellQueue.push(() => done(placeCell(this.course, cx, cz, size, density, full)));
+  }
+
   cancelAll(): void {
     this.queue.length = 0;
     this.current = null;
+    this.cellQueue.length = 0;
   }
 
   pump(budgetMs: number): void {
     const end = performance.now() + budgetMs;
+    // Props cells: at least one per frame, more within the budget.
+    do {
+      const job = this.cellQueue.shift();
+      if (!job) break;
+      job();
+    } while (performance.now() < end);
     while (performance.now() < end) {
       if (!this.current) {
         const next = this.queue.shift();
@@ -92,6 +122,33 @@ class WorkerBackend implements PatchBackend {
 
   get pending(): number {
     return this.waiting.size + this.local.pending;
+  }
+
+  private readonly cellWaiting = new Map<number, (d: CellData) => void>();
+  private cellSeq = 1;
+
+  requestCell(
+    cx: number,
+    cz: number,
+    size: number,
+    density: number,
+    full: boolean,
+    done: (d: CellData) => void,
+  ): void {
+    if (this.failed) {
+      this.local.requestCell(cx, cz, size, density, full, done);
+      return;
+    }
+    const id = this.cellSeq++;
+    this.cellWaiting.set(id, done);
+    this.service.post({ type: 'cell', id, gen: this.gen, cx, cz, size, density, full });
+  }
+
+  receiveCell(id: number, d: CellData): void {
+    const cb = this.cellWaiting.get(id);
+    if (!cb) return;
+    this.cellWaiting.delete(id);
+    cb(d);
   }
 
   /** A patch the worker could not build: build it on the main thread. */
@@ -141,6 +198,7 @@ class WorkerBackend implements PatchBackend {
   cancelAll(): void {
     this.waiting.clear();
     this.requests.clear();
+    this.cellWaiting.clear();
     this.local.cancelAll();
   }
 
@@ -187,6 +245,10 @@ export class TerrainService {
     }
     if (msg.type === 'patch') {
       if (this.active && msg.gen === this.active.gen) this.active.receive(msg.key, msg.result);
+      return;
+    }
+    if (msg.type === 'cell') {
+      if (this.active && msg.gen === this.active.gen) this.active.receiveCell(msg.id, msg.data);
       return;
     }
     const job = this.byId.get(msg.id);

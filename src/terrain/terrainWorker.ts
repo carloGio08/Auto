@@ -8,18 +8,30 @@ import { buildCourseData, Course, type CourseData } from './course';
 import { ArrayPool, buildPatch, type PatchArrays, type PatchRequest } from './patchBuilder';
 import type { MountainDef } from '../data/types';
 import type { PatchPalette } from './splat';
+import { placeCell, type CellData } from '../world/propPlacement';
 
 export type WorkerRequest =
   | { type: 'generate'; id: number; def: MountainDef }
   | { type: 'activate'; def: MountainDef; data: CourseData; palette: PatchPalette }
   | { type: 'patch'; req: PatchRequest }
-  | { type: 'recycle'; buffers: ArrayBuffer[] };
+  | { type: 'recycle'; buffers: ArrayBuffer[] }
+  | {
+      type: 'cell';
+      id: number;
+      gen: number;
+      cx: number;
+      cz: number;
+      size: number;
+      density: number;
+      full: boolean;
+    };
 
 export type WorkerResponse =
   | { type: 'progress'; id: number; progress: number }
   | { type: 'generated'; id: number; data: CourseData }
   | { type: 'error'; id: number; message: string }
   | { type: 'patchError'; key: number; gen: number; message: string }
+  | { type: 'cell'; id: number; gen: number; data: CellData }
   | { type: 'patch'; key: number; gen: number; result: PatchArrays };
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
@@ -43,6 +55,19 @@ scope.onmessage = (e: MessageEvent<WorkerRequest>): void => {
       scope.postMessage(
         { type: 'patch', key: msg.req.key, gen: msg.req.gen, result } as WorkerResponse,
         [result.position.buffer, result.color.buffer, result.normal.buffer],
+      );
+    } else if (msg.type === 'cell') {
+      if (!active || msg.gen !== active.gen) return;
+      const data = placeCell(active.course, msg.cx, msg.cz, msg.size, msg.density, msg.full);
+      scope.postMessage(
+        { type: 'cell', id: msg.id, gen: msg.gen, data } as WorkerResponse,
+        [
+          data.trees.buffer,
+          data.rocks.buffer,
+          data.rockReasons.buffer,
+          data.under.buffer,
+          data.blobs.buffer,
+        ] as ArrayBuffer[],
       );
     } else if (msg.type === 'recycle') {
       const [p, c, n] = msg.buffers;

@@ -165,8 +165,8 @@ export const config = {
     chunkBuildBudgetMs: 4,
     /** Props are generated and instanced per cell of this size (m). */
     propCellSize: 320,
-    /** Distance (m) under which trees use their detailed mesh (farther: simple cones). */
-    treeDetailDistance: 260,
+    /** Tree and rock colliders exist only within this distance of the jeep (m). */
+    colliderRadius: 180,
     roadSampleSpacing: 2,
     /** Minimum width of the soft embankment beside a trail (m) and centre crown (m). */
     roadShoulder: 9,
@@ -191,6 +191,13 @@ export const config = {
         antialias: false,
         viewDistance: 1500,
         propDistance: 420,
+        /** Trees: detailed within (m), canopy masses up to (m), undergrowth within (m),
+         * visible trees and canopy masses at most. */
+        treeNear: 120,
+        canopyDistance: 1500,
+        undergrowthDistance: 60,
+        treeLimit: 3000,
+        canopyLimit: 3000,
         propDensity: 0.5,
         particles: 400,
         clouds: 6,
@@ -206,7 +213,14 @@ export const config = {
         shadowMapSize: 1024,
         antialias: false,
         viewDistance: 2300,
-        propDistance: 600,
+        propDistance: 650,
+        /** Trees: detailed within (m), canopy masses up to (m), undergrowth within (m),
+         * visible trees and canopy masses at most. */
+        treeNear: 170,
+        canopyDistance: 2400,
+        undergrowthDistance: 100,
+        treeLimit: 5000,
+        canopyLimit: 6000,
         propDensity: 0.75,
         particles: 900,
         clouds: 10,
@@ -222,7 +236,14 @@ export const config = {
         shadowMapSize: 2048,
         antialias: true,
         viewDistance: 3200,
-        propDistance: 820,
+        propDistance: 900,
+        /** Trees: detailed within (m), canopy masses up to (m), undergrowth within (m),
+         * visible trees and canopy masses at most. */
+        treeNear: 230,
+        canopyDistance: 3200,
+        undergrowthDistance: 140,
+        treeLimit: 8000,
+        canopyLimit: 9000,
         propDensity: 1,
         particles: 1600,
         clouds: 16,
