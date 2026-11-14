@@ -25,5 +25,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    // Terrain generation tests take a few seconds locally and more on CI runners.
+    testTimeout: 60000,
   },
 });

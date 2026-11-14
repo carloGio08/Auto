@@ -31,7 +31,16 @@ describe('terrain LOD', () => {
       expect(mesh.finestCell).toBeLessThanOrEqual(p.terrainCell * 1.0001);
       expect(mesh.finestCell).toBeGreaterThan(p.terrainCell * 0.9);
       const st = course.start;
-      for (let i = 0; i < 300; i++) mesh.update(st.x, st.y + 4, st.z, 40);
+      // Build every requested patch each frame (no wall-clock budget, so the result does not
+      // depend on the machine) and run until the LOD rings have settled.
+      let last = '';
+      let still = 0;
+      for (let i = 0; i < 2000 && still < 20; i++) {
+        mesh.update(st.x, st.y + 4, st.z, Infinity);
+        const key = `${mesh.visibleTriangles}|${mesh.farScale}|${mesh.nearScale}`;
+        still = key === last ? still + 1 : 0;
+        last = key;
+      }
       expect(mesh.visibleTriangles).toBeLessThanOrEqual(p.triangleBudget * 1.02);
       // The LOD0 ring keeps a useful radius even when shrunk to fit the budget.
       expect(p.lod0Radius * mesh.lodScale).toBeGreaterThan(60);
