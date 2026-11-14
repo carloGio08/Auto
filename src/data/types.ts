@@ -1,3 +1,4 @@
+import type { ObjectiveDef } from './objectives';
 /**
  * Content type definitions. Everything the game can be extended with is described here as data.
  */
@@ -280,10 +281,19 @@ export interface MountainDef {
   medals: { gold: number; silver: number; bronze: number };
   /** Mountain id that must be descended once before this one unlocks. */
   unlockAfter?: string;
+  /** Optional objectives for this descent (the daily challenge draws three). */
+  objectives?: ObjectiveDef[];
 }
 
 export type SystemId =
-  'nitro' | 'style' | 'hazards' | 'collectibles' | 'trees' | 'medals' | 'achievements';
+  | 'nitro'
+  | 'style'
+  | 'hazards'
+  | 'collectibles'
+  | 'trees'
+  | 'objectives'
+  | 'medals'
+  | 'achievements';
 
 export type ModeId = 'freeDescent' | 'daily';
 
@@ -294,6 +304,8 @@ export interface ModeDef {
   systems: SystemId[];
   /** Whether best scores are saved. */
   recordsEnabled: boolean;
+  /** Medals from the style score (mountain thresholds) or from objectives completed (1/2/3). */
+  medalsBy: 'score' | 'objectives';
 }
 
 export interface AchievementStats {

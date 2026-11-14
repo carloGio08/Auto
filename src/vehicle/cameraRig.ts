@@ -327,6 +327,44 @@ export class CameraRig {
     }
   }
 
+  /**
+   * Opening fly-over: from far above the massif, orbiting down onto the summit and ending
+   * exactly where the chase camera starts. `t` goes 0 → 1.
+   */
+  intro(t: number, vehicle: Vehicle, ground: GroundProvider, centre: Vector3): void {
+    const cam = this.camera;
+    const p = vehicle.renderPosition;
+    fwd.set(0, 0, 1).applyQuaternion(vehicle.renderQuaternion).setY(0);
+    if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, 1);
+    fwd.normalize();
+    const e = t * t * t * (t * (t * 6 - 15) + 10); // smootherstep
+    const c = config.camera;
+    const behind = Math.atan2(-fwd.x, -fwd.z);
+    // Start out over the descent, low, looking back up at the snowy summit; swing round
+    // while closing in and finish exactly at the chase position behind the jeep.
+    const a = behind + (1 - e) * Math.PI * 1.15;
+    const r0 = 950;
+    const r1 = c.chaseDistance * this.prefs.distance;
+    const r = r0 * Math.pow(r1 / r0, e);
+    const h1 = c.chaseHeight * this.prefs.height;
+    const hgt = -140 + (h1 + 140) * e;
+    cam.position.set(p.x + Math.sin(a) * r, p.y + hgt, p.z + Math.cos(a) * r);
+    const gy = ground.groundHeight(cam.position.x, cam.position.z, cam.position.y + 50);
+    cam.position.y = Math.max(cam.position.y, gy + 2 + 90 * (1 - e));
+    look.set(p.x, p.y + 1.2 + 40 * (1 - e) * (1 - e), p.z);
+    void centre;
+    cam.up.set(0, 1, 0);
+    cam.lookAt(look);
+    const fov = this.prefs.fov * (this.aspect < 1.2 ? 1.22 : 1);
+    if (Math.abs(cam.fov - fov) > 0.05) {
+      cam.fov = fov;
+      cam.updateProjectionMatrix();
+    }
+    this.heading.copy(fwd);
+    this.smoothLook.copy(look);
+    this.anchorY = p.y;
+  }
+
   resize(aspect: number): void {
     this.aspect = aspect;
     this.camera.aspect = aspect;

@@ -3,13 +3,13 @@ import type { GameContext } from '../core/context';
 import { timesOfDay, weathers } from '../data/environment';
 import { damp } from '../math/util';
 import { Course } from '../terrain/course';
-import { createRoadPoint } from '../terrain/road';
 import { CarModel } from '../vehicle/model';
 import { World } from '../world/world';
 
 /**
- * Live 3D background for the menus: the selected car parked at the summit of the first
- * track at sunset, a slow cinematic camera pan and gentle parallax from mouse/gyroscope.
+ * Live 3D background for the menus: the selected jeep parked at the edge of the summit
+ * plateau, looking out over the whole descent at sunset, with a slow cinematic camera pan and
+ * gentle parallax from mouse/gyroscope.
  */
 export class MenuBackdrop {
   readonly world: World;
@@ -42,13 +42,19 @@ export class MenuBackdrop {
       preset: ctx.renderer.preset,
     });
     this.world.buildNow();
-    // Park the car on the outside of the first bend, facing down the mountain.
-    const p = course.road.pointAt(course.startS + 14, createRoadPoint());
-    const side = -1;
-    const off = side * (p.halfWidth - 1.5);
-    this.carPos.set(p.x + p.tz * off, 0, p.z - p.tx * off);
-    this.carPos.y = course.terrain.groundHeight(this.carPos.x, this.carPos.z, p.y + 2);
-    this.downhill.set(p.tx, 0, p.tz);
+    // Park at the plateau edge facing the base, where the ground starts to fall away.
+    const d = mountain;
+    this.downhill.set(d.base.x - d.summit.x, 0, d.base.z - d.summit.z).normalize();
+    const top = course.terrain.height(d.summit.x, d.summit.z);
+    let dist = d.summit.plateauRadius * 0.5;
+    while (dist < d.summit.plateauRadius * 5) {
+      const x = d.summit.x + this.downhill.x * (dist + 60);
+      const z = d.summit.z + this.downhill.z * (dist + 60);
+      if (course.terrain.height(x, z) < top - 30) break;
+      dist += 5;
+    }
+    this.carPos.set(d.summit.x + this.downhill.x * dist, 0, d.summit.z + this.downhill.z * dist);
+    this.carPos.y = course.terrain.groundHeight(this.carPos.x, this.carPos.z, top + 5);
     this.car = this.makeCar();
     this.camera = new PerspectiveCamera(55, ctx.renderer.width / ctx.renderer.height, 0.3, 13000);
     this.world.update(0, this.carPos, this.carPos, 50);
@@ -65,7 +71,7 @@ export class MenuBackdrop {
     const compression = (ph.mass * 15) / 4 / ph.suspension.stiffness;
     const bodyLift = ph.wheelRadius - (ph.mountY - ph.suspension.restLength + compression) - 0.02;
     car.root.position.set(this.carPos.x, this.carPos.y + bodyLift, this.carPos.z);
-    car.root.rotation.y = Math.atan2(this.downhill.x, this.downhill.z) + 0.5;
+    car.root.rotation.y = Math.atan2(this.downhill.x, this.downhill.z) + 0.35;
     car.enableHeadlights(true);
     car.shadow.position.set(this.carPos.x, this.carPos.y + 0.06, this.carPos.z);
     car.shadow.rotation.y = car.root.rotation.y;
@@ -87,18 +93,19 @@ export class MenuBackdrop {
     this.time += dt;
     this.parallaxX += (this.targetPX - this.parallaxX) * damp(2, dt);
     this.parallaxY += (this.targetPY - this.parallaxY) * damp(2, dt);
-    // Slow pendulum pan behind the car, looking down the valley (+Z), car in the right third.
-    const a = Math.sin(this.time * 0.07) * 0.35 + this.parallaxX * 0.1;
+    // Slow pendulum pan behind the jeep, looking down the valley, jeep in the right third.
+    const base = Math.atan2(this.downhill.x, this.downhill.z);
+    const a = base + Math.sin(this.time * 0.07) * 0.35 + this.parallaxX * 0.1;
     const dirX = Math.sin(a);
     const dirZ = Math.cos(a);
-    const r = 11 + Math.sin(this.time * 0.05) * 1.5;
+    const r = 12 + Math.sin(this.time * 0.05) * 1.5;
     const cam = this.camera;
     const leftX = dirZ;
     const leftZ = -dirX;
     const side = 2.2 * Math.min(1.6, cam.aspect / 1.4);
     cam.position.set(
       this.carPos.x - dirX * r - leftX * side,
-      this.carPos.y + 4.6 - this.parallaxY * 0.8,
+      this.carPos.y + 6.5 - this.parallaxY * 0.8,
       this.carPos.z - dirZ * r - leftZ * side,
     );
     const gy = this.world.course.terrain.groundHeight(
@@ -108,9 +115,9 @@ export class MenuBackdrop {
     );
     cam.position.y = Math.max(cam.position.y, gy + 1.5);
     this.lookTarget.set(
-      this.carPos.x + dirX * 30 + leftX * side * 3.2,
-      this.carPos.y - 6,
-      this.carPos.z + dirZ * 30 + leftZ * side * 3.2,
+      this.carPos.x + dirX * 420 + leftX * side * 36,
+      this.carPos.y - 120,
+      this.carPos.z + dirZ * 420 + leftZ * side * 36,
     );
     cam.lookAt(this.lookTarget);
     this.world.update(dt, cam.position, this.carPos, 3);

@@ -8,6 +8,8 @@ export const CAMERA_MODES: CameraMode[] = ['chase', 'wide', 'hood'];
 
 export interface Settings {
   quality: QualitySetting;
+  /** Level the automatic quality last settled on (next start begins there). */
+  autoQuality: 'low' | 'medium' | 'high' | null;
   masterVolume: number;
   musicVolume: number;
   sfxVolume: number;
@@ -34,6 +36,7 @@ export interface Settings {
 export function defaultSettings(): Settings {
   return {
     quality: 'auto',
+    autoQuality: null,
     masterVolume: 0.8,
     musicVolume: 0.45,
     sfxVolume: 0.85,

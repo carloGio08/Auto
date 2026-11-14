@@ -35,10 +35,16 @@ export class Renderer {
     readonly canvas: HTMLCanvasElement,
     setting: QualitySetting,
     device: DeviceInfo,
+    /** Level recorded by a previous session's automatic quality (start there). */
+    lastAuto: QualityPresetId | null = null,
   ) {
     this.setting = setting;
     this.autoCeiling = device.lowEnd ? 'low' : device.mobile ? 'medium' : 'high';
-    this.presetId = setting === 'auto' ? this.autoCeiling : setting;
+    const start =
+      lastAuto && ORDER.indexOf(lastAuto) < ORDER.indexOf(this.autoCeiling)
+        ? lastAuto
+        : this.autoCeiling;
+    this.presetId = setting === 'auto' ? start : setting;
     this.preset = config.graphics.presets[this.presetId];
     this.gl = new WebGLRenderer({
       canvas,

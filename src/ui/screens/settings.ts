@@ -106,7 +106,14 @@ export function createSettings(
       'settings.graphics',
       stepper(
         t('settings.quality'),
-        qualities.map((q) => ({ value: q, label: t(`settings.quality.${q}` as I18nKey) })),
+        qualities.map((q) => ({
+          value: q,
+          // Auto shows the level it has currently settled on.
+          label:
+            q === 'auto'
+              ? `${t('settings.quality.auto')} (${t(`settings.quality.${ctx.renderer.presetId}` as I18nKey)})`
+              : t(`settings.quality.${q}` as I18nKey),
+        })),
         s.quality,
         (v) => ((s.quality = v), apply()),
       ),

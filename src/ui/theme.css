@@ -972,6 +972,40 @@ body.kbd-nav .track-card:focus {
   top: calc(var(--safe-t) + 12px);
   left: calc(var(--safe-l) + 52px);
 }
+.hud-objectives {
+  position: absolute;
+  top: calc(var(--safe-t) + 84px);
+  left: calc(var(--safe-l) + 52px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+.hud-objectives[hidden] {
+  display: none;
+}
+.hud-objective {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 6px;
+  border-radius: 999px;
+  background: rgba(10, 14, 22, 0.42);
+  color: #fff;
+  width: max-content;
+}
+.hud-objective .ico {
+  width: 14px;
+  height: 14px;
+  opacity: 0.8;
+}
+.hud-objective b {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+.hud-objective.done {
+  background: rgba(220, 170, 40, 0.55);
+}
 .hud-tr {
   position: absolute;
   top: calc(var(--safe-t) + 12px);
@@ -1492,4 +1526,35 @@ body.kbd-nav .track-card:focus {
   font-size: 13px;
   color: rgba(255, 255, 255, 0.85);
   margin-top: 2px;
+}
+
+/* Opening fly-over: only the skip prompt is visible. */
+.hud-skip {
+  display: none;
+}
+.hud.intro > * {
+  opacity: 0;
+  transition: none;
+}
+.hud.intro > .hud-skip {
+  display: block;
+  opacity: 0.85;
+  position: absolute;
+  bottom: calc(var(--safe-b) + 28px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(10, 14, 22, 0.45);
+  color: #fff;
+  font-size: 14px;
+  animation: skip-pulse 1.6s ease-in-out infinite;
+}
+.hud > * {
+  transition: opacity 0.4s;
+}
+@keyframes skip-pulse {
+  50% {
+    opacity: 0.45;
+  }
 }

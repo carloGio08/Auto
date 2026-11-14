@@ -1,3 +1,4 @@
+import type { ObjectiveState } from '../game/session';
 import type { SurfaceId } from '../data/types';
 
 /**
@@ -17,6 +18,8 @@ export interface GameEvents {
   'vehicle:nearMiss': { distance: number; speed: number };
   'vehicle:crash': { impact: number };
   'vehicle:splash': { speed: number };
+  'objectives:update': { objectives: readonly ObjectiveState[] };
+  'objective:completed': { objective: ObjectiveState };
   /** A destructible tree was snapped by the jeep. */
   treeBroken: { tier: 'young' | 'medium' | 'old'; x: number; y: number; z: number; speed: number };
   'vehicle:surface': { surface: SurfaceId };

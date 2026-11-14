@@ -1,6 +1,7 @@
 import { Rng, hashString } from '../../math/rng';
 import type { HazardKind, MountainDef, TimeOfDayId, WeatherId } from '../types';
 import { alpine } from './alpine';
+import { dailyObjectives } from '../objectives';
 
 /** Returns the local date as YYYY-MM-DD, used as the daily challenge seed. */
 export function todayKey(date = new Date()): string {
@@ -105,5 +106,6 @@ export function createDailyMountain(dateKey: string): MountainDef {
     defaultWeather: rng.pick(weathers),
     medals: { gold: 55000, silver: 30000, bronze: 11000 },
     unlockAfter: undefined,
+    objectives: dailyObjectives(seed),
   };
 }

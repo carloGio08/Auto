@@ -72,8 +72,17 @@ export class World {
     this.applyFog();
   }
 
+  /** Fog distance multiplier (the opening fly-over looks further). */
+  private fogScale = 1;
+
+  setFogScale(k: number): void {
+    if (Math.abs(k - this.fogScale) < 0.01) return;
+    this.fogScale = k;
+    this.applyFog();
+  }
+
   private applyFog(): void {
-    const far = this.preset.viewDistance / this.weather.fogDensity;
+    const far = (this.preset.viewDistance * this.fogScale) / this.weather.fogDensity;
     this.scene.fog = new Fog(this.fogColor, Math.min(120, far * 0.12), far);
   }
 

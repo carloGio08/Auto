@@ -16,6 +16,11 @@ export class PlayingState implements GameState<StateId> {
   private resultsShown = false;
   private paused = false;
   private readonly offs: (() => void)[] = [];
+  /** Any tap/click skips the opening fly-over. */
+  private readonly onSkipTap = (): void => {
+    if (this.session?.intro > 0 && !this.paused) this.session.skipIntro();
+  };
+
   private readonly onVisibility = (): void => {
     if (document.hidden && !this.paused && this.session.phase !== 'finished') this.openPause();
   };
@@ -40,7 +45,9 @@ export class PlayingState implements GameState<StateId> {
     }
     if (new URLSearchParams(location.search).has('autopilot'))
       this.session.autopilot = new Autopilot(this.session.course.road);
-    this.session.start();
+    const query = new URLSearchParams(location.search);
+    this.session.start(!query.has('autopilot') && !query.has('e2e'));
+    window.addEventListener('pointerdown', this.onSkipTap);
     this.offs.push(
       this.session.events.on(
         'haptic',
@@ -129,7 +136,22 @@ export class PlayingState implements GameState<StateId> {
   update(dt: number, alpha: number): void {
     const ctx = this.ctx;
     const s = this.session;
-    if (!this.paused && !this.resultsShown) {
+    if (s.intro > 0 && !this.paused) {
+      const d = ctx.input.drive;
+      if (
+        d.throttle > 0 ||
+        d.brake > 0 ||
+        d.handbrake ||
+        ctx.input.pressed('uiConfirm') ||
+        ctx.input.pressed('pause') ||
+        ctx.input.pressed('reset')
+      ) {
+        ctx.input.consume('pause');
+        ctx.input.consume('reset');
+        s.skipIntro();
+      }
+    }
+    if (!this.paused && !this.resultsShown && s.intro <= 0) {
       if (ctx.input.pressed('pause')) {
         ctx.input.consume('pause');
         this.openPause();
@@ -182,6 +204,7 @@ export class PlayingState implements GameState<StateId> {
     const ctx = this.ctx;
     document.removeEventListener('visibilitychange', this.onVisibility);
     window.removeEventListener('resize', this.onResize);
+    window.removeEventListener('pointerdown', this.onSkipTap);
     this.offs.forEach((o) => o());
     ctx.input.remove('touch');
     ctx.input.remove('tilt');

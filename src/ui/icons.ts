@@ -59,6 +59,7 @@ export const icons: Record<string, string> = {
   ),
   arrowUp: svg('<path d="M12 3l7 9h-4.5v9h-5v-9H5z" fill="currentColor" stroke="none"/>'),
   check: svg('<path d="M4 12l5 5L20 6"/>'),
+  target: svg('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>'),
   car: svg(
     '<path d="M3 13l2-5h14l2 5v5H3z"/><circle cx="7.5" cy="18" r="2" fill="currentColor"/><circle cx="16.5" cy="18" r="2" fill="currentColor"/><path d="M3 13h18"/>',
   ),

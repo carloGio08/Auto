@@ -88,6 +88,8 @@ export const config = {
     shakeLanding: 0.35,
     shakeCrash: 0.6,
     shakeNitro: 0.06,
+    /** Opening fly-over length (s); skippable. */
+    introDuration: 6.5,
   },
 
   gameplay: {
@@ -223,6 +225,8 @@ export const config = {
     tilt: true,
     haptics: true,
     skidmarks: true,
+    /** Cinematic fly-over onto the summit at the start of a descent. */
+    introFlyover: true,
     /** Shows an FPS / physics overlay (also toggled with F3). */
     debugOverlay: false,
     serviceWorker: true,

@@ -2,6 +2,7 @@ import type { GameContext } from '../core/context';
 import type { RunSession } from '../game/session';
 import { h, setText } from './dom';
 import { icon } from './icons';
+import { fmt as fmtObjective } from '../systems/objectives';
 
 /**
  * In-run DOM HUD: speed, altitude, compass towards the base, descent bar, nitro, combo,
@@ -25,6 +26,7 @@ export class Hud {
   private readonly center: HTMLElement;
   private readonly tricks: HTMLElement;
   private readonly hint: HTMLElement;
+  private readonly objectives: HTMLElement;
   readonly touch: HTMLElement | null;
   private readonly offs: (() => void)[] = [];
   private centerTimer = 0;
@@ -102,6 +104,7 @@ export class Hud {
           this.baseDistance,
         ),
       ),
+      (this.objectives = h('div', { class: 'hud-objectives' })),
       h('div', { class: 'hud-tc' }, this.combo, this.tricks),
       h(
         'div',
@@ -132,10 +135,34 @@ export class Hud {
       ),
       this.center,
       this.hint,
+      h('div', { class: 'hud-skip' }, touchMode ? t('hud.skipTouch') : t('hud.skip')),
     );
     this.touch = touchMode ? this.buildTouch(ctx) : null;
     if (this.touch) this.el.append(this.touch);
     this.listen();
+    this.renderObjectives();
+  }
+
+  /** Daily challenge checklist (hidden when the run has no objectives). */
+  private renderObjectives(): void {
+    const list = this.session.objectives;
+    this.objectives.hidden = list.length === 0;
+    const tk = this.ctx.i18n.tk;
+    this.objectives.replaceChildren(
+      ...list.map((o) =>
+        h(
+          'div',
+          { class: `hud-objective ${o.done ? 'done' : ''}` },
+          h('span', { class: 'ico', html: icon(o.done ? 'check' : 'target') }),
+          h('span', {}, tk(`objective.${o.def.kind}`)),
+          h(
+            'b',
+            {},
+            `${fmtObjective(Math.min(o.value, o.def.target), o.def.kind)}/${fmtObjective(o.def.target, o.def.kind)}`,
+          ),
+        ),
+      ),
+    );
   }
 
   private buildTouch(ctx: GameContext): HTMLElement {
@@ -185,6 +212,15 @@ export class Hud {
       ev.on('run:start', () => this.flashCenter(t('hud.go'), 'go', 1.4)),
       ev.on('run:finish', () => this.flashCenter(t('hud.finish'), 'gold', 3)),
       ev.on('run:reset', () => this.ctx.ui.toast(t('toast.reset'), 'info', 1200)),
+      ev.on('objectives:update', () => this.renderObjectives()),
+      ev.on('objective:completed', ({ objective }) => {
+        this.ctx.ui.toast(
+          t('toast.objective', { name: this.ctx.i18n.tk(`objective.${objective.def.kind}`) }),
+          'gold',
+          2500,
+        );
+        this.ctx.audio.sfx?.achievement();
+      }),
       ev.on('style:trick', ({ label, points }) => this.popTrick(label, points)),
       ev.on('style:combo', ({ multiplier, pending }) => {
         this.comboShown = multiplier;
@@ -240,6 +276,8 @@ export class Hud {
 
   update(dt: number): void {
     const s = this.session;
+    this.el.classList.toggle('intro', s.intro > 0);
+    if (s.intro > 0) return;
     const ph = s.vehicle.physics;
     const p = s.vehicle.renderPosition;
     const alt = Math.round(p.y);

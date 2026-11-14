@@ -51,7 +51,18 @@ function start(): void {
   const device = detectDevice();
   document.body.classList.toggle('touch', device.touch);
   const canvas = document.getElementById('game') as HTMLCanvasElement;
-  const renderer = new Renderer(canvas, save.data.settings.quality, device);
+  const renderer = new Renderer(
+    canvas,
+    save.data.settings.quality,
+    device,
+    save.data.settings.autoQuality,
+  );
+  // Remember where the automatic quality settles, so the next start begins there.
+  renderer.onQualityChange((id) => {
+    if (save.data.settings.quality !== 'auto') return;
+    save.data.settings.autoQuality = id;
+    save.save();
+  });
   const input = new InputManager();
   const keyboard = new KeyboardSource(input);
   input.add(keyboard);

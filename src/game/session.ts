@@ -1,3 +1,4 @@
+import type { ObjectiveDef } from '../data/objectives';
 import { Vector3 } from 'three';
 import { config } from '../config';
 import type { GameContext } from '../core/context';
@@ -54,6 +55,13 @@ export interface DescentStats {
   longestJump: number;
 }
 
+/** Progress of one objective during a run. */
+export interface ObjectiveState {
+  def: ObjectiveDef;
+  value: number;
+  done: boolean;
+}
+
 /** A position where the car was stable, used for resets. */
 export interface SafeSpot {
   x: number;
@@ -104,6 +112,8 @@ export class RunSession {
   };
   /** Set by the medals system on finish. */
   medal: MedalId = 'none';
+  /** Filled by the objectives system (daily challenge). */
+  objectives: ObjectiveState[] = [];
   /** Drive input actually applied (after finish overrides). */
   readonly input: DriveState & { hold: boolean } = {
     throttle: 0,
@@ -231,8 +241,34 @@ export class RunSession {
     return Math.min(1, Math.max(0, (this.progressS - this.course.startS) / this.length));
   }
 
-  start(): void {
+  /** Seconds left of the opening fly-over (0 = driving). */
+  intro = 0;
+  private readonly introCentre = new Vector3();
+
+  /** Starts the run, optionally with the cinematic fly-over onto the summit. */
+  start(withIntro = true): void {
     this.audio.startEngine(this.vehicle);
+    const d = this.course.def;
+    this.introCentre.set(
+      (d.summit.x + d.base.x) / 2,
+      (this.course.startAltitude + this.course.base.y) / 2,
+      (d.summit.z + d.base.z) / 2,
+    );
+    this.intro = withIntro && config.features.introFlyover ? config.camera.introDuration : 0;
+    if (this.intro === 0) this.beginDriving();
+  }
+
+  /** Ends the fly-over early (any key, button or tap). */
+  skipIntro(): void {
+    if (this.intro <= 0) return;
+    this.intro = 0;
+    this.beginDriving();
+  }
+
+  private beginDriving(): void {
+    this.world.setFogScale(1);
+    this.camera.snap(this.vehicle, this.course.terrain);
+    this.events.emit('run:start', { trackId: this.cfg.mountain.id, modeId: this.cfg.mode.id });
   }
 
   /**
@@ -285,7 +321,7 @@ export class RunSession {
   fixedUpdate(dt: number, drive: DriveState): void {
     const v = this.vehicle;
     const inp = this.input;
-    inp.hold = false;
+    inp.hold = this.intro > 0;
     if (this.autopilot && this.phase === 'running')
       this.autopilot.drive(v.physics, this.progressS, inp);
     else {
@@ -295,7 +331,7 @@ export class RunSession {
       inp.handbrake = drive.handbrake;
       inp.nitro = drive.nitro;
     }
-    if (this.phase !== 'running') {
+    if (this.phase !== 'running' || this.intro > 0) {
       inp.throttle = 0;
       inp.brake = 0.5;
       inp.handbrake = false;
@@ -357,16 +393,29 @@ export class RunSession {
   update(dt: number, alpha: number): void {
     const realDt = this.ctx.loop.realDt;
     this.resetCooldown = Math.max(0, this.resetCooldown - dt);
-    if (this.phase === 'running') this.time += dt;
+    if (this.phase === 'running' && this.intro <= 0) this.time += dt;
     else this.finishTimer += realDt;
     const v = this.vehicle;
     v.sync(alpha, this.course.terrain, this.time, this.input.brake > 0.1);
     v.updateAudio();
     this.camera.syncPrefs(this.ctx.save.data.settings);
-    this.camera.update(realDt, v, this.course.terrain, this.ctx.input.look);
+    if (this.intro > 0) {
+      // Clamped: the first frame after loading can report a long frame time.
+      this.intro = Math.max(0, this.intro - Math.min(realDt, 0.05));
+      const T = config.camera.introDuration;
+      const t = 1 - this.intro / T;
+      this.camera.intro(t, v, this.course.terrain, this.introCentre);
+      this.world.setFogScale(1 + 1.6 * (1 - t) * (1 - t));
+      if (this.intro === 0) this.beginDriving();
+    } else this.camera.update(realDt, v, this.course.terrain, this.ctx.input.look);
     for (const s of this.systems) s.update?.(dt, alpha);
     this.effects.update(dt, realDt);
-    this.world.update(realDt, this.camera.camera.position, tmpV.copy(v.renderPosition));
+    this.world.update(
+      realDt,
+      this.camera.camera.position,
+      tmpV.copy(v.renderPosition),
+      this.intro > 0 ? 10 : undefined,
+    );
   }
 
   /** Restarts the run on the same world (fast retry). */
@@ -381,6 +430,7 @@ export class RunSession {
     this.finishTimer = 0;
     this.summary = null;
     this.medal = 'none';
+    this.objectives = [];
     this.progressS = this.course.startS;
     Object.assign(this.stats, {
       distance: 0,
@@ -396,6 +446,8 @@ export class RunSession {
     this.vehicle.telemetry.bestAir = 0;
     this.placeAtStart();
     this.createSystems();
+    this.intro = 0;
+    this.beginDriving();
   }
 
   dispose(): void {

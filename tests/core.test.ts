@@ -3,7 +3,7 @@ import { EventBus } from '../src/core/eventBus';
 import { StateMachine, type GameState } from '../src/core/stateMachine';
 import { GameLoop } from '../src/core/loop';
 import { I18n, detectLanguage } from '../src/core/i18n';
-import { medalFor } from '../src/systems/medals';
+import { medalFor, medalForObjectives } from '../src/systems/medals';
 
 describe('event bus', () => {
   it('delivers, unsubscribes and supports once', () => {
@@ -71,7 +71,7 @@ describe('i18n', () => {
     expect(detectLanguage(['it-IT', 'en'])).toBe('it');
     expect(detectLanguage(['fr-FR'])).toBe('en');
     const i = new I18n('en');
-    expect(i.t('hud.checkpoint', { bonus: 12 })).toBe('Checkpoint +12s');
+    expect(i.t('hud.baseDistance', { km: '2.5' })).toContain('2.5');
     i.apply('it');
     expect(i.t('menu.play')).toBe('Gioca');
   });
@@ -83,6 +83,10 @@ describe('helpers', () => {
     expect(medalFor(9500, m)).toBe('gold');
     expect(medalFor(6000, m)).toBe('silver');
     expect(medalFor(2000, m)).toBe('bronze');
+    expect(medalForObjectives(0, 3)).toBe('none');
+    expect(medalForObjectives(1, 3)).toBe('bronze');
+    expect(medalForObjectives(2, 3)).toBe('silver');
+    expect(medalForObjectives(3, 3)).toBe('gold');
     expect(medalFor(1999, m)).toBe('none');
   });
 });

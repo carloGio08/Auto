@@ -5,6 +5,7 @@ import { StyleSystem } from './style';
 import { HazardsSystem } from './hazards';
 import { CollectiblesSystem } from './collectibles';
 import { TreesSystem } from './trees';
+import { ObjectivesSystem } from './objectives';
 import { MedalsSystem } from './medals';
 import { AchievementsSystem } from './achievements';
 
@@ -18,6 +19,7 @@ export const systemFactories: Record<SystemId, () => GameSystem> = {
   hazards: () => new HazardsSystem(),
   collectibles: () => new CollectiblesSystem(),
   trees: () => new TreesSystem(),
+  objectives: () => new ObjectivesSystem(),
   medals: () => new MedalsSystem(),
   achievements: () => new AchievementsSystem(),
 };
