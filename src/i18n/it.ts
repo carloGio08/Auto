@@ -92,7 +92,7 @@ export const it: Dictionary = {
   'results.newRecord': 'Nuovo record!',
   'results.best': 'Record: {score}',
   'results.retry': 'Riprova',
-  'results.next': 'Prossimo percorso',
+  'results.next': 'Prossima montagna',
   'results.menu': 'Menu',
   'results.crystals': 'Cristalli',
   'results.topSpeed': 'Velocità max',

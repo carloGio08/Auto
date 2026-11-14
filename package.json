@@ -1,8 +1,8 @@
 {
   "name": "mountain-drop",
   "private": true,
-  "version": "1.0.0",
-  "description": "Low-poly downhill driving game with raycast suspension physics, built with Three.js, Vite and TypeScript.",
+  "version": "2.0.0",
+  "description": "Low-poly off-road descent of a huge mountain in a 4x4 jeep, built with Three.js, Vite and TypeScript.",
   "type": "module",
   "license": "MIT",
   "scripts": {

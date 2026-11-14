@@ -90,7 +90,7 @@ export const en = {
   'results.newRecord': 'New record!',
   'results.best': 'Best: {score}',
   'results.retry': 'Retry',
-  'results.next': 'Next track',
+  'results.next': 'Next mountain',
   'results.menu': 'Menu',
   'results.crystals': 'Crystals',
   'results.topSpeed': 'Top speed',

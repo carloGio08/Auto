@@ -1,3 +1,4 @@
+import { createRoadPoint } from '../terrain/road';
 import type { GameContext, StateId } from '../core/context';
 import type { GameState } from '../core/stateMachine';
 import { vibrate } from '../core/device';
@@ -77,9 +78,37 @@ export class PlayingState implements GameState<StateId> {
     window.addEventListener('resize', this.onResize);
     // Debug hook for automated tests (dev builds or ?e2e only).
     if (import.meta.env.DEV || new URLSearchParams(location.search).has('e2e')) {
+      const s = this.session;
       (window as unknown as { __md?: object }).__md = {
-        session: this.session,
-        finish: () => (this.session.progressS = this.session.course.finishS + 1),
+        session: s,
+        /** Drops the jeep inside the base zone: the run finishes on the next step. */
+        finish: () => s.teleport(s.course.base.x, s.course.base.z, 0),
+        /** Moves the jeep to a main-trail position (metres from the summit). */
+        trail: (dist: number) => {
+          const p = s.course.road.pointAt(dist, createRoadPoint());
+          s.teleport(p.x, p.z, Math.atan2(p.tx, p.tz));
+          s.progressS = dist;
+        },
+        /** Launches the jeep at the nearest tree of a tier; returns its id or null. */
+        aimAtTree: (tier: 'young' | 'medium' | 'old', speed = 14) => {
+          const v = s.vehicle.physics.position;
+          let best: { x: number; z: number; id: number } | null = null;
+          let bd = Infinity;
+          s.world.props.forEachTreeNear(v.x, v.z, 200, (t) => {
+            const d = Math.hypot(t.x - v.x, t.z - v.z);
+            if (t.tier === tier && d > 20 && d < bd) {
+              bd = d;
+              best = t;
+            }
+          });
+          if (!best) return null;
+          const tr = best as { x: number; z: number; id: number };
+          const dx = tr.x - v.x;
+          const dz = tr.z - v.z;
+          const l = Math.hypot(dx, dz);
+          s.teleport(tr.x - (dx / l) * 16, tr.z - (dz / l) * 16, Math.atan2(dx, dz), speed);
+          return tr.id;
+        },
       };
     }
   }

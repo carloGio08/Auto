@@ -1,60 +1,67 @@
 # Mountain Drop
 
-**Low-poly downhill driving game in the browser.** Drive a car with real suspension from the
-summit of a mountain down to the lake, as fast and with as much style as you can: drifts on
-the hairpins, jumps, flips, near misses and risky off-road shortcuts. Works on desktop and
-on phones (landscape, touch or tilt), installable as a PWA and playable offline.
+**Low-poly off-road descent in the browser.** Start on the snowy summit of a huge mountain in
+a 4x4 jeep and find your way down to the village by the lake — about 1800 m of drop and 8 × 8
+km of free roam. No timer and no checkpoints: follow the trails carved into the slopes, cut
+across meadows and scree, snap young trees on the way, drift the hairpins. Works on desktop
+and on phones (landscape, touch or tilt), installable as a PWA and playable offline.
 
 **▶ Play: https://carlogio08.github.io/Auto/** (see [Deployment](#deployment) — the address
 follows the repository name, e.g. `/mountain-drop/` if the repository is renamed)
 
 ![Main menu](docs/screenshots/desktop-menu.png)
 
-| Race                                             | Garage                                           |
-| ------------------------------------------------ | ------------------------------------------------ |
-| ![Race](docs/screenshots/desktop-race.png)       | ![Garage](docs/screenshots/desktop-garage.png)   |
-| **Track select**                                 | **Results**                                      |
-| ![Tracks](docs/screenshots/desktop-tracks.png)   | ![Results](docs/screenshots/desktop-results.png) |
-| **Mobile (landscape, touch)**                    | **Mobile menu**                                  |
-| ![Mobile race](docs/screenshots/mobile-race.png) | ![Mobile menu](docs/screenshots/mobile-menu.png) |
+| Summit start                                       | Down the mountain                                    |
+| -------------------------------------------------- | ---------------------------------------------------- |
+| ![Summit](docs/screenshots/desktop-summit.png)     | ![Trees](docs/screenshots/desktop-trees.png)         |
+| **Garage**                                         | **Results**                                          |
+| ![Garage](docs/screenshots/desktop-garage.png)     | ![Results](docs/screenshots/desktop-results.png)     |
+| **Mobile (landscape, touch)**                      | **Mobile summit**                                    |
+| ![Mobile trees](docs/screenshots/mobile-trees.png) | ![Mobile summit](docs/screenshots/mobile-summit.png) |
 
 ## Features
 
-- **Physics at 120 Hz** with interpolated rendering: raycast suspension per wheel (spring,
-  bump/rebound damping, anti-roll bars), slip-angle tyres with a friction circle, handbrake
-  drifts, downforce and drag, air control, auto-righting, chassis collisions.
-- **Procedural mountains**: analytic `height(x, z)`, switchback roads with hairpins, cuts and
-  fills, jumps, bumps, a river with bridges, a rock arch, shortcuts and a lake at the bottom.
-- **3 tracks + daily challenge** (same procedural mountain for everyone on a given day), time
-  attack and free ride modes, medals, ghost of your best run.
-- **4 cars** with different personalities (stable AWD, RWD drifter, light jumper, heavy
-  truck), paint jobs and upgrades (engine, tyres, suspension, nitro).
-- **Style system**: drifts, air, flips, barrel rolls, perfect landings, near misses and
-  shortcuts build a combo multiplier; crash and you lose it. Nitro refills with style.
-- **Hazards**: rolling boulders, rockslides, fallen logs, mud pools, ice patches, narrow bridges.
-- **Low-poly art, no assets**: every mesh, texture (canvas), icon (SVG) and sound (WebAudio)
-  is generated in code. Times of day (dawn, day, sunset, night with headlights), weather
-  (clear, fog, snow).
-- **Mobile first**: multitouch buttons or tilt steering, auto-accelerate option, vibration,
-  safe areas, fullscreen, adaptive quality and dynamic resolution.
-- **English and Italian**, chosen from the browser language.
+- **One huge mountain** from an analytic, smooth `height(x, z)`: rounded massif, domain warp,
+  a few cliffs, rivers and a lake, biomes by altitude (snow, rock, scree, alpine meadow,
+  forest, valley), streamed with a quadtree LOD (2–3 m faces up close, flat shaded).
+- **Trails carved into the terrain**: a main trail and branches routed with a grade-limited
+  A\*, hairpins that follow the contours, banking, variable width, wooden footbridges, painted
+  waymarks, cairns, signs and fences. Leave them whenever you like.
+- **4x4 jeeps** (Trailblazer, Scout, Crawler, Nomad): low centre of mass, stiff long-travel
+  suspension that does not bounce, tolerant tyres, engine braking, ground stick, anti-flip on
+  the ground and **no air control**. Paint and upgrades in the garage.
+- **Destructible trees**: young ones always snap, medium ones above an impact energy, old
+  ones never; stumps, tumbling pieces, splinters and leaves.
+- **Camera made for descents**: high chase view that looks ahead and tilts down the slope,
+  wide and hood views, free look (mouse, right stick, one-finger drag), trees between you and
+  the jeep shrink away. A skippable fly-over opens every run.
+- **Modes**: _Free descent_ (style score medals) and _Daily challenge_ (a new mountain,
+  weather and three objectives every day). Style combos for drifts, jumps, flips, near
+  misses and felled trees; nitro, coins, crystals, boulders and rockslides.
+- **Diorama look, no assets**: ~26 flat palette colours re-themed by time of day and weather,
+  low-poly sky and clouds, instanced low-poly particles. Every mesh, colour, icon (SVG) and
+  sound (WebAudio) is generated in code; no textures.
+- **Mobile first**: multitouch buttons or tilt, auto-accelerate option, vibration, safe
+  areas, fullscreen, adaptive quality and dynamic resolution. **English and Italian**.
 
 ## Controls
 
-| Action              | Keyboard  | Gamepad    | Touch              |
-| ------------------- | --------- | ---------- | ------------------ |
-| Throttle            | W / ↑     | RT         | ⬆ (right)          |
-| Brake / reverse     | S / ↓     | LT         | ⬇ (right)          |
-| Steer               | A D / ← → | Left stick | ◀ ▶ (left) or tilt |
-| Handbrake / drift   | Space     | X / RB     | ↪                  |
-| Nitro               | Shift     | A          | ⚡                 |
-| Reset to checkpoint | R         | View       | ↺                  |
-| Change camera       | C         | Y          | 📷                 |
-| Pause               | P / Esc   | Menu       | ❚❚                 |
+| Action            | Keyboard   | Gamepad     | Touch              |
+| ----------------- | ---------- | ----------- | ------------------ |
+| Throttle          | W / ↑      | RT          | ⬆ (right)          |
+| Brake / reverse   | S / ↓      | LT          | ⬇ (right)          |
+| Steer             | A D / ← →  | Left stick  | ◀ ▶ (left) or tilt |
+| Handbrake / drift | Space      | X / RB      | ↪                  |
+| Nitro             | Shift      | A           | ⚡                 |
+| Back to safe spot | R          | View        | ↺                  |
+| Change camera     | C          | Y           | 📷                 |
+| Free look         | Mouse drag | Right stick | Drag on the view   |
+| Pause             | P / Esc    | Menu        | ❚❚                 |
 
-In the air, release and press throttle/brake to pitch, steer to roll (hold the handbrake to
-yaw instead). Keys can be rebound in **Settings → Controls**. Menus work with mouse, touch,
-keyboard (arrows + Enter/Esc) and gamepad (D-pad + A/B).
+`R` puts the jeep back on the last safe spot (sampled automatically) facing downhill; press
+again to go further back. It also happens on its own if you stay upside down, sink in deep
+water or leave the map. Keys can be rebound in **Settings → Controls**; camera distance,
+height, field of view and shake are in **Settings**.
 
 ## Run locally
 
@@ -75,46 +82,51 @@ npm run lint      # ESLint + Prettier check
 npm run e2e       # Playwright smoke test + screenshots (needs `npm run preview` running)
 ```
 
-Debug helpers: `?autopilot` (the built-in driver races), `?e2e` (exposes `window.__md`),
-**F3** (FPS / draw-call overlay).
+Debug helpers: `?autopilot` (the built-in driver follows the main trail), `?e2e` (skips the
+fly-over and exposes `window.__md`), **F3** (FPS / draw-call overlay).
 
 ## Tuning
 
 Everything lives in [`src/config.ts`](src/config.ts) (grouped by area, plus feature flags);
-per-car values are in [`src/data/cars/`](src/data/cars). The five most useful knobs for the
-driving feel:
+per-jeep values are in [`src/data/cars/`](src/data/cars), tree tiers in
+[`src/data/trees.ts`](src/data/trees.ts), colours in [`src/data/palette.ts`](src/data/palette.ts).
+The most useful knobs for the driving feel:
 
-| Parameter                                                    | Effect                                                                |
-| ------------------------------------------------------------ | --------------------------------------------------------------------- |
-| `physics.gravity` (15)                                       | Higher = snappier jumps and faster descents, lower = floatier.        |
-| `driving.gripScale` (1.0)                                    | Global tyre grip: raise for control, lower for chaos.                 |
-| `driving.handbrakeGrip` (0.3) + `driving.handbrakeYaw` (2.6) | How eagerly the tail steps out on the handbrake.                      |
-| `driving.minSteerFactor` (0.3) / `steerFalloffSpeed` (38)    | Steering reduction at speed (stability vs agility).                   |
-| car `aero.drag`                                              | Top speed: terminal velocity is where drag balances gravity + engine. |
+| Parameter                                              | Effect                                                     |
+| ------------------------------------------------------ | ---------------------------------------------------------- |
+| `driving.gripScale` / jeep `tires.grip`                | Overall grip: raise for control, lower for slides.         |
+| `driving.slideFactor` / `slideFalloff`                 | How much grip is left past the peak (tolerance of slides). |
+| `driving.handbrakeGrip` / `handbrakeYaw`               | How eagerly the tail steps out on the handbrake.           |
+| jeep `groundStick`, `physics.stickRampIn`              | How glued the jeep stays over crests and after landings.   |
+| jeep `suspension.dampingRebound`, `antiRoll*`          | Bounce and body roll.                                      |
+| jeep `aero.drag`, `engine.engineBrake`                 | Top speed on the flat and speed held on long descents.     |
+| `camera.chaseDistance` / `chaseHeight` / `descentLift` | Framing of the slope ahead.                                |
 
 ## Code structure
 
 ```
 src/
   core/      context, loop (fixed step), stateMachine, eventBus, save, i18n, renderer, settings
-  data/      cars, tracks (+ daily generator), upgrades, surfaces, hazards, environment, modes, achievements, registry
-  input/     actions, input manager, keyboard, gamepad, touch, tilt
-  terrain/   mountain (natural height), road (generator, profile, spatial queries), terrain (carving),
-             course (placement), terrain/road meshes, canvas textures
-  vehicle/   physics, model, telemetry, camera rig, autopilot, vehicle
-  world/     world, props (instancing), structures, colliders, sky, lighting, water, weather
-  systems/   checkpoints, nitro, style, hazards, collectibles, ghost, medals, achievements
-  effects/   particles, skidmarks, speed lines, CSS post-fx
+  data/      mountains (+ daily generator), jeeps, palette & themes, surfaces, trees, objectives,
+             upgrades, hazards, environment, modes, achievements, registry
+  input/     actions, input manager, keyboard, gamepad, touch, tilt, pointer free look
+  terrain/   mountain (natural height, rivers), trail router, road (trail network), terrain
+             (carving, biomes), course (placement), quadtree terrain mesh
+  vehicle/   physics, jeep model, telemetry, camera rig, autopilot, vehicle
+  world/     world, props (streamed instancing), structures, colliders, tree debris, sky,
+             lighting, water, weather
+  systems/   nitro, style, hazards, collectibles, trees, objectives, medals, achievements
+  effects/   instanced shards (particle kinds), tyre strips, speed lines, CSS post-fx
   audio/     audio engine (mixer), engine sound, sfx, music, director
   game/      run session, progression, menu backdrop, garage scene
   ui/        UI manager (focus navigation), screens, HUD, components, icons, theme.css
-  states/    boot, main menu, garage, track select, loading, playing, paused, results
+  states/    boot, main menu, garage, mountain select, loading, playing, paused, results
   main.ts
 ```
 
-Read [ARCHITECTURE.md](ARCHITECTURE.md) for the module diagram, the physics formulas and the
-performance strategy, and [CONTRIBUTING.md](CONTRIBUTING.md) for step-by-step guides to add a
-car, a track, an upgrade, a hazard, a mechanic or a language.
+Read [ARCHITECTURE.md](ARCHITECTURE.md) for the module diagram, the terrain/trail maths, the
+physics and the performance strategy, and [CONTRIBUTING.md](CONTRIBUTING.md) for step-by-step
+guides to add a mountain, a jeep, a hazard, a palette theme, a mechanic or a language.
 
 ## Deployment
 
@@ -127,12 +139,11 @@ Pages), and **Settings → Pages → Build and deployment → Source** must be *
 
 ## Roadmap
 
-- More tracks and a track editor using the same data format.
-- Online leaderboards and shareable ghost codes for the daily challenge.
-- Replays with free camera; photo mode.
-- More weather (rain, mud spray on the camera), night-time torches and lamps along the road.
+- More mountains and an in-browser editor for trails and biomes.
+- Online leaderboards for the daily challenge.
+- Photo mode and replays with a free camera.
+- Rain and mud, seasonal palettes, wildlife.
 - Cosmetics: decals, wheels, horns.
-- Split-screen local multiplayer.
 
 ## License
 

@@ -128,6 +128,14 @@ export class World {
     yield { stage: 'loading.vehicle', progress: 0.94 };
   }
 
+  /** Synchronously builds terrain and props around a point (teleports in tests and tools). */
+  prebuildAround(x: number, y: number, z: number): void {
+    for (const _ of this.terrainMesh.prebuild(x, y, z)) {
+      /* drain */
+    }
+    this.props.prebuild(x, z);
+  }
+
   /** Builds everything synchronously (menu background, tests). */
   buildNow(): this {
     for (const _ of this.build()) {

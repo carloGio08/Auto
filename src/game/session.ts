@@ -258,6 +258,14 @@ export class RunSession {
     if (this.intro === 0) this.beginDriving();
   }
 
+  /** Puts the jeep at a point facing `heading` with a forward speed (tests and tools). */
+  teleport(x: number, z: number, heading: number, speed = 0): void {
+    this.world.prebuildAround(x, this.course.terrain.height(x, z) + 4, z);
+    this.place({ x, y: this.course.terrain.height(x, z), z, heading }, true);
+    const ph = this.vehicle.physics;
+    ph.velocity.set(Math.sin(heading) * speed, 0, Math.cos(heading) * speed);
+  }
+
   /** Ends the fly-over early (any key, button or tap). */
   skipIntro(): void {
     if (this.intro <= 0) return;

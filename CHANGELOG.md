@@ -4,6 +4,49 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [2.0.0] - 2026-11-14
+
+Free-roam update: one huge mountain, a 4x4 jeep and no clock.
+
+### Added
+
+- Huge data-driven mountain (8 × 8 km, ~1800 m drop): rounded massif with domain warp and a
+  configurable max slope, few authored cliffs, rivers, lake, biomes by altitude, natural
+  borders; quadtree terrain streaming with LOD, skirts and flat shading.
+- Trails carved into the terrain: grade-limited A\* routing with contour-following hairpins,
+  branches and shortcuts, banking, variable width, footbridges; per-vertex trail colouring
+  with partial snow up high; waymarks, cairns, signs, fences, summit overlook, base village.
+- Palette of 13 × 2 flat colours with time-of-day and weather themes; gradient sky, low-poly
+  clouds, cone/octahedron trees in three tiers.
+- Four original 4x4 jeeps (Trailblazer, Scout, Crawler, Nomad) with a low-poly model: boxy
+  tub, round headlights, wide flares, rollbar, spare wheel, roof rack with jerrycans and
+  backpack, knobby tyres, visible half-shafts and coil-overs.
+- Off-road physics: engine braking, ground stick with landing ramp-in, downforce, tolerant
+  slip curve, no-bounce suspension, low centre of mass, anti-flip assist on the ground.
+- Destructible trees (young / medium by impact energy / old solid) with tumbling debris,
+  splinters, leaves, stumps, sound, shake and haptics; `treeBroken` event and stats.
+- Instanced low-poly particles (dust, snow, gravel, mud, sparks, drops and rings, landing
+  rings, wood, leaves, steam, nitro) and prism speed lines.
+- Camera: high look-ahead chase, wide and hood views, free look, slope tilt, terrain/prop
+  avoidance, tree fading, camera settings; skippable summit fly-over.
+- Safe-spot resets (manual or automatic when upside down, in deep water or off the map).
+- Daily challenge objectives with a HUD checklist; medals by objectives; HUD compass to the
+  base, altitude and descent bar; results with distance, altitude dropped, trees, drift and
+  jump records.
+- Auto quality level recorded in Settings.
+
+### Changed
+
+- Save schema v4: keeps coins, unlocks, upgrades, achievements, stats and settings, maps the
+  old cars to the jeeps, drops time records, medals and ghosts.
+- Menu backdrop shows the jeep at the summit edge; "Tracks" became "Mountains".
+
+### Removed
+
+- Checkpoints, timer, countdown, time medals, time attack and ghosts.
+- Air control and in-air self-righting; slow motion.
+- The three old tracks and four old cars; canvas noise textures and sprite particles.
+
 ## [1.0.0] - 2026-11-13
 
 ### Added
