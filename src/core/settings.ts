@@ -3,7 +3,8 @@ import type { ActionId } from '../input/actions';
 export type QualitySetting = 'auto' | 'low' | 'medium' | 'high';
 export type LanguageSetting = 'auto' | 'en' | 'it';
 export type TouchMode = 'buttons' | 'tilt';
-export type CameraMode = 'chase' | 'hood' | 'high';
+export type CameraMode = 'chase' | 'wide' | 'hood';
+export const CAMERA_MODES: CameraMode[] = ['chase', 'wide', 'hood'];
 
 export interface Settings {
   quality: QualitySetting;
@@ -19,6 +20,13 @@ export interface Settings {
   haptics: boolean;
   showFps: boolean;
   camera: CameraMode;
+  /** Chase camera distance / height multipliers (0.7..1.5). */
+  cameraDistance: number;
+  cameraHeight: number;
+  /** Base vertical field of view (degrees). */
+  cameraFov: number;
+  /** Camera shake multiplier (0 = off). */
+  cameraShake: number;
   /** Keyboard bindings: action → list of KeyboardEvent.code. Missing actions use defaults. */
   bindings: Partial<Record<ActionId, string[]>>;
 }
@@ -38,6 +46,10 @@ export function defaultSettings(): Settings {
     haptics: true,
     showFps: false,
     camera: 'chase',
+    cameraDistance: 1,
+    cameraHeight: 1,
+    cameraFov: 62,
+    cameraShake: 1,
     bindings: {},
   };
 }

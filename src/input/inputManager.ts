@@ -17,6 +17,17 @@ export interface RawInput {
   /** True for digital steering sources that should be smoothed. */
   steerDigital: boolean;
   held: Set<ActionId>;
+  /** Free-look rotation this frame (radians, + = right / up) and whether a look is held. */
+  lookX: number;
+  lookY: number;
+  looking: boolean;
+}
+
+/** Free-look state for the camera, merged from mouse/touch drags and the right stick. */
+export interface LookState {
+  dx: number;
+  dy: number;
+  active: boolean;
 }
 
 export interface InputSource {
@@ -31,6 +42,7 @@ export interface InputSource {
  */
 export class InputManager {
   readonly drive: DriveState = createDriveState();
+  readonly look: LookState = { dx: 0, dy: 0, active: false };
   private readonly sources: InputSource[] = [];
   private readonly raw: RawInput = {
     throttle: 0,
@@ -38,6 +50,9 @@ export class InputManager {
     steer: 0,
     steerDigital: false,
     held: new Set(),
+    lookX: 0,
+    lookY: 0,
+    looking: false,
   };
   private prevHeld = new Set<ActionId>();
   private currHeld = new Set<ActionId>();
@@ -86,7 +101,12 @@ export class InputManager {
     raw.steer = 0;
     raw.steerDigital = false;
     raw.held.clear();
+    raw.lookX = raw.lookY = 0;
+    raw.looking = false;
     for (const s of this.sources) s.update(dt, raw);
+    this.look.dx = raw.lookX;
+    this.look.dy = raw.lookY;
+    this.look.active = raw.looking;
 
     const swap = this.prevHeld;
     this.prevHeld = this.currHeld;

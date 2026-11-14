@@ -12,6 +12,7 @@ import { StateMachine } from './core/stateMachine';
 import { createRegistries } from './data/registry';
 import { InputManager } from './input/inputManager';
 import { KeyboardSource } from './input/keyboard';
+import { PointerLookSource } from './input/pointerLook';
 import { GamepadSource } from './input/gamepad';
 import { TiltSource } from './input/tilt';
 import { AudioEngine } from './audio/audioEngine';
@@ -55,6 +56,7 @@ function start(): void {
   const keyboard = new KeyboardSource(input);
   input.add(keyboard);
   input.add(new GamepadSource(input));
+  input.add(new PointerLookSource(input, canvas));
   const tilt = new TiltSource();
   const audio = new AudioEngine();
   const ui = new UIManager(input, audio);

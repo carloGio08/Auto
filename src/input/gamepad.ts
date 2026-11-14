@@ -38,6 +38,15 @@ export class GamepadSource implements InputSource {
         out.steer += sx;
         used = true;
       }
+      // Right stick: free look (rate control).
+      const lx = dz(pad.axes[2] ?? 0);
+      const ly = dz(pad.axes[3] ?? 0);
+      if (lx !== 0 || ly !== 0) {
+        out.lookX += lx * 2.6 * _dt;
+        out.lookY -= ly * 1.6 * _dt;
+        out.looking = true;
+        used = true;
+      }
       const map: [number, Parameters<RawInput['held']['add']>[0]][] = [
         [0, 'nitro'],
         [2, 'handbrake'],

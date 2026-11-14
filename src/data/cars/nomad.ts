@@ -34,7 +34,7 @@ export const nomad: CarDef = {
       reverseForce: 7500,
       engineBrake: 170,
     },
-    aero: { drag: 3.4, downforce: 3.4 },
+    aero: { drag: 6.8, downforce: 3.4 },
     steering: { maxAngle: 0.57 },
     nitro: { force: 9500, capacity: 1.1, burnRate: 0.28 },
     groundStick: 0.35,

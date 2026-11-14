@@ -143,6 +143,8 @@ export class RunSession {
     this.vehicle.model.enableHeadlights(world.time.headlights);
     this.camera = new CameraRig(ctx.renderer.width / ctx.renderer.height);
     this.camera.mode = save.settings.camera;
+    this.camera.syncPrefs(save.settings);
+    this.camera.world = { colliders: world.colliders, props: world.props };
     this.effects = new Effects(this, ctx.renderer.preset);
     this.audio = new AudioDirector(ctx.audio, this.events);
     this.progressS = course.startS;
@@ -201,12 +203,12 @@ export class RunSession {
     this.safeSpots.push({ x: p.x, y: p.y, z: p.z, heading: Math.atan2(p.tx, p.tz) });
   }
 
-  private place(spot: SafeSpot, snapCamera: boolean): void {
+  private place(spot: SafeSpot, snapCamera: boolean, smooth = false): void {
     const g = this.course.terrain.sample(spot.x, spot.z, spot.y + 3, createGroundSample());
     this.vehicle.physics.reset(spot.x, g.height + 0.9, spot.z, spot.heading, g.normal);
     this.vehicle.telemetry.reset();
     this.vehicle.sync(1, this.course.terrain, 0, false);
-    if (snapCamera) this.camera.snap(this.vehicle, this.course.terrain);
+    if (snapCamera) this.camera.snap(this.vehicle, this.course.terrain, smooth);
   }
 
   get length(): number {
@@ -244,7 +246,7 @@ export class RunSession {
     this.lastResetAt = this.time;
     const n = this.safeSpots.length;
     const spot = this.safeSpots[Math.max(0, n - 1 - this.resetDepth)];
-    this.place(spot, false);
+    this.place(spot, true, true);
     this.waterTime = 0;
     this.offMapTime = 0;
     this.events.emit('run:reset', { manual });
@@ -359,7 +361,8 @@ export class RunSession {
     const v = this.vehicle;
     v.sync(alpha, this.course.terrain, this.time, this.input.brake > 0.1);
     v.updateAudio();
-    this.camera.update(realDt, v, this.course.terrain);
+    this.camera.syncPrefs(this.ctx.save.data.settings);
+    this.camera.update(realDt, v, this.course.terrain, this.ctx.input.look);
     for (const s of this.systems) s.update?.(dt, alpha);
     this.effects.update(dt, realDt);
     this.world.update(realDt, this.camera.camera.position, tmpV.copy(v.renderPosition));

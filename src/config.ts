@@ -60,17 +60,31 @@ export const config = {
   },
 
   camera: {
-    chaseDistance: 7.2,
-    chaseHeight: 2.6,
-    chaseLookAhead: 6,
-    chaseStiffness: 6,
-    chaseRotStiffness: 4,
-    highDistance: 13,
-    highHeight: 8.5,
+    /** Chase camera: high and far, so the slope ahead is visible. */
+    chaseDistance: 9.5,
+    chaseHeight: 3.9,
+    wideDistance: 15,
+    wideHeight: 7,
+    /** Base look-ahead (m); grows with speed. */
+    chaseLookAhead: 8,
+    chaseStiffness: 5,
+    /** Heading spring: lower = more lag in drifts. */
+    chaseRotStiffness: 3.2,
+    /** Low-pass of the jeep's height (bumps do not shake the camera). */
+    verticalStiffness: 3.5,
+    lookStiffness: 7,
+    /** Max share of the travel direction in the heading (vs the nose). */
+    velocityFollow: 0.7,
+    /** Extra height (m) per unit of downhill grade ahead. */
+    descentLift: 5,
+    groundClearance: 1.4,
+    /** Free look: seconds before auto-recentring, and recentring speed. */
+    lookRecenterDelay: 1.2,
+    lookRecenterRate: 2.5,
     fovBase: 62,
-    fovMax: 84,
+    fovMax: 78,
     /** Speed (m/s) at which the FOV reaches fovMax. */
-    fovSpeed: 48,
+    fovSpeed: 45,
     shakeLanding: 0.35,
     shakeCrash: 0.6,
     shakeNitro: 0.06,

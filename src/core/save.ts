@@ -1,5 +1,5 @@
 import type { AchievementStats, TimeOfDayId, UpgradeId, WeatherId } from '../data/types';
-import { defaultSettings, type Settings } from './settings';
+import { CAMERA_MODES, defaultSettings, type Settings } from './settings';
 
 export const SAVE_KEY = 'mountain-drop:save';
 /** Storage prefix of the replay ghosts used up to schema v3 (purged on load). */
@@ -179,6 +179,8 @@ export function migrate(raw: AnySave): SaveData {
   if (!Array.isArray(merged.ownedCars) || merged.ownedCars.length === 0)
     merged.ownedCars = [STARTER_CAR];
   if (!merged.ownedCars.includes(merged.selectedCar)) merged.selectedCar = merged.ownedCars[0];
+  if (!CAMERA_MODES.includes(merged.settings.camera))
+    merged.settings.camera = (merged.settings.camera as string) === 'high' ? 'wide' : 'chase';
   if (typeof merged.coins !== 'number' || !Number.isFinite(merged.coins) || merged.coins < 0)
     merged.coins = 0;
   return merged;

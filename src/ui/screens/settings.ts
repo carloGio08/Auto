@@ -1,5 +1,10 @@
 import type { GameContext } from '../../core/context';
-import type { CameraMode, LanguageSetting, QualitySetting, TouchMode } from '../../core/settings';
+import {
+  CAMERA_MODES,
+  type LanguageSetting,
+  type QualitySetting,
+  type TouchMode,
+} from '../../core/settings';
 import { LANGUAGES } from '../../core/i18n';
 import { DEFAULT_KEY_BINDINGS, REBINDABLE, type ActionId } from '../../input/actions';
 import { TiltSource } from '../../input/tilt';
@@ -170,12 +175,45 @@ export function createSettings(
       ),
       stepper(
         t('settings.camera'),
-        (['chase', 'hood', 'high'] as CameraMode[]).map((c) => ({
+        CAMERA_MODES.map((c) => ({
           value: c,
           label: t(`settings.camera.${c}` as I18nKey),
         })),
         s.camera,
         (v) => ((s.camera = v), apply()),
+      ),
+      slider(
+        t('settings.cameraDistance'),
+        s.cameraDistance,
+        (v) => ((s.cameraDistance = v), apply()),
+        0.7,
+        1.5,
+        0.05,
+      ),
+      slider(
+        t('settings.cameraHeight'),
+        s.cameraHeight,
+        (v) => ((s.cameraHeight = v), apply()),
+        0.7,
+        1.6,
+        0.05,
+      ),
+      slider(
+        t('settings.cameraFov'),
+        s.cameraFov,
+        (v) => ((s.cameraFov = v), apply()),
+        50,
+        80,
+        1,
+        (v) => `${Math.round(v)}°`,
+      ),
+      slider(
+        t('settings.cameraShake'),
+        s.cameraShake,
+        (v) => ((s.cameraShake = v), apply()),
+        0,
+        1.5,
+        0.05,
       ),
       ctx.device.touch && !ctx.device.mobile ? null : null,
       h('h4', {}, t('settings.bindings')),

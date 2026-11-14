@@ -33,7 +33,7 @@ export const crawler: CarDef = {
       reverseForce: 8500,
       engineBrake: 220,
     },
-    aero: { drag: 4.2, downforce: 3.6 },
+    aero: { drag: 9, downforce: 3.6 },
     steering: { maxAngle: 0.55 },
     nitro: { force: 9000, capacity: 1.1, burnRate: 0.26 },
     groundStick: 0.4,

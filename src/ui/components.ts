@@ -112,6 +112,7 @@ export function slider(
   min = 0,
   max = 1,
   step = 0.05,
+  formatter?: (v: number) => string,
 ): HTMLElement {
   const input = h('input', {
     type: 'range',
@@ -123,7 +124,11 @@ export function slider(
     'data-adjust': '',
   }) as HTMLInputElement;
   const format = (v: number): string =>
-    min === 0 && max === 1 ? `${Math.round(v * 100)}%` : `${v.toFixed(2)}×`;
+    formatter
+      ? formatter(v)
+      : min === 0 && max === 1
+        ? `${Math.round(v * 100)}%`
+        : `${v.toFixed(2)}×`;
   const out = h('span', { class: 'slider-value' }, format(value));
   const update = (): void => {
     const v = Number(input.value);

@@ -33,7 +33,7 @@ export const scout: CarDef = {
       reverseForce: 6500,
       engineBrake: 130,
     },
-    aero: { drag: 3.2, downforce: 2.6 },
+    aero: { drag: 7.2, downforce: 2.6 },
     steering: { maxAngle: 0.64 },
     nitro: { force: 8800, capacity: 1, burnRate: 0.3 },
     groundStick: 0.3,

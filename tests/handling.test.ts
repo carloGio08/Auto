@@ -36,11 +36,11 @@ const fresh = (def: (typeof cars)[number], speed: number): VehiclePhysics => {
 };
 
 describe.each(cars.map((c) => [c.id, c] as const))('handling: %s', (_id, def) => {
-  it('accelerates to 100 km/h in under 6 s', () => {
+  it('accelerates to 80 km/h in under 6 s', () => {
     const car = fresh(def, 0);
     const input: DriveInput = { throttle: 1, brake: 0, steer: 0, handbrake: false, nitro: false };
     let t = 0;
-    while (car.speed < 27.8 && t < 10) {
+    while (car.speed < 22.2 && t < 10) {
       car.step(dt, input, flat);
       t += dt;
     }
@@ -68,6 +68,14 @@ describe.each(cars.map((c) => [c.id, c] as const))('handling: %s', (_id, def) =>
       lat = Math.max(lat, Math.abs(car.angularVelocity.y) * car.speed);
     }
     expect(lat).toBeGreaterThan(10);
+  });
+
+  it('tops out like an off-roader on the flat (90–125 km/h)', () => {
+    const car = fresh(def, 0);
+    const input: DriveInput = { throttle: 1, brake: 0, steer: 0, handbrake: false, nitro: false };
+    for (let i = 0; i < 120 * 40; i++) car.step(dt, input, flat);
+    expect(car.speed * 3.6).toBeGreaterThan(90);
+    expect(car.speed * 3.6).toBeLessThan(125);
   });
 
   it('drifts on a handbrake flick and recovers without spinning', () => {

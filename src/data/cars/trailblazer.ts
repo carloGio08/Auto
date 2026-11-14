@@ -33,7 +33,7 @@ export const trailblazer: CarDef = {
       reverseForce: 7000,
       engineBrake: 160,
     },
-    aero: { drag: 3.6, downforce: 3.2 },
+    aero: { drag: 8, downforce: 3.2 },
     steering: { maxAngle: 0.58 },
     nitro: { force: 8500, capacity: 1, burnRate: 0.28 },
     groundStick: 0.35,
