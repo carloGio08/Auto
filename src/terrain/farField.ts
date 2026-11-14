@@ -5,6 +5,9 @@ import { heightmapHalfExtent } from './generator';
 import { LandformField } from './landforms';
 import type { PatchPalette } from './splat';
 
+/** Blue-grey of the distant rock faces (linear RGB). */
+const FAR_ROCK = [0.2, 0.235, 0.29];
+
 /** A far-field ring request: the quadtree covers |x|, |z| < hole. */
 export interface FarFieldRequest {
   hole: number;
@@ -52,6 +55,9 @@ export class FarHeight {
     let h = this.field.height(x, z);
     const far = smoothstep(6000, 10000, r);
     if (far > 0) h += 480 * far * this.noise.ridged(x / 3800, z / 3800, 3) - 150 * far;
+    // Jagged crests: sharper ridged noise on high ground away from the map.
+    const jag = smoothstep(3500, 6000, r) * smoothstep(500, 1300, h);
+    if (jag > 0) h += 220 * jag * (this.noise.ridged(x / 900, z / 900, 2) - 0.45);
     if (r >= this.outer) return h;
     const t = smoothstep(this.inner, this.outer, r);
     return this.course.terrain.height(x, z) * (1 - t) + h * t;
@@ -114,24 +120,29 @@ export function buildFarField(
       const slope =
         Math.hypot(H[j * n + ir] - H[j * n + il], H[jr * n + i] - H[jl * n + i]) / (2 * s);
       acc[0] = acc[1] = acc[2] = 0;
+      const x = pos[c * 3];
+      const z = pos[c * 3 + 2];
+      // Distant ranges: bright snow caps only on the upper peaks (snow line raised, ragged
+      // edge), blue-grey rock below, dark forest on the lower slopes.
+      const streak = Math.sin(x / 310 + Math.sin(z / 470) * 2) * 90;
+      const snowLine = b.snowLine + (Math.max(Math.abs(x), Math.abs(z)) > 4000 ? 380 : 0);
       const snow =
-        smoothstep(b.snowLine - 150, b.snowLine + 250, h) * (1 - smoothstep(0.7, 1.1, slope));
-      const rock = Math.min(
-        1 - snow,
-        smoothstep(0.45, 0.9, slope) + smoothstep(b.rockLine, b.snowLine, h) * 0.6,
-      );
-      const veg = Math.max(0, 1 - snow - rock);
-      const forest = veg * (1 - smoothstep(b.treeLine - 200, b.treeLine + 100, h)) * 0.75;
-      tone(palette.snow, 0.7, tmp);
+        smoothstep(snowLine - 60, snowLine + 160, h + streak) * (1 - smoothstep(0.85, 1.25, slope));
+      const forestK =
+        (1 - snow) *
+        (1 - smoothstep(b.treeLine - 150, b.treeLine + 120, h)) *
+        (1 - smoothstep(0.55, 0.9, slope));
+      const rock = Math.max(0, 1 - snow - forestK);
+      tone(palette.snow, 0.75, tmp);
       add(snow);
-      tone(palette.rockLight, 0.4, tmp);
-      add(rock * 0.6);
-      tone(palette.rockDark, 0.6, tmp);
-      add(rock * 0.4);
-      tone(palette.forest, 0.6, tmp);
-      add(forest);
-      tone(palette.grass, 0.5, tmp);
-      add(veg - forest);
+      for (let q = 0; q < 3; q++) tmp[q] = FAR_ROCK[q] * (0.85 + 0.25 * Math.min(1, slope));
+      add(rock * 0.7);
+      tone(palette.rockDark, 0.4, tmp);
+      add(rock * 0.3);
+      tone(palette.forest, 0.35, tmp);
+      add(forestK * 0.8);
+      tone(palette.grass, 0.4, tmp);
+      add(forestK * 0.2);
       col[c * 3] = Math.min(255, acc[0] * 255);
       col[c * 3 + 1] = Math.min(255, acc[1] * 255);
       col[c * 3 + 2] = Math.min(255, acc[2] * 255);

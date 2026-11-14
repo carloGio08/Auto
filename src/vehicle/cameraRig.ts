@@ -261,7 +261,7 @@ export class CameraRig {
       const la = (c.chaseLookAhead + Math.min(speed * 0.35, 18)) * (wide ? 1.2 : 1);
       look.set(p.x + dir.x * la, 0, p.z + dir.z * la);
       const gL = ground.groundHeight(look.x, look.z, p.y + 30);
-      look.y = lerp(this.anchorY + 1.2, gL + 1.4, 0.55) + this.pitch * 6;
+      look.y = lerp(this.anchorY + c.lookHeight, gL + c.lookHeight, 0.6) + this.pitch * 6;
       if (snap) this.smoothLook.copy(look);
       else this.smoothLook.lerp(look, damp(c.lookStiffness * boost, dt));
       cam.up.set(0, 1, 0);

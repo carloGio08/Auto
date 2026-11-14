@@ -58,7 +58,7 @@ export function defaultSettings(): Settings {
     camera: 'chase',
     cameraDistance: 1,
     cameraHeight: 1,
-    cameraFov: 62,
+    cameraFov: 65,
     cameraShake: 1,
     bindings: {},
   };

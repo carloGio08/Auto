@@ -162,7 +162,7 @@ export class Sky {
         color: cloudColor,
         flatShading: true,
         emissive: cloudColor,
-        emissiveIntensity: 0.35,
+        emissiveIntensity: 0.22,
       }),
       n,
     );

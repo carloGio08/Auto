@@ -66,12 +66,16 @@ export const config = {
 
   camera: {
     /** Chase camera: high and far, so the slope ahead is visible. */
-    chaseDistance: 9.5,
-    chaseHeight: 3.9,
-    wideDistance: 15,
-    wideHeight: 7,
-    /** Base look-ahead (m); grows with speed. */
+    // Higher and slightly farther than before (pitch ~20° down at the look point, ~30° to
+    // the jeep): the jeep sits in the lower middle, the road ahead fills about half of the
+    // frame and the horizon stays in view.
+    chaseDistance: 10.5,
+    chaseHeight: 7,
+    wideDistance: 16,
+    wideHeight: 10,
+    /** Base look-ahead (m); grows with speed. Look point height above the ground ahead. */
     chaseLookAhead: 8,
+    lookHeight: 0.6,
     chaseStiffness: 5,
     /** Heading spring: lower = more lag in drifts. */
     chaseRotStiffness: 3.2,
@@ -86,8 +90,8 @@ export const config = {
     /** Free look: seconds before auto-recentring, and recentring speed. */
     lookRecenterDelay: 1.2,
     lookRecenterRate: 2.5,
-    fovBase: 62,
-    fovMax: 78,
+    fovBase: 65,
+    fovMax: 80,
     /** Speed (m/s) at which the FOV reaches fovMax. */
     fovSpeed: 45,
     shakeLanding: 0.35,
