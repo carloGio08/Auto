@@ -147,6 +147,9 @@ export const config = {
     /** Minimum width of the soft embankment beside a trail (m) and centre crown (m). */
     roadShoulder: 9,
     roadCrown: 0.1,
+    /** Broken tree pieces alive at once, and seconds before they fade away. */
+    debrisMax: 60,
+    debrisLifetime: 20,
   },
 
   graphics: {

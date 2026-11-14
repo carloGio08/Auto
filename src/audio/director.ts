@@ -30,6 +30,7 @@ export class AudioDirector {
       ),
       events.on('vehicle:splash', ({ speed }) => sfx()?.splash(speed / 20)),
       events.on('vehicle:nearMiss', () => sfx()?.whoosh()),
+      events.on('treeBroken', ({ tier }) => sfx()?.treeBreak(tier !== 'young')),
       events.on('nitro:changed', ({ active }) => {
         if (active) sfx()?.nitroStart();
       }),

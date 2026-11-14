@@ -156,6 +156,7 @@ export class RunSession {
         if (kind === 'coin') this.coins += value;
         else this.crystals++;
       }),
+      this.events.on('treeBroken', () => this.stats.treesBroken++),
       this.events.on('vehicle:drift', ({ duration }) => {
         this.stats.longestDrift = Math.max(this.stats.longestDrift, duration);
       }),
@@ -390,6 +391,7 @@ export class RunSession {
     });
     this.vehicle.physics.odometer = 0;
     this.effects.clear();
+    this.world.props.restoreTrees();
     this.vehicle.telemetry.topSpeed = 0;
     this.vehicle.telemetry.bestAir = 0;
     this.placeAtStart();

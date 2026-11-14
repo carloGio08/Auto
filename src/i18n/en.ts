@@ -199,6 +199,8 @@ export const en = {
   'trick.barrelRoll': 'Barrel roll',
   'trick.perfectLanding': 'Perfect landing',
   'trick.nearMiss': 'Near miss',
+  'trick.timber': 'Timber!',
+  'trick.bigTimber': 'Big timber!',
   'trick.crystal': 'Crystal',
   'trick.shortcut': 'Shortcut',
 

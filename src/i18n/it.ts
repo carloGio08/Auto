@@ -201,6 +201,8 @@ export const it: Dictionary = {
   'trick.barrelRoll': 'Avvitamento',
   'trick.perfectLanding': 'Atterraggio perfetto',
   'trick.nearMiss': 'Al limite',
+  'trick.timber': 'Albero giù!',
+  'trick.bigTimber': 'Abbattuto!',
   'trick.crystal': 'Cristallo',
   'trick.shortcut': 'Scorciatoia',
 

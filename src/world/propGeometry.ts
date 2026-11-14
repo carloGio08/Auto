@@ -128,6 +128,17 @@ export class PropGeometry {
     return merge([paint(c, this.pal.forest[1])]);
   }
 
+  /** Broken trunk section for debris: vertical, centred on the origin, 2.4 m long. */
+  log(): BufferGeometry {
+    const t = new CylinderGeometry(0.24, 0.28, 2.4, 6);
+    const end = new CylinderGeometry(0.235, 0.235, 0.04, 6);
+    end.translate(0, 1.2, 0);
+    return merge([
+      paint(t, this.pal.wood[1], this.pal.wood[0], 0.3, 7),
+      paint(end, this.pal.trail[0]),
+    ]);
+  }
+
   stump(): BufferGeometry {
     const t = new CylinderGeometry(0.32, 0.4, 0.55, 6);
     t.translate(0, 0.27, 0);

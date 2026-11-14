@@ -40,8 +40,15 @@ const tmp = new Vector3();
 const tmpR = new Vector3();
 const fwd = new Vector3();
 
+/**
+ * Decides whether a contact breaks the collider (destructible trees). Returning true means the
+ * handler dealt with it (speed loss, effects) and the contact is skipped.
+ */
+export type BreakHandler = (c: Collider, impactSpeed: number, car: VehiclePhysics) => boolean;
+
 /** Static spatial hash of props plus a short list of dynamic colliders. */
 export class CollisionWorld {
+  breakHandler: BreakHandler | null = null;
   private readonly cell = 16;
   private readonly cells = new Map<number, Collider[]>();
   private readonly dynamic: Collider[] = [];
@@ -233,6 +240,12 @@ export class CollisionWorld {
         } else {
           nx /= dist;
           nz /= dist;
+        }
+        if (c.kind === 'tree' && this.breakHandler) {
+          tmpR.set(cx - p.x - nx * radius, 0, cz - p.z - nz * radius);
+          car.pointVelocity(tmpR, tmp);
+          const vIn = -((tmp.x - c.vx) * nx + (tmp.z - c.vz) * nz);
+          if (vIn > 0 && this.breakHandler(c, vIn, car)) continue;
         }
         // Push out of penetration.
         const pen = -clearance;

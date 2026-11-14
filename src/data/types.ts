@@ -282,7 +282,8 @@ export interface MountainDef {
   unlockAfter?: string;
 }
 
-export type SystemId = 'nitro' | 'style' | 'hazards' | 'collectibles' | 'medals' | 'achievements';
+export type SystemId =
+  'nitro' | 'style' | 'hazards' | 'collectibles' | 'trees' | 'medals' | 'achievements';
 
 export type ModeId = 'freeDescent' | 'daily';
 

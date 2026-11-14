@@ -260,7 +260,7 @@ export class Effects {
     }
     // Engine steam: cold air at altitude or a hot engine working hard at low speed.
     const cold = car.position.y > this.session.course.def.biomes.treeLine;
-    const rate = (cold ? 5 : 0) + (car.engineLoad > 0.7 && speed < 10 ? 4 : 0);
+    const rate = (cold ? 4 : 0) + (car.engineLoad > 0.8 && speed < 4 ? 3 : 0);
     this.steamAcc += rate * dt;
     if (this.steamAcc >= 1) {
       this.steamAcc -= 1;

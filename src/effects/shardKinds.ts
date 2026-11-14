@@ -96,7 +96,7 @@ export const shardKinds = {
     shape: 'icosa',
     gravity: -1.6,
     drag: 1.4,
-    size: [0.08, 0.16],
+    size: [0.05, 0.1],
     life: [0.8, 1.4],
     spin: 2,
     grow: 2.4,

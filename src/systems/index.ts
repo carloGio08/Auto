@@ -4,6 +4,7 @@ import { NitroSystem } from './nitro';
 import { StyleSystem } from './style';
 import { HazardsSystem } from './hazards';
 import { CollectiblesSystem } from './collectibles';
+import { TreesSystem } from './trees';
 import { MedalsSystem } from './medals';
 import { AchievementsSystem } from './achievements';
 
@@ -16,6 +17,7 @@ export const systemFactories: Record<SystemId, () => GameSystem> = {
   style: () => new StyleSystem(),
   hazards: () => new HazardsSystem(),
   collectibles: () => new CollectiblesSystem(),
+  trees: () => new TreesSystem(),
   medals: () => new MedalsSystem(),
   achievements: () => new AchievementsSystem(),
 };

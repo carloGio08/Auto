@@ -6,14 +6,14 @@ export const modes: Record<ModeId, ModeDef> = {
     id: 'freeDescent',
     nameKey: 'mode.freeDescent.name',
     descriptionKey: 'mode.freeDescent.desc',
-    systems: ['nitro', 'style', 'hazards', 'collectibles', 'medals', 'achievements'],
+    systems: ['nitro', 'style', 'hazards', 'collectibles', 'trees', 'medals', 'achievements'],
     recordsEnabled: true,
   },
   daily: {
     id: 'daily',
     nameKey: 'mode.daily.name',
     descriptionKey: 'mode.daily.desc',
-    systems: ['nitro', 'style', 'hazards', 'collectibles', 'medals', 'achievements'],
+    systems: ['nitro', 'style', 'hazards', 'collectibles', 'trees', 'medals', 'achievements'],
     recordsEnabled: true,
   },
 };

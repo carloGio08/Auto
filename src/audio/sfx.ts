@@ -170,6 +170,21 @@ export class Sfx {
     if (this.gate('whoosh', 0.2)) this.burst(0.35, 0.12, 'bandpass', 2400, 2, 0, 800);
   }
 
+  /** Wood cracking: a sharp noise snap and a falling creak. */
+  treeBreak(big: boolean): void {
+    if (!this.gate('tree', 0.06)) return;
+    this.burst(0.12, big ? 0.4 : 0.26, 'highpass', 1800, 1.4);
+    this.burst(big ? 0.6 : 0.35, big ? 0.28 : 0.16, 'bandpass', 520, 1.6, 0.03, 180);
+    this.tone(
+      big ? 140 : 220,
+      big ? 0.5 : 0.25,
+      'sawtooth',
+      big ? 0.1 : 0.06,
+      0.02,
+      big ? 60 : 110,
+    );
+  }
+
   rumble(): void {
     if (this.gate('rumble', 1)) this.burst(1.6, 0.35, 'lowpass', 220, 0.8, 0, 90);
   }

@@ -1,3 +1,4 @@
+import { treeTiers } from '../data/trees';
 import { config } from '../config';
 import type { I18nKey } from '../i18n/en';
 import { BaseSystem } from './system';
@@ -39,6 +40,9 @@ export class StyleSystem extends BaseSystem {
       this.trick(key, (kind === 'barrelRoll' ? 600 : 500) * count, count > 1 ? `×${count}` : '');
     });
     this.onEvent('vehicle:nearMiss', () => this.trick('trick.nearMiss', 150));
+    this.onEvent('treeBroken', ({ tier }) =>
+      this.trick(tier === 'young' ? 'trick.timber' : 'trick.bigTimber', treeTiers[tier].score),
+    );
     this.onEvent(
       'collectible:picked',
       ({ kind }) => kind === 'crystal' && this.trick('trick.crystal', g.crystalScore),
