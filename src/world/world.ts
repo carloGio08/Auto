@@ -9,7 +9,7 @@ import {
   Vector3,
 } from 'three';
 import { atmosphereUniforms, installAtmosphere, setAtmosphere } from './atmosphere';
-import type { QualityPreset } from '../config';
+import { config, type QualityPreset } from '../config';
 import {
   defaultPalette,
   resolvePalette,
@@ -101,14 +101,17 @@ export class World {
   /** Pushes this world's atmosphere into the shared shader uniforms. */
   private applyAtmosphereUniforms(): void {
     const w = this.weather;
+    const visibility = (config.world.fogVisibility * this.fogScale) / Math.sqrt(w.fogDensity);
     setAtmosphere({
       haze: this.hazeColor,
       low: this.fogColor,
       hazeDistance: (9000 * this.fogScale) / w.fogDensity,
+      visibility,
       base: this.course.def.lake.level,
       density: 0.00022 * w.fogDensity * w.fogDensity,
       falloff: 170,
     });
+    this.sky?.setFogBand(Math.min(0.5, (0.3 * config.world.fogVisibility) / visibility));
   }
 
   /** Fog distance multiplier (the opening fly-over looks further). */
@@ -206,6 +209,7 @@ export class World {
       course.def.summit.height,
     );
     this.scene.add(this.sky.group);
+    this.applyAtmosphereUniforms();
     this.lighting = new Lighting(
       this.scene,
       this.time,

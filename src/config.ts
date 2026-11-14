@@ -161,6 +161,13 @@ export const config = {
     terrainJitter: 0.25,
     /** Baked ambient occlusion: darkening strength (0 = off) and ring radii (m). */
     ao: { strength: 0.32, radii: [6, 18] as number[] },
+    /**
+     * Visibility fog on a clear day (m): the scene fades into the horizon colour,
+     * 63 % at this distance and 95 % at 1.7 ×. Foggier weather divides it by √fogDensity.
+     */
+    fogVisibility: 520,
+    /** Saturation multiplier applied to the whole palette (1 = as declared). */
+    vividness: 1.4,
     /** Max ms per frame spent building terrain patches on the main thread (no worker). */
     chunkBuildBudgetMs: 4,
     /** Props are generated and instanced per cell of this size (m). */

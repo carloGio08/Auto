@@ -19,6 +19,7 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Rng } from '../math/rng';
+import { applyCloudAtmosphere } from './atmosphere';
 import type { TimeOfDayDef, WeatherDef } from '../data/types';
 
 const vertexShader = /* glsl */ `
@@ -36,10 +37,14 @@ uniform vec3 bottomColor;
 uniform vec3 sunColor;
 uniform vec3 sunDir;
 uniform float sunSize;
+uniform float fogBand;
 varying vec3 vDir;
 void main() {
   float h = vDir.y;
   vec3 col = h > 0.0 ? mix(horizonColor, topColor, pow(min(h * 1.6, 1.0), 0.7)) : mix(horizonColor, bottomColor, min(-h * 4.0, 1.0));
+  // Fog: the sky melts into the horizon colour (the colour fogged terrain fades to) up to
+  // fogBand above the horizon, and below it.
+  if (fogBand > 0.0) col = mix(horizonColor, col, smoothstep(0.0, fogBand, h));
   float d = max(dot(normalize(vDir), normalize(sunDir)), 0.0);
   // Sun disc, a soft halo and a wide glow that warms the horizon on the sun's side.
   col += sunColor * (pow(d, 900.0 / sunSize) * 1.6 + pow(d, 12.0) * 0.22 + pow(d, 3.0) * 0.1);
@@ -97,6 +102,7 @@ export class Sky {
           sunColor: { value: new Color(time.sunColor).multiplyScalar(1 - weather.overcast * 0.85) },
           sunDir: { value: sunDir.clone() },
           sunSize: { value: time.id === 'night' ? 0.5 : 1.5 },
+          fogBand: { value: 0 },
         },
         vertexShader,
         fragmentShader,
@@ -160,6 +166,7 @@ export class Sky {
       }),
       n,
     );
+    (this.clouds.material as MeshLambertMaterial).onBeforeCompile = applyCloudAtmosphere;
     // Three layers: high clouds, clouds at the summit's height and low banks lying in the
     // valleys (seen from above at the start); the haze shades the far ones.
     for (let i = 0; i < n; i++) {
@@ -196,6 +203,11 @@ export class Sky {
       this.clouds.setMatrixAt(i, this.m);
     });
     this.clouds.instanceMatrix.needsUpdate = true;
+  }
+
+  /** Height (sine of elevation) of the fogged band above the horizon, 0 = none. */
+  setFogBand(band: number): void {
+    this.dome.material.uniforms.fogBand.value = band;
   }
 
   private time = 0;

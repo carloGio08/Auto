@@ -225,9 +225,15 @@ Course: start, base zone, waymarks, cairns, signs, fences, coins and crystals. P
   material: **aerial perspective** (exponential with distance: lighter, less saturated, shifted
   to the sky's horizon colour — overlapping ridges read as tone steps, no hard band) and
   **height fog** integrated analytically along the view ray (dense in the valleys, thin on the
-  crests). One set of shared uniforms updated per frame, driven by time and weather themes.
-  The sky has a sun halo and horizon glow; clouds float on three layers (high, at the summit,
-  low banks below it) and take the haze.
+  crests), then a **visibility fog** `1 − exp(−(d/V)²)` into the sky's horizon colour
+  (`config.world.fogVisibility` V = 520 m on a clear day, ÷ √fogDensity in fog and snow), so
+  the view ends at ~900 m. Fog colours are passed in sRGB because three.js applies fog after
+  the output colour conversion. One set of shared uniforms updated per frame, driven by time
+  and weather themes. The sky dome melts into the same horizon colour up to a fog band above
+  the horizon (wider when the fog is thicker), so fogged terrain never cuts out against blue
+  sky; clouds float on three layers (high, at the summit, low banks below it) with a 5×
+  longer visibility. The palette's saturation is scaled by `config.world.vividness` (1.4)
+  when it is resolved.
 - **Vegetation** (`data/vegetation.ts`, `world/propPlacement.ts`, `world/props.ts`):
   species are data (beech, spruce, pine, larch, dwarf pine: realistic heights per age,
   crown width, altitude band, wetness, colours). Trees sit on a **global Poisson disk** (a

@@ -21,7 +21,12 @@ export const atmosphereUniforms = {
   uHazeDistance: { value: 9000 },
   /** Maximum strength of the haze (0..1) and desaturation at full haze. */
   uHazeStrength: { value: 0.92 },
-  uHazeDesaturate: { value: 0.45 },
+  uHazeDesaturate: { value: 0.2 },
+  /**
+   * Visibility fog: everything fades into the horizon colour of the sky with distance,
+   * 1 - exp(-(d / V)²) (63 % at V, 95 % at 1.7 V). 0 switches it off.
+   */
+  uFogVisibility: { value: 520 },
   /** Height fog: colour, base altitude, density (1/m at the base) and falloff height (m). */
   uFogLowColor: { value: new Color('#d9e2ea') },
   uFogBase: { value: 0 },
@@ -67,6 +72,7 @@ uniform vec3 uHazeColor;
 uniform float uHazeDistance;
 uniform float uHazeStrength;
 uniform float uHazeDesaturate;
+uniform float uFogVisibility;
 uniform vec3 uFogLowColor;
 uniform float uFogBase;
 uniform float uFogDensity;
@@ -98,6 +104,10 @@ if ( uHazeDistance > 0.0 ) {
   col = mix( col, vec3( lum ), haze * uHazeDesaturate );
   col = mix( col, uHazeColor, haze );
   col = mix( col, uFogLowColor, clamp( fogLow, 0.0, 0.95 ) );
+  if ( uFogVisibility > 0.0 ) {
+    float v = dist / uFogVisibility;
+    col = mix( col, uHazeColor, 1.0 - exp( - v * v ) );
+  }
   gl_FragColor.rgb = col;
 } else {
 #ifdef FOG_EXP2
@@ -114,19 +124,37 @@ if ( uHazeDistance > 0.0 ) {
   };
 }
 
+/**
+ * Visibility of the clouds: they live in the sky, far past the ground fog, so they get a much
+ * longer visibility (they still melt into the horizon low down).
+ */
+export const cloudFogVisibility = { value: 2600 };
+
+/** Atmosphere for the clouds: the shared uniforms with their own, longer visibility. */
+export function applyCloudAtmosphere(shader: WebGLProgramParametersWithUniforms): void {
+  applyAtmosphere(shader);
+  shader.uniforms.uFogVisibility = cloudFogVisibility;
+}
+
 /** Atmosphere settings of a world: colours from the sky and time of day, weather density. */
 export function setAtmosphere(o: {
   haze: Color;
   low: Color;
   hazeDistance: number;
+  /** Visibility fog distance V (m), 0 = off. */
+  visibility: number;
   base: number;
   density: number;
   falloff: number;
 }): void {
   const u = atmosphereUniforms;
-  u.uHazeColor.value.copy(o.haze);
-  u.uFogLowColor.value.copy(o.low);
+  // three.js applies fog after the output colour space conversion: the fog colours are given
+  // in sRGB so fogged objects end exactly on the sky's horizon colour.
+  u.uHazeColor.value.copy(o.haze).convertLinearToSRGB();
+  u.uFogLowColor.value.copy(o.low).convertLinearToSRGB();
   u.uHazeDistance.value = o.hazeDistance;
+  u.uFogVisibility.value = o.visibility;
+  cloudFogVisibility.value = o.visibility * 5;
   u.uFogBase.value = o.base;
   u.uFogDensity.value = o.density;
   u.uFogFalloff.value = o.falloff;

@@ -1,4 +1,5 @@
 import { Color } from 'three';
+import { config } from '../config';
 import type { PaletteKey, TimeOfDayId, WeatherId } from './types';
 
 /**
@@ -80,11 +81,19 @@ function applyTheme(c: Color, t: PaletteTheme): Color {
   return c.multiplyScalar(t.brightness);
 }
 
+const hsl = { h: 0, s: 0, l: 0 };
+/** Scales a colour's saturation (HSL), keeping hue and lightness. */
+function vivid(c: Color, k: number): Color {
+  if (k === 1) return c;
+  c.getHSL(hsl);
+  return c.setHSL(hsl.h, Math.min(1, hsl.s * k), hsl.l);
+}
+
 export function resolvePalette(palette: Palette, ...themes: PaletteTheme[]): ResolvedPalette {
   const out = {} as ResolvedPalette;
   for (const key of Object.keys(palette) as PaletteKey[]) {
     out[key] = palette[key].map((hex) => {
-      const c = new Color(hex);
+      const c = vivid(new Color(hex), config.world.vividness);
       for (const t of themes) applyTheme(c, t);
       return c;
     });

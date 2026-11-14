@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- More vivid colours: the whole palette's saturation is scaled by `config.world.vividness`
+  (1.4), with less desaturation in the distance.
+- Real visibility fog: the scene fades into the sky's horizon colour and the view ends at
+  about 900 m on a clear day (closer in fog and snow); the sky melts into the fog near the
+  horizon. Tunable with `config.world.fogVisibility`.
+
+### Fixed
+
+- Fog colours were applied in the wrong colour space (fogged objects came out darker than
+  the sky).
+
 ## [2.2.0] - 2026-11-14
 
 Landscape update: distant ranges, atmosphere, finer and calmer terrain, varied relief and
