@@ -107,22 +107,6 @@ export class PropGeometry {
     return merge(parts);
   }
 
-  /** Broadleaf tree made of stacked octahedra (medium tier). */
-  roundTree(variant: number): BufferGeometry {
-    const parts: BufferGeometry[] = [this.trunk(2.6, 0.26)];
-    const rng = new Rng(300 + variant);
-    const greens = [this.pal.grass[1], this.pal.foliage[2], this.pal.foliage[3]];
-    for (let i = 0; i < 3; i++) {
-      const o = new OctahedronGeometry(1.3 - i * 0.25, 0);
-      o.scale(1, 1.2, 1);
-      o.rotateY(rng.next() * 3);
-      o.translate(rng.range(-0.3, 0.3), 3 + i * 1.3, rng.range(-0.3, 0.3));
-      wobble(o, 0.15, variant * 7 + i);
-      parts.push(paint(o, greens[(i + variant) % 3], greens[(i + variant + 1) % 3], 0.3, i));
-    }
-    return merge(parts);
-  }
-
   /**
    * Full tree of a species at unit size: 1 m tall, crown 1 m wide, origin at the trunk base
    * (instances scale it to the real width and height). `snowy` adds snow on the crown.
@@ -266,13 +250,6 @@ export class PropGeometry {
       case 'stump':
         return this.stump();
     }
-  }
-
-  /** Very cheap far-away tree: one cone. */
-  farTree(): BufferGeometry {
-    const c = new ConeGeometry(2.2, 8, 5, 1);
-    c.translate(0, 4.5, 0);
-    return merge([paint(c, this.pal.foliage[1])]);
   }
 
   /** Broken trunk section for debris: vertical, centred on the origin, 2.4 m long. */

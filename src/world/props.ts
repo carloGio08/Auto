@@ -144,7 +144,6 @@ const uniforms = (): FadeUniforms => ({
  */
 export class Props {
   readonly group = new Group();
-  private readonly geo: PropGeometry;
   /** Detailed geometries per species × snowy, low geometries per species. */
   private readonly speciesGeo: BufferGeometry[] = [];
   private readonly lowGeo: BufferGeometry[] = [];
@@ -188,7 +187,7 @@ export class Props {
     private readonly backend: PatchBackend | null = null,
   ) {
     this.group.name = 'props';
-    const g = (this.geo = new PropGeometry(palette));
+    const g = new PropGeometry(palette);
     for (const sp of treeSpecies) {
       const tones = sp.foliage.tones.map((t) => palette[sp.foliage.key][t]);
       this.speciesGeo.push(
@@ -722,6 +721,5 @@ export class Props {
     for (const mat of [this.nearMat, this.midMat, this.farMat, this.underMat, this.rockMat])
       mat.dispose();
     this.group.removeFromParent();
-    void this.geo;
   }
 }
