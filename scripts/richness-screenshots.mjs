@@ -5,6 +5,8 @@
  *
  *   npm run build && npm run preview      # serves http://localhost:4173
  *   node scripts/richness-screenshots.mjs before|after
+ *
+ * PRESETS=high, DEVICES=mobile and SPOTS=0,5 narrow the set.
  */
 import { mkdir } from 'node:fs/promises';
 import { createRequire } from 'node:module';
@@ -48,7 +50,9 @@ async function run(preset, device) {
   await page.goto(`${BASE}?shot=richness&spot=0&quality=${preset}&e2e`);
   await page.waitForFunction(() => document.documentElement.dataset.benchmark === 'running');
   const names = await page.evaluate(() => window.__md.spots);
+  const only = process.env.SPOTS ? process.env.SPOTS.split(',').map(Number) : null;
   for (let i = 0; i < names.length; i++) {
+    if (only && !only.includes(i)) continue;
     await page.evaluate((k) => window.__md.spot(k), i);
     await page.waitForTimeout(Number(process.env.SETTLE_MS ?? 8000));
     const file = `${OUT}${label}-${names[i]}-${preset}-${device}.png`;

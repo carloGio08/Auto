@@ -42,7 +42,8 @@ Richness update: no bland zones. Diagnosis in `docs/bland-zones-diagnosis.md`, s
 ### Fixed
 
 - Dark blurry blotches: forest-floor colour in glades without trees, rock colour on trail cuts
-  and fills, near-black embankments facing away from the sun.
+  and fills (now light disturbed ground: dry grass and soil), near-black embankments facing
+  away from the sun.
 
 ## [2.3.0] - 2026-11-14
 

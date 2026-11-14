@@ -269,6 +269,16 @@ export class BiomeModel {
       out[Mat.Grass] = Math.max(0.08 * veg, veg - taken - out[Mat.Earth]);
     }
 
+    // Trail cuts and fills (steep banks within ~12 m of the band): freshly worked ground,
+    // light dry grass and soil, so banks turned away from the sun never go dark.
+    const bank = smoothstep(0.5, 0.85, slope) * (1 - smoothstep(6, 14, p.roadEdge));
+    if (bank > 0 && snowAll < 0.5) {
+      out[Mat.DryGrass] += bank * 1.1;
+      out[Mat.Earth] += bank * 0.35;
+      out[Mat.Grass] *= 1 - bank * 0.6;
+      out[Mat.Forest] *= 1 - bank;
+      out[Mat.Undergrowth] *= 1 - bank;
+    }
     // Trampled fringe along the trails, and fresh cuts of the embankments.
     if (p.roadEdge < 3) {
       const fringe = 1 - smoothstep(0, 2.2, p.roadEdge);
