@@ -146,6 +146,11 @@ export function createGarage(ctx: GameContext, cb: GarageCallbacks): Screen {
       ),
       h('p', { class: 'muted' }, tk(car.descriptionKey)),
       h(
+        'p',
+        { class: 'muted small' },
+        `${car.physics.mass} kg · 4x4 · ${Math.round(car.physics.suspension.maxTravel * 100)} cm`,
+      ),
+      h(
         'div',
         { class: 'stats' },
         statBar(t('garage.stats.speed'), car.stats.speed),

@@ -22,7 +22,8 @@ export interface SurfaceDef {
 }
 
 export type DriveType = 'awd' | 'rwd' | 'fwd';
-export type BodyStyle = 'rally' | 'buggy' | 'truck' | 'coupe';
+/** Jeep body proportions: short (agile), standard, long (pickup bed). */
+export type JeepBody = 'short' | 'standard' | 'long';
 
 export interface CarPhysicsDef {
   /** Mass (kg). */
@@ -62,24 +63,36 @@ export interface CarPhysicsDef {
     drive: DriveType;
     brakeForce: number;
     reverseForce: number;
+    /** Engine braking with the throttle released (N per m/s, capped). */
+    engineBrake: number;
   };
   aero: { drag: number; downforce: number };
   steering: { maxAngle: number };
   nitro: { force: number; capacity: number; burnRate: number };
-  /** Multiplier applied to air control torques. */
-  airControl: number;
+  /** Extra force pressing the jeep onto the ground along its normal (fraction of weight). */
+  groundStick: number;
+  /** Strength of the on-ground anti-flip assist (rad/s² per rad of excess roll). */
+  antiFlip: number;
 }
 
+/** Visual configuration of a jeep: few flat colours and accessories. */
 export interface CarLookDef {
-  body: BodyStyle;
+  body: JeepBody;
+  /** Paint options (first = default). */
   colors: string[];
+  /** Bumpers, flares, rollbar. */
   accent: string;
-  spoiler: boolean;
   roofRack: boolean;
-  /** Visual wheel width (m). */
+  spareWheel: boolean;
+  /** Jerrycans and a backpack on the rack. */
+  cargo: boolean;
+  lightBar: boolean;
+  snorkel: boolean;
+  /** Visual tyre width (m). */
   wheelWidth: number;
 }
 
+/** A drivable jeep (registered in src/data/cars). */
 export interface CarDef {
   id: string;
   nameKey: string;

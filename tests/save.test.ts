@@ -3,10 +3,13 @@ import {
   CURRENT_SCHEMA,
   MemoryStorage,
   SAVE_KEY,
+  STARTER_CAR,
   SaveManager,
   defaultSave,
+  defaultStats,
   migrate,
 } from '../src/core/save';
+import { cars } from '../src/data/cars';
 
 describe('save system', () => {
   it('starts from defaults when storage is empty', () => {
@@ -18,11 +21,11 @@ describe('save system', () => {
     const storage = new MemoryStorage();
     const a = new SaveManager(storage);
     a.data.coins = 1234;
-    a.data.ownedCars.push('hopper');
+    a.data.ownedCars.push('scout');
     a.flush();
     const b = new SaveManager(storage);
     expect(b.data.coins).toBe(1234);
-    expect(b.data.ownedCars).toContain('hopper');
+    expect(b.data.ownedCars).toContain('scout');
   });
 
   it('migrates a v1 prototype save to the current schema', () => {
@@ -36,9 +39,9 @@ describe('save system', () => {
     const data = migrate(v1);
     expect(data.schemaVersion).toBe(CURRENT_SCHEMA);
     expect(data.coins).toBe(500);
-    expect(data.selectedCar).toBe('sidewinder');
-    expect(data.ownedCars).toEqual(expect.arrayContaining(['ridge', 'sidewinder']));
-    expect(data.records['pine_ridge:timeAttack'].bestTime).toBe(81.5); // dropped by the v4 migration
+    expect(data.selectedCar).toBe('scout');
+    expect(data.ownedCars).toEqual(expect.arrayContaining([STARTER_CAR, 'scout']));
+    expect(data.records).toEqual({}); // time records are dropped by the v4 migration
     expect(data.settings.masterVolume).toBe(0.3);
     expect(data.stats.runsFinished).toBe(0);
     expect(data.daily.date).toBe('');
@@ -61,6 +64,62 @@ describe('save system', () => {
     expect(data.settings.quality).toBe('auto');
   });
 
+  it('v3 → v4 keeps coins, unlocks, upgrades and settings, drops times and medals', () => {
+    const v3 = {
+      schemaVersion: 3,
+      coins: 4321,
+      selectedCar: 'avalanche',
+      ownedCars: ['ridge', 'hopper', 'sidewinder', 'avalanche'],
+      carColors: { ridge: '#ff0000' },
+      upgrades: {
+        ridge: { engine: 2, grip: 1 },
+        hopper: { engine: 1, nitro: 3 },
+        sidewinder: { engine: 3 },
+      },
+      records: {
+        'pine_ridge:timeAttack': { bestTime: 75.2, bestScore: 900, medal: 'gold', runs: 4 },
+      },
+      achievements: ['first_drop', 'gold_rush'],
+      stats: { ...defaultStats(), runsFinished: 12, goldMedals: 3, totalCoins: 800 },
+      settings: { ...defaultSave().settings, language: 'it', masterVolume: 0.4 },
+      lastMountain: 'pine_ridge',
+      lastTime: 'dusk',
+      lastWeather: 'clear',
+      daily: { date: '2026-11-01', bestScore: 1200, medal: 'silver' },
+      seenTutorial: true,
+    };
+    const data = migrate(v3);
+    expect(data.schemaVersion).toBe(4);
+    expect(data.coins).toBe(4321);
+    expect(data.selectedCar).toBe('crawler');
+    expect(new Set(data.ownedCars)).toEqual(new Set(['trailblazer', 'scout', 'crawler']));
+    expect(data.upgrades.trailblazer).toEqual({ engine: 2, grip: 1 });
+    expect(data.upgrades.scout).toEqual({ engine: 3, nitro: 3 });
+    expect(data.achievements).toEqual(['first_drop', 'gold_rush']);
+    expect(data.stats.runsFinished).toBe(12);
+    expect(data.stats.totalCoins).toBe(800);
+    expect(data.stats.goldMedals).toBe(0);
+    expect(data.settings.language).toBe('it');
+    expect(data.settings.masterVolume).toBe(0.4);
+    expect(data.records).toEqual({});
+    expect(data.daily).toEqual({ date: '', bestScore: 0, medal: 'none' });
+    expect(data.carColors).toEqual({});
+    expect(data.lastMountain).toBe('alpine');
+    expect(data.seenTutorial).toBe(true);
+    for (const id of data.ownedCars) expect(cars.some((c) => c.id === id)).toBe(true);
+  });
+
+  it('purges the legacy replay ghosts when loading an old save', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(SAVE_KEY, JSON.stringify({ schemaVersion: 3, coins: 5 }));
+    storage.setItem('mountain-drop:ghost:__index', JSON.stringify(['pine_ridge']));
+    storage.setItem('mountain-drop:ghost:pine_ridge', 'xyz');
+    const m = new SaveManager(storage);
+    expect(m.data.coins).toBe(5);
+    expect(storage.getItem('mountain-drop:ghost:pine_ridge')).toBeNull();
+    expect(storage.getItem('mountain-drop:ghost:__index')).toBeNull();
+  });
+
   it('recovers from corrupted or hostile data', () => {
     const storage = new MemoryStorage();
     storage.setItem(SAVE_KEY, '{not json');
@@ -72,21 +131,8 @@ describe('save system', () => {
       selectedCar: 'nope',
     });
     expect(bad.coins).toBe(0);
-    expect(bad.ownedCars).toEqual(['ridge']);
-    expect(bad.selectedCar).toBe('ridge');
+    expect(bad.ownedCars).toEqual([STARTER_CAR]);
+    expect(bad.selectedCar).toBe(STARTER_CAR);
     expect(migrate({ schemaVersion: 999 }).schemaVersion).toBe(CURRENT_SCHEMA);
-  });
-
-  it('keeps only the latest daily-challenge ghost', () => {
-    const storage = new MemoryStorage();
-    const m = new SaveManager(storage);
-    m.saveGhost('pine_ridge', 'a');
-    m.saveGhost('daily_2026-11-12', 'b');
-    m.saveGhost('daily_2026-11-13', 'c');
-    expect(m.loadGhost('pine_ridge')).toBe('a');
-    expect(m.loadGhost('daily_2026-11-12')).toBeNull();
-    expect(m.loadGhost('daily_2026-11-13')).toBe('c');
-    m.reset();
-    expect(m.loadGhost('pine_ridge')).toBeNull();
   });
 });

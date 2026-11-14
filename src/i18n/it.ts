@@ -3,7 +3,7 @@ import type { Dictionary } from './en';
 /** Italian strings. Must contain every key of `en` (enforced by the type). */
 export const it: Dictionary = {
   'app.title': 'Mountain Drop',
-  'app.tagline': 'Dalla vetta al lago. Veloce, di traverso, in volo.',
+  'app.tagline': 'Dalla vetta innevata alla valle. Una montagna enorme, nessun cronometro.',
 
   'common.back': 'Indietro',
   'common.ok': 'OK',
@@ -63,7 +63,7 @@ export const it: Dictionary = {
     'Tira il freno a mano per un attimo per buttare dentro l’auto nel tornante, poi torna sul gas.',
   'loading.tip.2': 'Derapate lunghe, tempo in aria e passaggi al limite ricaricano il nitro.',
   'loading.tip.3':
-    'In aria, gas e freno inclinano l’auto: allineala al pendio per un atterraggio perfetto.',
+    'Niente controllo in aria: allineati prima del dosso e la jeep atterra sulle ruote.',
   'loading.tip.4': 'Le scorciatoie sono più veloci ma insidiose: occhio a rocce e fondo scivoloso.',
   'loading.tip.5':
     'Uno schianto azzera la combo. Incassa le combo guidando pulito per un paio di secondi.',
@@ -228,22 +228,24 @@ export const it: Dictionary = {
   'weather.fog': 'Nebbia',
   'weather.snow': 'Neve',
 
-  'car.ridge.name': 'Ridge Runner',
-  'car.ridge.desc':
-    'Auto da rally a trazione integrale. Stabile e indulgente: perfetta per iniziare.',
-  'car.sidewinder.name': 'Sidewinder',
-  'car.sidewinder.desc': 'Coupé a trazione posteriore con il retrotreno vivace. Nata per derapare.',
-  'car.hopper.name': 'Hopper',
-  'car.hopper.desc': 'Buggy leggerissimo con sospensioni a lunga escursione. Adora volare.',
-  'car.avalanche.name': 'Avalanche',
-  'car.avalanche.desc': 'Pickup pesante e potente. Brutale in rettilineo, testardo in curva.',
+  'car.trailblazer.name': 'Trailblazer',
+  'car.trailblazer.desc':
+    'Fuoristrada equilibrato, baricentro basso e lunga escursione. Indulgente e sicuro.',
+  'car.scout.name': 'Scout',
+  'car.scout.desc': 'Jeep da rally corta e leggera. Agile e pronta a derapare col freno a mano.',
+  'car.crawler.name': 'Crawler',
+  'car.crawler.desc':
+    'Pesante mezzo da trial con gomme enormi e sospensioni lunghissime. Niente lo scompone.',
+  'car.nomad.name': 'Nomad',
+  'car.nomad.desc':
+    'Jeep da raid a lungo raggio: la più veloce sui pendii aperti e stabile in velocità.',
 
   'upgrade.engine.name': 'Motore',
   'upgrade.engine.desc': '+8% di potenza per livello',
   'upgrade.grip.name': 'Pneumatici',
   'upgrade.grip.desc': '+4,5% di aderenza per livello',
   'upgrade.suspension.name': 'Sospensioni',
-  'upgrade.suspension.desc': 'Più escursione, smorzamento e controllo in aria',
+  'upgrade.suspension.desc': 'Più escursione, smorzamento e barre antirollio',
   'upgrade.nitro.name': 'Nitro',
   'upgrade.nitro.desc': 'Spinta più forte e più lunga',
 
@@ -285,7 +287,7 @@ export const it: Dictionary = {
   'ach.crystal_hunter.name': 'Cacciatore di cristalli',
   'ach.crystal_hunter.desc': 'Raccogli 10 cristalli.',
   'ach.gold_rush.name': 'Febbre dell’oro',
-  'ach.gold_rush.desc': 'Vinci una medaglia d’oro. Sblocca l’Avalanche.',
+  'ach.gold_rush.desc': 'Vinci una medaglia d’oro. Sblocca la Nomad.',
   'ach.marathon.name': 'Maratona',
   'ach.marathon.desc': 'Percorri 25 km in totale.',
   'ach.rich.name': 'Magnate della montagna',

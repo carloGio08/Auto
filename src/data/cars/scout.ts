@@ -1,0 +1,53 @@
+import type { CarDef } from '../types';
+
+/** Short-wheelbase rally jeep: light, quick, loose rear on the handbrake. */
+export const scout: CarDef = {
+  id: 'scout',
+  nameKey: 'car.scout.name',
+  descriptionKey: 'car.scout.desc',
+  price: 1800,
+  stats: { speed: 0.75, grip: 0.65, suspension: 0.6, weight: 0.45 },
+  physics: {
+    mass: 1480,
+    chassis: { length: 3.7, width: 1.9, height: 1.2 },
+    comOffsetY: -0.22,
+    wheelbase: 2.3,
+    trackWidth: 1.7,
+    wheelRadius: 0.42,
+    mountY: -0.04,
+    suspension: {
+      restLength: 0.56,
+      maxTravel: 0.38,
+      stiffness: 48000,
+      dampingBump: 3800,
+      dampingRebound: 7000,
+      antiRollFront: 20000,
+      antiRollRear: 13000,
+    },
+    tires: { grip: 1.22, rearBias: 0.91, corneringStiffness: 9 },
+    engine: {
+      power: 205000,
+      maxForce: 14000,
+      drive: 'awd',
+      brakeForce: 18500,
+      reverseForce: 6500,
+      engineBrake: 130,
+    },
+    aero: { drag: 3.2, downforce: 2.6 },
+    steering: { maxAngle: 0.64 },
+    nitro: { force: 8800, capacity: 1, burnRate: 0.3 },
+    groundStick: 0.3,
+    antiFlip: 5,
+  },
+  look: {
+    body: 'short',
+    colors: ['#e6b630', '#2f8f83', '#d9532c', '#f2f0ea', '#7a4fb0', '#2c3036'],
+    accent: '#24262a',
+    roofRack: false,
+    spareWheel: true,
+    cargo: false,
+    lightBar: true,
+    snorkel: false,
+    wheelWidth: 0.34,
+  },
+};

@@ -30,7 +30,8 @@ export const upgrades: UpgradeDef[] = [
       p.suspension.maxTravel *= 1 + 0.07 * level;
       p.suspension.dampingBump *= 1 + 0.06 * level;
       p.suspension.dampingRebound *= 1 + 0.06 * level;
-      p.airControl *= 1 + 0.06 * level;
+      p.suspension.antiRollFront *= 1 + 0.05 * level;
+      p.suspension.antiRollRear *= 1 + 0.05 * level;
     },
   },
   {

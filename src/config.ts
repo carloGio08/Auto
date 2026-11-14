@@ -13,15 +13,20 @@ export const config = {
     /** Angular velocity clamp (rad/s). */
     maxAngularSpeed: 16,
     /** Angular damping applied every step (per second). */
-    angularDamping: 0.6,
+    angularDamping: 0.8,
     /** Restitution / friction of chassis-vs-ground impacts. */
-    chassisRestitution: 0.12,
+    chassisRestitution: 0,
     chassisFriction: 0.55,
     /** Restitution of chassis-vs-prop collisions. */
-    propRestitution: 0.25,
+    propRestitution: 0.05,
     /** Water: extra linear drag per second when submerged, and buoyancy. */
     waterDrag: 2.6,
     waterBuoyancy: 0.9,
+    /** Ground stick: seconds to reach full strength after landing / to fade out in the air. */
+    stickRampIn: 0.35,
+    stickAirDecay: 0.3,
+    /** Roll (rad) relative to the ground beyond which the anti-flip assist pushes back. */
+    antiFlipRoll: 0.45,
   },
 
   driving: {
@@ -33,19 +38,21 @@ export const config = {
     /** Steering angle multiplier at/above steerFalloffSpeed. */
     minSteerFactor: 0.3,
     /** Slip angle (rad) where lateral grip peaks. */
-    slipPeak: 0.17,
+    slipPeak: 0.2,
     /** Lateral grip fraction when sliding beyond the peak. */
-    slideFactor: 0.78,
+    slideFactor: 0.84,
+    /** How fast lateral grip falls past the peak (per unit of normalised slip): low = tolerant. */
+    slideFalloff: 0.18,
     /** Low speed threshold under which lateral sliding is cancelled (m/s). */
     lowSpeedCancel: 3,
     /** Rear lateral grip multiplier while the handbrake is held. */
-    handbrakeGrip: 0.3,
+    handbrakeGrip: 0.42,
     /** Yaw acceleration from steering while the handbrake is held (rad/s²): the drift flick. */
-    handbrakeYaw: 2.6,
+    handbrakeYaw: 2.2,
     /** Yaw torque assist while drifting, makes drifts easier to hold (N·m per rad of slip). */
-    driftAssist: 2.4,
+    driftAssist: 2.0,
     /** Global grip multiplier – raise for more control, lower for more chaos. */
-    gripScale: 1.0,
+    gripScale: 1.05,
     /** Rolling resistance coefficient. */
     rollingResistance: 0.012,
     /** Reverse engages when braking below this speed (m/s). */

@@ -1,8 +1,8 @@
 import type { CarDef } from '../types';
-import { ridgeRunner } from './ridgeRunner';
-import { sidewinder } from './sidewinder';
-import { hopper } from './hopper';
-import { avalanche } from './avalanche';
+import { trailblazer } from './trailblazer';
+import { scout } from './scout';
+import { crawler } from './crawler';
+import { nomad } from './nomad';
 
-/** All cars, in garage order. To add a car: create a file next to these and list it here. */
-export const cars: CarDef[] = [ridgeRunner, sidewinder, hopper, avalanche];
+/** All jeeps, in garage order. To add one: create a file next to these and list it here. */
+export const cars: CarDef[] = [trailblazer, scout, crawler, nomad];

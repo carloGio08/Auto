@@ -1,7 +1,7 @@
 /** English strings. This file defines the set of valid keys: other languages must match it. */
 export const en = {
   'app.title': 'Mountain Drop',
-  'app.tagline': 'From the summit to the lake. Fast, sideways, airborne.',
+  'app.tagline': 'From the snowy summit to the valley. One huge mountain, no clock.',
 
   'common.back': 'Back',
   'common.ok': 'OK',
@@ -61,7 +61,7 @@ export const en = {
     'Hold the handbrake briefly to throw the car into a hairpin, then get back on the throttle.',
   'loading.tip.2': 'Long drifts, air time and near misses refill your nitro.',
   'loading.tip.3':
-    'In the air, throttle and brake pitch the car: line it up with the slope for a perfect landing.',
+    'No air control here: line up before the crest and the jeep lands on its wheels.',
   'loading.tip.4': 'Shortcuts are faster but rough: watch out for rocks and slippery ground.',
   'loading.tip.5':
     'Crashing ends your combo. Bank big combos by driving clean for a couple of seconds.',
@@ -226,21 +226,23 @@ export const en = {
   'weather.fog': 'Fog',
   'weather.snow': 'Snow',
 
-  'car.ridge.name': 'Ridge Runner',
-  'car.ridge.desc': 'All-wheel-drive rally car. Stable and forgiving: the perfect start.',
-  'car.sidewinder.name': 'Sidewinder',
-  'car.sidewinder.desc': 'Rear-wheel-drive coupé with a playful tail. Born to drift.',
-  'car.hopper.name': 'Hopper',
-  'car.hopper.desc': 'Feather-light buggy with long-travel suspension. Loves the air.',
-  'car.avalanche.name': 'Avalanche',
-  'car.avalanche.desc': 'Heavy, powerful pickup. Brutal in a straight line, stubborn in corners.',
+  'car.trailblazer.name': 'Trailblazer',
+  'car.trailblazer.desc':
+    'Balanced 4x4 with a low centre of mass and long travel. Forgiving and sure-footed.',
+  'car.scout.name': 'Scout',
+  'car.scout.desc': 'Short, light rally jeep. Quick to turn and happy to slide on the handbrake.',
+  'car.crawler.name': 'Crawler',
+  'car.crawler.desc':
+    'Heavy trial truck with huge tyres and the longest suspension. Nothing unsettles it.',
+  'car.nomad.name': 'Nomad',
+  'car.nomad.desc': 'Long-range raid jeep: the fastest on open slopes and stable at speed.',
 
   'upgrade.engine.name': 'Engine',
   'upgrade.engine.desc': '+8% power per level',
   'upgrade.grip.name': 'Tyres',
   'upgrade.grip.desc': '+4.5% grip per level',
   'upgrade.suspension.name': 'Suspension',
-  'upgrade.suspension.desc': 'More travel, damping and air control',
+  'upgrade.suspension.desc': 'More travel, damping and anti-roll',
   'upgrade.nitro.name': 'Nitro',
   'upgrade.nitro.desc': 'Stronger and longer boost',
 
@@ -281,7 +283,7 @@ export const en = {
   'ach.crystal_hunter.name': 'Crystal Hunter',
   'ach.crystal_hunter.desc': 'Collect 10 crystals.',
   'ach.gold_rush.name': 'Gold Rush',
-  'ach.gold_rush.desc': 'Win a gold medal. Unlocks the Avalanche.',
+  'ach.gold_rush.desc': 'Win a gold medal. Unlocks the Nomad.',
   'ach.marathon.name': 'Marathon',
   'ach.marathon.desc': 'Drive 25 km in total.',
   'ach.rich.name': 'Mountain Tycoon',

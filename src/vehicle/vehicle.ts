@@ -82,6 +82,7 @@ export class Vehicle {
       vis.pivot.rotation.y = w.front ? -steer : 0;
       vis.spinner.rotation.x = w.prevSpin + (w.spin - w.prevSpin) * alpha;
     }
+    this.model.syncLinks();
     // Blob shadow on the ground below the car.
     const gy = ground.groundHeight(pos.x, pos.z, pos.y + 1);
     const height = pos.y - gy;
@@ -92,7 +93,7 @@ export class Vehicle {
       1 - 2 * (quat.y * quat.y + quat.x * quat.x),
     );
     const mat = shadow.material as { opacity: number };
-    mat.opacity = Math.max(0, 0.75 - height * 0.12);
+    mat.opacity = Math.max(0, 0.32 - height * 0.05);
     this.model.setBraking(braking);
     this.model.setNitro(ph.nitroActive, time);
   }

@@ -2,13 +2,22 @@ import type { AchievementStats, TimeOfDayId, UpgradeId, WeatherId } from '../dat
 import { defaultSettings, type Settings } from './settings';
 
 export const SAVE_KEY = 'mountain-drop:save';
-export const GHOST_PREFIX = 'mountain-drop:ghost:';
-export const CURRENT_SCHEMA = 3;
+/** Storage prefix of the replay ghosts used up to schema v3 (purged on load). */
+const LEGACY_GHOST_PREFIX = 'mountain-drop:ghost:';
+export const CURRENT_SCHEMA = 4;
+export const STARTER_CAR = 'trailblazer';
+
+/** v3 car ids → v4 jeeps. */
+const LEGACY_CARS: Record<string, string> = {
+  ridge: 'trailblazer',
+  sidewinder: 'scout',
+  hopper: 'scout',
+  avalanche: 'crawler',
+};
 
 export type MedalId = 'none' | 'bronze' | 'silver' | 'gold';
 
 export interface TrackRecord {
-  bestTime: number | null;
   bestScore: number;
   medal: MedalId;
   runs: number;
@@ -53,8 +62,8 @@ export function defaultSave(): SaveData {
   return {
     schemaVersion: CURRENT_SCHEMA,
     coins: 0,
-    selectedCar: 'ridge',
-    ownedCars: ['ridge'],
+    selectedCar: STARTER_CAR,
+    ownedCars: [STARTER_CAR],
     carColors: {},
     upgrades: {},
     records: {},
@@ -79,7 +88,7 @@ export const migrations: Record<number, (old: AnySave) => AnySave> = {
   // v1 (prototype): { version: 1, coins, car, best: { [mountainId]: seconds }, volume }
   1: (old) => {
     const best = (old.best as Record<string, number> | undefined) ?? {};
-    const records: Record<string, TrackRecord> = {};
+    const records: Record<string, object> = {};
     for (const [track, time] of Object.entries(best)) {
       records[`${track}:timeAttack`] = {
         bestTime: typeof time === 'number' ? time : null,
@@ -111,6 +120,35 @@ export const migrations: Record<number, (old: AnySave) => AnySave> = {
     daily: { date: '', bestScore: 0, medal: 'none' },
     seenTutorial: false,
   }),
+  // v3 → v4 (free-roam jeep update): keeps coins, unlocks, upgrades, achievements, stats and
+  // settings; maps the old cars onto the new jeeps; drops time records, medals and the daily
+  // result (the scoring changed), and the paint choices of cars that no longer exist.
+  3: (old) => {
+    const map = (id: unknown): string =>
+      typeof id === 'string' ? (LEGACY_CARS[id] ?? id) : STARTER_CAR;
+    const owned = Array.isArray(old.ownedCars) ? old.ownedCars.map(map) : [STARTER_CAR];
+    const upgrades: Record<string, Record<string, number>> = {};
+    const oldUpgrades = (old.upgrades as Record<string, Record<string, number>>) ?? {};
+    for (const [car, levels] of Object.entries(oldUpgrades)) {
+      const target = (upgrades[map(car)] ??= {});
+      for (const [u, l] of Object.entries(levels ?? {}))
+        if (typeof l === 'number') target[u] = Math.max(target[u] ?? 0, l);
+    }
+    const stats = { ...defaultStats(), ...((old.stats as object) ?? {}) };
+    stats.goldMedals = 0;
+    return {
+      ...old,
+      schemaVersion: 4,
+      selectedCar: map(old.selectedCar),
+      ownedCars: Array.from(new Set([STARTER_CAR, ...owned])),
+      upgrades,
+      carColors: {},
+      records: {},
+      stats,
+      daily: { date: '', bestScore: 0, medal: 'none' },
+      lastMountain: 'alpine',
+    };
+  },
 };
 
 /** Applies migrations in order and fills any missing field with defaults. */
@@ -139,7 +177,7 @@ export function migrate(raw: AnySave): SaveData {
     daily: { ...def.daily, ...((data.daily as object) ?? {}) },
   };
   if (!Array.isArray(merged.ownedCars) || merged.ownedCars.length === 0)
-    merged.ownedCars = ['ridge'];
+    merged.ownedCars = [STARTER_CAR];
   if (!merged.ownedCars.includes(merged.selectedCar)) merged.selectedCar = merged.ownedCars[0];
   if (typeof merged.coins !== 'number' || !Number.isFinite(merged.coins) || merged.coins < 0)
     merged.coins = 0;
@@ -191,7 +229,9 @@ export class SaveManager {
     const raw = this.storage.getItem(SAVE_KEY);
     if (!raw) return defaultSave();
     try {
-      return migrate(JSON.parse(raw) as AnySave);
+      const data = JSON.parse(raw) as AnySave;
+      if (typeof data.schemaVersion === 'number' && data.schemaVersion < 4) this.purgeGhosts();
+      return migrate(data);
     } catch (err) {
       console.warn('Corrupted save, starting fresh', err);
       return defaultSave();
@@ -217,53 +257,27 @@ export class SaveManager {
   reset(): void {
     this.data = defaultSave();
     this.flush();
-    for (const key of this.ghostKeys()) this.storage.removeItem(key);
+    this.purgeGhosts();
   }
 
   record(mountainId: string, modeId: string): TrackRecord {
     const key = `${mountainId}:${modeId}`;
-    return (this.data.records[key] ??= { bestTime: null, bestScore: 0, medal: 'none', runs: 0 });
+    return (this.data.records[key] ??= { bestScore: 0, medal: 'none', runs: 0 });
   }
 
   upgradeLevel(carId: string, upgrade: UpgradeId): number {
     return this.data.upgrades[carId]?.[upgrade] ?? 0;
   }
 
-  saveGhost(mountainId: string, encoded: string): void {
+  /** Removes the replay ghosts stored by schema v3 and earlier. */
+  private purgeGhosts(): void {
+    let ids: string[] = [];
     try {
-      this.storage.setItem(GHOST_PREFIX + mountainId, encoded);
-      const index = this.ghostIndex;
-      // Daily challenge ghosts expire: keep only the current day's one.
-      if (mountainId.startsWith('daily_')) {
-        for (const id of [...index]) {
-          if (id.startsWith('daily_') && id !== mountainId) {
-            this.storage.removeItem(GHOST_PREFIX + id);
-            index.delete(id);
-          }
-        }
-      }
-      index.add(mountainId);
-      this.storage.setItem(GHOST_PREFIX + '__index', JSON.stringify([...index]));
-    } catch (err) {
-      console.warn('Could not store ghost', err);
-    }
-  }
-
-  loadGhost(mountainId: string): string | null {
-    return this.storage.getItem(GHOST_PREFIX + mountainId);
-  }
-
-  private get ghostIndex(): Set<string> {
-    try {
-      return new Set(
-        JSON.parse(this.storage.getItem(GHOST_PREFIX + '__index') ?? '[]') as string[],
-      );
+      ids = JSON.parse(this.storage.getItem(LEGACY_GHOST_PREFIX + '__index') ?? '[]') as string[];
     } catch {
-      return new Set();
+      /* ignore */
     }
-  }
-
-  private ghostKeys(): string[] {
-    return [...this.ghostIndex].map((id) => GHOST_PREFIX + id).concat(GHOST_PREFIX + '__index');
+    for (const id of ids) this.storage.removeItem(LEGACY_GHOST_PREFIX + id);
+    this.storage.removeItem(LEGACY_GHOST_PREFIX + '__index');
   }
 }

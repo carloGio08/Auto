@@ -1,0 +1,53 @@
+import type { CarDef } from '../types';
+
+/** Base 4x4: low centre of mass, stiff long-travel suspension, forgiving. The starter jeep. */
+export const trailblazer: CarDef = {
+  id: 'trailblazer',
+  nameKey: 'car.trailblazer.name',
+  descriptionKey: 'car.trailblazer.desc',
+  price: 0,
+  stats: { speed: 0.6, grip: 0.8, suspension: 0.75, weight: 0.65 },
+  physics: {
+    mass: 1650,
+    chassis: { length: 4.1, width: 1.95, height: 1.25 },
+    comOffsetY: -0.25,
+    wheelbase: 2.55,
+    trackWidth: 1.72,
+    wheelRadius: 0.44,
+    mountY: -0.02,
+    suspension: {
+      restLength: 0.62,
+      maxTravel: 0.42,
+      stiffness: 52000,
+      dampingBump: 4200,
+      dampingRebound: 7800,
+      antiRollFront: 22000,
+      antiRollRear: 18000,
+    },
+    tires: { grip: 1.28, rearBias: 0.97, corneringStiffness: 8 },
+    engine: {
+      power: 185000,
+      maxForce: 15000,
+      drive: 'awd',
+      brakeForce: 20000,
+      reverseForce: 7000,
+      engineBrake: 160,
+    },
+    aero: { drag: 3.6, downforce: 3.2 },
+    steering: { maxAngle: 0.58 },
+    nitro: { force: 8500, capacity: 1, burnRate: 0.28 },
+    groundStick: 0.35,
+    antiFlip: 6,
+  },
+  look: {
+    body: 'standard',
+    colors: ['#d8763a', '#5f7f4e', '#3f6fa8', '#e8e2d0', '#c43d32', '#3b3f45'],
+    accent: '#2a2c30',
+    roofRack: true,
+    spareWheel: true,
+    cargo: true,
+    lightBar: false,
+    snorkel: false,
+    wheelWidth: 0.36,
+  },
+};

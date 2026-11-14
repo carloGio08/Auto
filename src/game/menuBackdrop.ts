@@ -61,8 +61,9 @@ export class MenuBackdrop {
     const def = this.ctx.registries.cars.get(save.selectedCar);
     const car = new CarModel(def, save.carColors[def.id] ?? def.look.colors[0]);
     car.setRestPose();
-    const bodyLift =
-      -(def.physics.mountY - def.physics.suspension.restLength) + def.physics.wheelRadius - 0.1;
+    const ph = def.physics;
+    const compression = (ph.mass * 15) / 4 / ph.suspension.stiffness;
+    const bodyLift = ph.wheelRadius - (ph.mountY - ph.suspension.restLength + compression) - 0.02;
     car.root.position.set(this.carPos.x, this.carPos.y + bodyLift, this.carPos.z);
     car.root.rotation.y = Math.atan2(this.downhill.x, this.downhill.z) + 0.5;
     car.enableHeadlights(true);

@@ -43,7 +43,7 @@ export class AudioDirector {
     this.vehicle = vehicle;
     if (!vehicle.engine) {
       const character =
-        vehicle.def.look.body === 'truck' ? 0.9 : vehicle.def.look.body === 'buggy' ? 0.2 : 0.5;
+        vehicle.def.look.body === 'long' ? 0.9 : vehicle.def.look.body === 'short' ? 0.3 : 0.6;
       vehicle.engine = this.audio.createEngine(character);
     }
     this.audio.music?.play('drive');

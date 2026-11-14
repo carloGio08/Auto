@@ -1,0 +1,53 @@
+import type { CarDef } from '../types';
+
+/** Heavy trial truck with a pickup bed: huge tyres, longest travel, unshakeable. */
+export const crawler: CarDef = {
+  id: 'crawler',
+  nameKey: 'car.crawler.name',
+  descriptionKey: 'car.crawler.desc',
+  price: 3200,
+  stats: { speed: 0.5, grip: 0.9, suspension: 0.95, weight: 0.9 },
+  physics: {
+    mass: 1800,
+    chassis: { length: 4.6, width: 2.05, height: 1.35 },
+    comOffsetY: -0.3,
+    wheelbase: 2.9,
+    trackWidth: 1.82,
+    wheelRadius: 0.5,
+    mountY: 0.02,
+    suspension: {
+      restLength: 0.74,
+      maxTravel: 0.52,
+      stiffness: 56000,
+      dampingBump: 4800,
+      dampingRebound: 9000,
+      antiRollFront: 26000,
+      antiRollRear: 24000,
+    },
+    tires: { grip: 1.34, rearBias: 0.98, corneringStiffness: 7.5 },
+    engine: {
+      power: 195000,
+      maxForce: 18000,
+      drive: 'awd',
+      brakeForce: 23000,
+      reverseForce: 8500,
+      engineBrake: 220,
+    },
+    aero: { drag: 4.2, downforce: 3.6 },
+    steering: { maxAngle: 0.55 },
+    nitro: { force: 9000, capacity: 1.1, burnRate: 0.26 },
+    groundStick: 0.4,
+    antiFlip: 8,
+  },
+  look: {
+    body: 'long',
+    colors: ['#4c6b3c', '#b7472f', '#d9d3c1', '#2f4f6e', '#e09a2a', '#33363b'],
+    accent: '#1f2124',
+    roofRack: true,
+    spareWheel: false,
+    cargo: true,
+    lightBar: true,
+    snorkel: true,
+    wheelWidth: 0.42,
+  },
+};

@@ -110,6 +110,9 @@ export class VehiclePhysics {
   odometer = 0;
   /** Seed for per-surface micro bumps. */
   private bumpPhase = 0;
+  /** 0..1 ground-stick strength: full on the ground, decays in the air, ramps in on landing. */
+  private stick = 1;
+  private readonly groundNormal = new Vector3(0, 1, 0);
 
   constructor(def: CarPhysicsDef) {
     this.def = def;
@@ -190,6 +193,7 @@ export class VehiclePhysics {
     this.airTime = 0;
     this.upsideDownTime = 0;
     this.invalid = false;
+    this.stick = 1;
     for (const w of this.wheels) {
       w.compression = w.prevCompression = 0;
       w.spinRate = 0;
@@ -349,7 +353,9 @@ export class VehiclePhysics {
       const stopStart = sus.maxTravel * 0.85;
       if (w.compression > stopStart) {
         const e = w.compression - stopStart;
-        fz += sus.stiffness * 6 * e + sus.stiffness * 40 * e * e;
+        // Capped: deep penetration is resolved by the rigid hard stop below, never by a
+        // spring kick that would launch the jeep.
+        fz += Math.min(sus.stiffness * 6 * e + sus.stiffness * 40 * e * e, staticLoad * 5);
       }
       fz = Math.max(0, fz);
       w.load = fz;
@@ -362,7 +368,7 @@ export class VehiclePhysics {
         const vn = vP.dot(n);
         if (vn < 0) {
           const k = this.effectiveInvMass(r, n);
-          const j = (-vn * (1 + 0.05)) / k / 2;
+          const j = -vn / k / 2;
           this.applyImpulse(r, impulse.copy(n).multiplyScalar(j));
           this.lastImpact = Math.max(this.lastImpact, -vn);
         }
@@ -394,7 +400,7 @@ export class VehiclePhysics {
       const alpha = Math.atan2(vLat, Math.max(Math.abs(vLong), drv.lowSpeedCancel + 1));
       w.slipAngle = alpha;
       const a = Math.abs(alpha) / slipPeak;
-      const curve = a < 1 ? a * (2 - a) : Math.max(drv.slideFactor, 1 - (a - 1) * 0.3);
+      const curve = a < 1 ? a * (2 - a) : Math.max(drv.slideFactor, 1 - (a - 1) * drv.slideFalloff);
       let fy = -Math.sign(alpha) * maxF * curve;
 
       // Longitudinal: drive, brakes, rolling resistance.
@@ -417,7 +423,9 @@ export class VehiclePhysics {
       if (input.handbrake && !w.front) brakeF += def.engine.brakeForce * 0.4;
       if (input.hold) brakeF += def.engine.brakeForce;
       brakeF += (drv.rollingResistance + surf.rollingDrag) * fz;
-      if (input.throttle === 0 && input.brake === 0) brakeF += 60; // engine braking
+      // Engine braking off the throttle: holds the jeep on long descents.
+      if (input.throttle === 0 && input.brake === 0 && w.driven)
+        brakeF += (def.engine.engineBrake * Math.min(Math.abs(vLong), 25)) / 4;
       fx -= Math.sign(vLong) * Math.min(brakeF, stopForce);
 
       // Friction circle.
@@ -435,7 +443,10 @@ export class VehiclePhysics {
         Math.min(1, Math.max(lateralSlide, sliding * 2, locked)) * clamp((speed - 2) / 6, 0, 1);
 
       // Apply tyre forces closer to the centre of mass to limit body roll from tyre forces.
-      const rApply = tmpB.copy(r).addScaledVector(up, -r.dot(up) * 0.55);
+      // A low centre of mass (comOffsetY < 0) shortens the lever further.
+      const rApply = tmpB
+        .copy(r)
+        .addScaledVector(up, -r.dot(up) * clamp(0.55 - def.comOffsetY, 0, 0.9));
       const tf = tmpC.copy(wf).multiplyScalar(fx).addScaledVector(ws, fy);
       force.add(tf);
       torque.add(tmpA.crossVectors(rApply, tf));
@@ -447,9 +458,22 @@ export class VehiclePhysics {
     }
 
     const grounded = this.wheelsInContact > 0;
-    // --- Aerodynamics, nitro -----------------------------------------------------------------
+    // --- Ground stick, aerodynamics, nitro ---------------------------------------------------
+    if (this.wheelsInContact >= 2) {
+      tmpA.set(0, 0, 0);
+      for (const w of this.wheels) if (w.contact) tmpA.add(w.normal);
+      this.groundNormal.copy(tmpA.normalize());
+      // Ramp in after landing (no slam), so jumps land soft and then stay glued.
+      this.stick = Math.min(1, this.stick + dt / config.physics.stickRampIn);
+      const press =
+        def.groundStick * this.mass * config.physics.gravity * this.stick +
+        def.aero.downforce * speed * speed;
+      force.addScaledVector(this.groundNormal, -press);
+    } else if (!grounded) {
+      // Over crests the stick lingers briefly; on long jumps it fades out completely.
+      this.stick = Math.max(0, this.stick - dt / config.physics.stickAirDecay);
+    }
     force.addScaledVector(this.velocity, -def.aero.drag * speed);
-    if (this.wheelsInContact >= 2) force.addScaledVector(up, -def.aero.downforce * speed * speed);
     if (this.nitroActive) force.addScaledVector(fwd, def.nitro.force);
 
     // --- Engine telemetry (for sound): automatic gearbox ------------------------------------
@@ -492,6 +516,18 @@ export class VehiclePhysics {
         if (Math.abs(yawRate) > 2.2)
           angAccAir.addScaledVector(up, -Math.sign(yawRate) * (Math.abs(yawRate) - 2.2) * 6);
       }
+    }
+    // --- Anti-flip assist (ground only): gently rights excessive roll/pitch -----------------
+    if (grounded || this.chassisContact) {
+      const n = grounded ? this.groundNormal : worldUp;
+      const roll = Math.asin(clamp(left.dot(n), -1, 1));
+      const pitch = Math.asin(clamp(fwd.dot(n), -1, 1));
+      const lim = config.physics.antiFlipRoll;
+      const rollEx = Math.sign(roll) * Math.max(0, Math.abs(roll) - lim);
+      const pitchEx = Math.sign(pitch) * Math.max(0, Math.abs(pitch) - lim * 1.4);
+      const k = def.antiFlip;
+      angAccAir.addScaledVector(fwd, -k * rollEx * 4 - this.angularVelocity.dot(fwd) * k * 0.15);
+      angAccAir.addScaledVector(left, k * pitchEx * 2);
     }
     // In the air there is no player control at all: rotation comes only from physics.
     if (!grounded && !this.chassisContact) this.airTime += dt;

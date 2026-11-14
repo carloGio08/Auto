@@ -88,8 +88,9 @@ export class GarageScene {
     this.car?.dispose();
     this.car = new CarModel(def, color);
     this.car.setRestPose();
-    const lift =
-      -(def.physics.mountY - def.physics.suspension.restLength) + def.physics.wheelRadius - 0.1;
+    const ph = def.physics;
+    const compression = (ph.mass * 15) / 4 / ph.suspension.stiffness;
+    const lift = ph.wheelRadius - (ph.mountY - ph.suspension.restLength + compression) - 0.02;
     this.car.root.position.set(0, lift, 0);
     this.car.shadow.visible = false;
     this.scene.add(this.car.root);
