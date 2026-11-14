@@ -21,7 +21,8 @@ export const granite: MountainDef = {
   descriptionKey: 'mountain.granite.desc',
   summit: { ...shape.summit, height: 1740 },
   terracing: { amount: 0.7, scale: 1200 },
-  erosion: { ...shape.erosion, talus: 0.72 },
+  erosion: { ...shape.erosion, talus: 0.74 },
+  relief: { ...shape.relief, spurs: { amplitude: 8, scale: 260 } },
   noise: { ...shape.noise, detail: { amplitude: 0.4, rugged: 2, scale: 50 } },
   landforms: [
     ...shape.landforms,

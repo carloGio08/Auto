@@ -153,7 +153,10 @@ export class Terrain {
     // Cut and fill blend into the natural slope with rounded crest and toe.
     const t = smoothstep(hw + SHOULDER, hw + SHOULDER + sh, d1);
     const blend = (1 - t) * q.carve;
-    return n + (hr - n) * blend;
+    const out = n + (hr - n) * blend;
+    // Under bridge decks the ground is only ever cut down, never above the deck.
+    if (q.carve < 1) return Math.min(out, out + (hr - 0.8 - out) * (1 - t) * (1 - q.carve));
+    return out;
   }
 
   /** Depth (m) of ruts, puddles and the grassy hump at a lateral position on the trail. */

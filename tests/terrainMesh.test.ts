@@ -134,17 +134,23 @@ describe('terrain LOD', () => {
       if (v / 3 >= a.count / 3 - n * 8) break;
       expect(Math.abs(y - course.terrain.height(x, z))).toBeLessThan(0.02);
     }
-    // The right border of A and the left border of B: same set of world points.
-    const border = (r: typeof a, x0: number, onX: number): string[] => {
-      const out = new Set<string>();
+    // The right border of A and the left border of B: the same world points (z, height).
+    const border = (r: typeof a, x0: number, onX: number): [number, number][] => {
+      const out = new Map<string, [number, number]>();
       for (let v = 0; v < r.count - n * 24; v++) {
         const x = x0 + r.position[v * 3] * r.unit;
         if (Math.abs(x - onX) > 1e-3) continue;
         const z = st.z + r.position[v * 3 + 2] * r.unit;
-        out.add(`${z.toFixed(2)}:${(r.position[v * 3 + 1] * r.unit + r.originY).toFixed(1)}`);
+        out.set(z.toFixed(2), [z, r.position[v * 3 + 1] * r.unit + r.originY]);
       }
-      return [...out].sort();
+      return [...out.values()].sort((p, q) => p[0] - q[0]);
     };
-    expect(border(a, st.x, st.x + n * cell)).toEqual(border(b, st.x + n * cell, st.x + n * cell));
+    const ea = border(a, st.x, st.x + n * cell);
+    const eb = border(b, st.x + n * cell, st.x + n * cell);
+    expect(ea.length).toBe(eb.length);
+    ea.forEach(([z, y], i) => {
+      expect(Math.abs(z - eb[i][0])).toBeLessThan(0.01);
+      expect(Math.abs(y - eb[i][1])).toBeLessThan(0.02);
+    });
   });
 });

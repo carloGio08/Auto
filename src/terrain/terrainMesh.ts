@@ -190,7 +190,14 @@ export class TerrainMesh {
   }
 
   private request(nd: QuadNode): Omit<PatchRequest, 'gen'> {
-    return { key: nd.key, x0: nd.x0, z0: nd.z0, size: nd.size, n: this.n };
+    return {
+      key: nd.key,
+      x0: nd.x0,
+      z0: nd.z0,
+      size: nd.size,
+      n: this.n,
+      refine: nd.level === this.maxDepth,
+    };
   }
 
   /**

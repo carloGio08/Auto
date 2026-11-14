@@ -15,6 +15,8 @@ export interface HeightfieldData {
   moisture: Uint8Array;
   /** 0..255 rockiness from the landforms (crests, cirque walls, steep faces). */
   rough: Uint8Array;
+  /** 0..255 declared flat zones (meadows, terraces, valley floors, basins). */
+  flat: Uint8Array;
 }
 
 /**
@@ -104,6 +106,11 @@ export class Heightfield {
   /** Wetness 0..1 (valley floors, streams). */
   moisture(x: number, z: number): number {
     return this.bilinear8(this.data.moisture, x, z);
+  }
+
+  /** Declared flat zone 0..1 (meadows, terraces, valley floors). */
+  flat(x: number, z: number): number {
+    return this.bilinear8(this.data.flat, x, z);
   }
 
   /** Rockiness 0..1 (crests, cirque walls, faces). */

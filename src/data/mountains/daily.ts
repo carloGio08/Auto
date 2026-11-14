@@ -38,6 +38,7 @@ export function createDailyMountain(dateKey: string): MountainDef {
     descriptionKey: 'mountain.daily.desc',
     summit: { ...shape.summit, height },
     terracing: { amount: rng.range(0.4, 0.7), scale: rng.range(1100, 1700) },
+    erosion: { ...shape.erosion, talus: 0.74 },
     noise: {
       ...shape.noise,
       warp: rng.range(160, 240),

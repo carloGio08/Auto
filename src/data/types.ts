@@ -228,7 +228,16 @@ export interface TrailDef {
 
 /** Kinds of landform the mountain is assembled from (see src/terrain/landforms.ts). */
 export type LandformKind =
-  'ridge' | 'valley' | 'cirque' | 'plateau' | 'meadow' | 'saddle' | 'slope' | 'hills' | 'basin';
+  | 'ridge'
+  | 'valley'
+  | 'cirque'
+  | 'plateau'
+  | 'meadow'
+  | 'saddle'
+  | 'slope'
+  | 'hills'
+  | 'moraine'
+  | 'basin';
 
 /**
  * One landform: a shape blended into the massif with smooth min/max (never a hard seam).
@@ -265,6 +274,27 @@ export interface ErosionDef {
   hydraulicStrength: number;
   /** Smoothing of valley floors where flow accumulates (0..1). */
   floorSmoothing: number;
+  /** Particle (droplet) hydraulic erosion: droplets per km² and strength (0 disables). */
+  droplets: number;
+  dropletStrength: number;
+}
+
+/**
+ * Relief at the intermediate scale (tens to hundreds of metres), shaped by zone: nothing
+ * on declared flats (meadows, terraces, valley floors), rolling hummocks on gentle ground,
+ * spurs, smoothed terrace steps and gullies on slopes, more on rugged ground.
+ */
+export interface ReliefDef {
+  /** Domain warp of the relief noises (m, scale m). */
+  warp: { amplitude: number; scale: number };
+  /** Ridged multifractal spurs and small crests on slopes. */
+  spurs: { amplitude: number; scale: number };
+  /** Smoothed steps on slopes, in patches: step height (m), blend (0..1), patch scale (m). */
+  terraces: { step: number; amount: number; scale: number };
+  /** Rolling bumps and hollows on gentle ground (also the natural ramps for jumps). */
+  hummocks: { amplitude: number; scale: number };
+  /** Gullies carved where flow gathers on slopes: depth (m) at full flow. */
+  gullies: { depth: number };
 }
 
 export interface RiverDef {
@@ -320,6 +350,7 @@ export interface MountainDef {
   };
   /** Landforms blended into the massif, in order. */
   landforms: LandformDef[];
+  relief: ReliefDef;
   erosion: ErosionDef;
   /** Natural boundary: ridges rising towards the map edge (m). */
   rimHeight: number;

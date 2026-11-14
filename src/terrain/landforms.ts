@@ -127,6 +127,8 @@ export class LandformField {
   private readonly hit: PathHit = { d: 0, s: 0, side: 0 };
   /** Rockiness of the last evaluated point (0..1). */
   rough = 0;
+  /** How much the last point lies in a declared flat zone (meadow, terrace, floor) (0..1). */
+  flat = 0;
 
   constructor(private readonly def: MountainDef) {
     this.warpNoise = new Simplex2(def.seed ^ 0x5bd1e995);
@@ -188,14 +190,17 @@ export class LandformField {
   private evalUpTo(count: number, x: number, z: number): number {
     let h = this.massif(x, z);
     let rough = 0;
+    let flat = 0;
     for (let k = 0; k < count; k++) {
       const f = this.forms[k];
       if (x < f.minX || x > f.maxX || z < f.minZ || z > f.maxZ) continue;
       const r = this.apply(f, x, z, h);
       h = r;
       rough = Math.max(rough * (1 - this.flatten), this.roughHere);
+      flat = Math.max(flat * (1 - this.roughHere), this.flatten);
     }
     this.rough = rough;
+    this.flat = flat;
     return h;
   }
 
@@ -270,6 +275,25 @@ export class LandformField {
           target += 0.12 * f.def.radius * 0.1 * this.shapeNoise.fbm(x / 170 + f.phase, z / 170, 2);
         this.flatten = w;
         return h + (target - h) * w * strength;
+      }
+      case 'moraine': {
+        // Crescent of mounds left by a glacier: an arc of radius R around `at`, on the side
+        // facing away from the summit (the glacier flowed down from the cirque).
+        const [cx, cz] = f.def.at!;
+        const dx = x - cx;
+        const dz = z - cz;
+        const d = Math.hypot(dx, dz);
+        const w = R * 0.22;
+        if (Math.abs(d - R) > w * 1.5) return h;
+        const sx = cx - this.def.summit.x;
+        const sz = cz - this.def.summit.z;
+        const sl = Math.hypot(sx, sz) || 1;
+        const front = smoothstep(-0.35, 0.35, (dx * sx + dz * sz) / (sl * (d || 1)));
+        const u = (d - R) / w;
+        const lump = 0.75 + 0.25 * this.shapeNoise.noise(x / 40 + f.phase, z / 40);
+        const mound = Math.max(0, 1 - u * u) ** 2 * front * lump;
+        this.roughHere = f.rugged * mound;
+        return smax(h, h + f.def.height * mound, 2);
       }
       case 'hills': {
         const d = Math.hypot(x - f.def.at![0], z - f.def.at![1]);

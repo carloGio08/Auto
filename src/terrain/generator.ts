@@ -2,6 +2,7 @@ import type { MountainDef } from '../data/types';
 import { blur, flowGraph, limitSlope, smoothFloors, streamPower, thermalErosion } from './erosion';
 import type { HeightfieldData } from './heightfield';
 import { LandformField } from './landforms';
+import { applyRelief, dropletErosion } from './relief';
 
 /** Heightmap spacing (m): coarse enough for phones, detail is added analytically. */
 export const HEIGHTMAP_SPACING = 12;
@@ -22,8 +23,9 @@ export interface TerrainData {
 
 /**
  * Generation pipeline (pure, deterministic from the definition):
- * landforms → heightmap → thermal erosion → flow routing → stream incision → floor smoothing
- * → thermal erosion → moisture and stream tracing. Runs in a Web Worker in the browser
+ * landforms → heightmap → intermediate relief → talus + thermal erosion → flow routing →
+ * stream incision → gullies → droplet erosion → floor smoothing → talus + thermal erosion →
+ * moisture and stream tracing. Runs in a Web Worker in the browser
  * (see terrainWorker.ts) and synchronously in tests.
  */
 export function generateTerrain(def: MountainDef, progress?: (p: number) => void): TerrainData {
@@ -35,23 +37,33 @@ export function generateTerrain(def: MountainDef, progress?: (p: number) => void
   const N = n * n;
   const h = new Float32Array(N);
   const roughF = new Float32Array(N);
+  const flatF = new Float32Array(N);
   // The designed shape only has features of 60 m and more: evaluate it on a grid twice as
   // coarse and upsample (Catmull-Rom), four times fewer landform evaluations.
   const field = new LandformField(def);
   const nc = (n - 1) / 2 + 1;
   const hc = new Float32Array(nc * nc);
   const rc = new Float32Array(nc * nc);
+  const fc = new Float32Array(nc * nc);
   for (let j = 0; j < nc; j++) {
     const z = min + j * spacing * 2;
     for (let i = 0; i < nc; i++) {
       hc[j * nc + i] = field.height(min + i * spacing * 2, z);
       rc[j * nc + i] = field.rough;
+      fc[j * nc + i] = field.flat;
     }
     if (progress && (j & 15) === 0) progress((j / nc) * 0.5);
   }
   upsample2(hc, nc, h, n);
   upsample2(rc, nc, roughF, n);
-  for (let c = 0; c < N; c++) roughF[c] = Math.max(0, Math.min(1, roughF[c]));
+  upsample2(fc, nc, flatF, n);
+  for (let c = 0; c < N; c++) {
+    roughF[c] = Math.max(0, Math.min(1, roughF[c]));
+    flatF[c] = Math.max(0, Math.min(1, flatF[c]));
+  }
+  // Intermediate relief by zone: spurs, terraces, hummocks (nothing on declared flats).
+  applyRelief(h, flatF, roughF, n, spacing, min, def.relief, def.seed);
+  progress?.(0.55);
   const er = def.erosion;
   // Talus: walls are cut back to the repose angle; rugged cells (crags, cirque walls) may
   // stay steeper.
@@ -73,6 +85,12 @@ export function generateTerrain(def: MountainDef, progress?: (p: number) => void
     streamPower(h, n, spacing, graph, er.hydraulicStrength);
     if (p < er.hydraulicPasses - 1) graph = flowGraph(h, n, outlet);
   }
+  // Gullies where flow gathers on slopes (not on the declared flats).
+  carveGullies(h, n, spacing, graph.area, flatF, def.relief.gullies.depth);
+  progress?.(0.72);
+  // Particle erosion: rills, small fans; then the debris settles (thermal below).
+  const km2 = ((n - 1) * spacing) ** 2 / 1e6;
+  dropletErosion(h, n, spacing, Math.round(er.droplets * km2), er.dropletStrength, def.seed);
   progress?.(0.8);
   smoothFloors(h, n, graph.area, er.floorSmoothing, 40, 4000);
   smoothFloors(h, n, graph.area, er.floorSmoothing, 40, 4000);
@@ -90,13 +108,15 @@ export function generateTerrain(def: MountainDef, progress?: (p: number) => void
   blur(roughF, n, 1);
   const moisture = new Uint8Array(N);
   const rough = new Uint8Array(N);
+  const flat = new Uint8Array(N);
   for (let c = 0; c < N; c++) {
     moisture[c] = Math.round(Math.min(1, moistF[c] * 1.6) * 255);
     rough[c] = Math.round(Math.min(1, roughF[c]) * 255);
+    flat[c] = Math.round(flatF[c] * 255);
   }
   const streams = traceStreams(def, n, spacing, min, graph.receiver, outlet, h);
   progress?.(1);
-  return { field: { n, spacing, min, height: h, moisture, rough }, streams };
+  return { field: { n, spacing, min, height: h, moisture, rough, flat }, streams };
 }
 
 /** Follows the flow graph from each spring down to the lake, then smooths the polyline. */
@@ -197,4 +217,34 @@ function upsample2(src: Float32Array, nc: number, dst: Float32Array, n: number):
       dst[fj * n + i] = cr(v(j - 1), v(j), v(j + 1), v(j + 2));
     }
   }
+}
+
+/** Cuts gullies along the flow lines of slopes: depth grows with the upstream area. */
+function carveGullies(
+  h: Float32Array,
+  n: number,
+  spacing: number,
+  area: Float32Array,
+  flat: Float32Array,
+  depth: number,
+): void {
+  if (depth <= 0) return;
+  const lo = Math.log(6);
+  const hi = Math.log(400);
+  const src = h.slice();
+  for (let j = 1; j < n - 1; j++)
+    for (let i = 1; i < n - 1; i++) {
+      const c = j * n + i;
+      const a = Math.log(area[c]);
+      if (a <= lo) continue;
+      const slope = Math.hypot(src[c + 1] - src[c - 1], src[c + n] - src[c - n]) / (2 * spacing);
+      const onSlope = Math.min(1, Math.max(0, (slope - 0.12) / 0.25));
+      const k = Math.min(1, (a - lo) / (hi - lo)) * onSlope * (1 - flat[c]);
+      // Neighbours get half of it: a V with a rounded floor.
+      h[c] -= depth * k;
+      h[c - 1] -= depth * k * 0.25;
+      h[c + 1] -= depth * k * 0.25;
+      h[c - n] -= depth * k * 0.25;
+      h[c + n] -= depth * k * 0.25;
+    }
 }

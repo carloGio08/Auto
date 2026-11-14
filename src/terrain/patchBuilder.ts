@@ -12,6 +12,8 @@ export interface PatchRequest {
   z0: number;
   size: number;
   n: number;
+  /** Refine steep edges (finest level only: far away the shape of faces does not show). */
+  refine?: boolean;
 }
 
 /**
@@ -261,7 +263,7 @@ export class PatchBuild {
     // Edges steeper than ~25° get a midpoint on the surface. The decision belongs to the
     // edge, so both cells (and both patches) sharing it agree: no cracks. Count the extra
     // triangles to size the arrays.
-    const lim = STEEP_SPLIT * cell;
+    const lim = this.req.refine === false ? Infinity : STEEP_SPLIT * cell;
     const splitH = new Uint8Array(n * (n + 1)); // (i, j)–(i + 1, j), index j * n + i
     const splitV = new Uint8Array((n + 1) * n); // (i, j)–(i, j + 1), index j * (n + 1) + i
     for (let j = 0; j <= n; j++)

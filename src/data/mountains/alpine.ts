@@ -156,6 +156,9 @@ export const alpine: MountainDef = {
     // Cirques under the summit.
     { kind: 'cirque', at: [450, -1550], radius: 320, height: 50, wall: 0.75, rugged: 1 },
     { kind: 'cirque', at: [-520, -1520], radius: 300, height: 45, wall: 0.75, rugged: 1 },
+    // Moraine crescents below the cirques.
+    { kind: 'moraine', at: [470, -1500], radius: 300, height: 9, rugged: 0.4 },
+    { kind: 'moraine', at: [-540, -1470], radius: 280, height: 8, rugged: 0.4 },
     // Drainage valleys from the summit down to the lake.
     {
       kind: 'valley',
@@ -203,12 +206,21 @@ export const alpine: MountainDef = {
     // Lake basin.
     { kind: 'basin', at: [-200, 2950], radius: 520, height: 8, wall: 0.1, blend: 120 },
   ],
+  relief: {
+    warp: { amplitude: 70, scale: 420 },
+    spurs: { amplitude: 10, scale: 300 },
+    terraces: { step: 6, amount: 0.35, scale: 700 },
+    hummocks: { amplitude: 3.5, scale: 95 },
+    gullies: { depth: 2.2 },
+  },
   erosion: {
     thermalIterations: 12,
     talus: 0.76,
     hydraulicPasses: 2,
     hydraulicStrength: 0.2,
     floorSmoothing: 0.6,
+    droplets: 350,
+    dropletStrength: 0.45,
   },
   rimHeight: 950,
   lake: { x: -200, z: 2950, radius: 480, level: 36 },
