@@ -221,33 +221,65 @@ Course: start, base zone, waymarks, cairns, signs, fences, coins and crystals. P
   a broad ridged noise. The grid is aligned to the quadtree edge (cells inside are skipped)
   and the real terrain is kept past it, so the two meet without seams. Coloured by altitude
   and slope from the palette, flat shaded from derivatives.
+- **Render pipeline and clarity** (`core/renderer.ts`): one forward pass, no post-processing
+  render targets, no blur, bloom or depth of field. MSAA on every preset, pixel ratio
+  `min(devicePixelRatio, 2)` (1.5 on Low), the canvas drawn at its CSS size; dynamic
+  resolution never below 0.85. ACES tone mapping followed by a small **colour grade**
+  (`config.graphics.grade`: saturation × 1.12, contrast × 1.07 around mid grey) patched into
+  three.js' tone-mapping chunk as constants.
+- **Lighting** (`world/lighting.ts`, `data/environment.ts`): a warm key sun (day: 40° high,
+  from behind-left of the default view) and a cool sky-blue hemisphere fill. One shadow map
+  (2048 High, 1024 Medium and Low, PCF soft, radius 2, tuned bias and normal bias) whose
+  frustum (±75 m) is centred 40 m ahead of the jeep along the view, snapped to texels. The
+  jeep, trees, boulders, bushes and flowers cast shadows; a soft **contact shadow** blob lies
+  under the jeep on the terrain normal and fades in the air (`effects/contactShadow.ts`).
 - **Atmosphere** (`world/atmosphere.ts`): three.js' fog chunks are replaced for every
-  material: **aerial perspective** (exponential with distance: lighter, less saturated, shifted
-  to the sky's horizon colour — overlapping ridges read as tone steps, no hard band) and
-  **height fog** integrated analytically along the view ray (dense in the valleys, thin on the
-  crests), then a **visibility fog** `1 − exp(−(d/V)²)` into the sky's horizon colour
-  (`config.world.fogVisibility` V = 520 m on a clear day, ÷ √fogDensity in fog and snow), so
-  the view ends at ~900 m. Fog colours are passed in sRGB because three.js applies fog after
-  the output colour conversion. One set of shared uniforms updated per frame, driven by time
-  and weather themes. The sky dome melts into the same horizon colour up to a fog band above
-  the horizon (wider when the fog is thicker), so fogged terrain never cuts out against blue
-  sky; clouds float on three layers (high, at the summit, low banks below it) with a 5×
-  longer visibility. The palette's saturation is scaled by `config.world.vividness` (1.4)
-  when it is resolved.
-- **Vegetation** (`data/vegetation.ts`, `world/propPlacement.ts`, `world/props.ts`):
-  species are data (beech, spruce, pine, larch, dwarf pine: realistic heights per age,
-  crown width, altitude band, wetness, colours). Trees sit on a **global Poisson disk** (a
-  jittered grid whose candidates yield to higher-priority ones closer than the minimum
-  distance: seamless across cells) accepted by an ecological density — the forest density
-  of the biome model raised to a clumping exponent and drawn by a low-frequency cluster
-  noise — so woods are compact, glades open, edges soft, and trees shrink and thin out at
-  the tree line; never on trails, in water or on slopes over ~40°. Three LODs cross-fade with
-  an ordered dither on the instance distance: full models per cell near the jeep
-  (destructible; colliders only within `colliderRadius`), simplified crowns in the middle
-  range and merged canopy masses far away in a few global instanced meshes. Undergrowth
-  (bushes, grass tufts, ferns, flowers, logs, stumps) by habitat, near the jeep only, growing
-  in with distance. Limits per preset (8000 / 5000 / 3000 trees) shrink the middle range.
-  Rocks: outcrops, talus, stream beds, a few trailside stones (~120 per km²).
+  material: **aerial perspective** (exponential with distance: lighter, a little less
+  saturated, shifted to the sky's horizon colour — overlapping ridges read as tone steps) and
+  **height fog** integrated analytically along the view ray (dense in the valleys), then a
+  **visibility fog** that starts at `config.world.fogStart` (300 m: the foreground and middle
+  distance stay crisp) and fades into the horizon colour, `1 − exp(−((d − start)/V)²)` with
+  V = 650 m (÷ √fogDensity in fog and snow), **thinning above the camera** so high snowy
+  peaks rise over the valley fog. Fog colours are passed in sRGB because three.js applies fog
+  after the output colour conversion. The sky dome (clean gradient, deeper blue at the
+  zenith, sun halo) melts into the same horizon colour in a band just above the horizon;
+  low-poly clouds with lit and shaded sides drift on three layers with a longer visibility.
+  The palette's saturation is scaled by `config.world.vividness` when it is resolved.
+- **Road and ruts** (`terrain/terrain.ts`, `terrain/splat.ts`, `world/rutDecals.ts`): trails
+  are 6.5–8 m wide (branches 5–7 m), part of the terrain mesh, warm orange-brown with a soft
+  yellow-green fringe into the meadow. **Baked wheel ruts** run along every trail at
+  ±0.85 m from the spline: a 3–5 cm depression in `height()` (no effect on handling) and
+  darker vertex colours with a lighter crown; near the camera, crisp ribbons lie exactly on
+  them (dark walls, lighter floor, soft edges), rebuilt in place every 24 m. The jeep's own
+  tyre tracks are darker and sharper and fade over time.
+- **Vegetation: ecology → props pipeline** (`data/vegetation.ts`, `world/propPlacement.ts`,
+  `world/coverPlacement.ts`, `world/props.ts`, `world/groundCover.ts`):
+  1. `ecologyAt()` samples one point: forest density (biome forest weight → clumping
+     exponent → low-frequency cluster noise → thinning at the tree line → a few lone meadow
+     trees), height, altitude band, wetness, slope, distance to the trail band, habitats
+     (forest floor, flowers, grass), water;
+  2. **trees** per 320 m cell in the worker: a global Poisson disk (seamless across cells)
+     accepted by the density; species by altitude and wetness; age young near trails and
+     forest edges, old deep inside; heights 6–25 m, crown width coherent with the height;
+     never on trails, in water or on slopes over ~40°;
+  3. **pines** (`propGeometry.pineTree`): short visible trunk, 4–6 faceted cone tiers (young
+     4, medium 5, tall 6; spruce slimmer), two greens baked from the sun direction (sunlit
+     faces lighter, undersides darker; instances lean 2–5° but are never turned around Y);
+     LOD: full model within `treeNear`, three-tier model in the middle range, merged canopy
+     masses far away, cross-faded with an ordered dither; near trees are instanced only
+     within the near range (refilled as the camera moves), the middle layer gets what they
+     leave of the tree cap (8000 / 3500 / 1500); breakable trees and colliders only near the
+     jeep as before;
+  4. **ground cover** per 64 m tile in the worker: grass tufts on vegetated ground, flower
+     patches (yellow, red, purple, white; tight clusters, one or two colours each), bushes,
+     ferns, logs, stumps, pebbles on and beside the trail; drawn with one instanced mesh per
+     kind whose capacity is the preset cap (grass 30000 / 12000 / 4000, flowers
+     8000 / 3000 / 800); each instance has its own reach (30–100 % of the cover distance), so
+     the density is strongest near the camera and fades smoothly with no pop-in; light wind
+     sway in the vertex shader (off on Low); the shadow depth material shares the shrink;
+  5. **rocks**: outcrops, talus, stream beds, trailside stones, and **boulder groups** (2–4
+     big flat-faceted warm-grey boulders with lighter tops) beside the trails and on slopes,
+     never reaching the driving line.
 - **Structures** (`world/structures.ts`): waymarks, cairns, signs, fences, footbridges, the
   village houses and the summit overlook, each a single instanced draw call.
 
@@ -317,7 +349,9 @@ friction, a toppling torque about the base, sleeping, a 60-piece pool and a shri
 
 ## 8. Camera (`vehicle/cameraRig.ts`)
 
-- **chase / wide**: high and far; the heading follows the direction of travel through a
+- **chase / wide**: higher and slightly farther (chase 7 m up, 10.5 m back, look point
+  8 m ahead near the ground: ~20° down, the jeep in the lower middle, the road ahead over
+  half of the frame; base FOV 65°); the heading follows the direction of travel through a
   damped spring (lags in drifts, never swings in reverse); vertical motion is low-passed; the
   look-at point moves ahead with speed and towards the ground ahead, so the view tilts down
   and rises on steep descents.
@@ -373,17 +407,25 @@ writes only `textContent`/`transform`.
 
 ## 12. Performance strategy
 
-- Terrain: generation, patch building, far field and props placement in a Web Worker,
-  compact attributes, pooled buffers, a triangle budget per preset (far rings shrink first,
-  faces keep their size), steep-edge refinement only on the finest level, frustum culling
-  per patch; the far field is one draw call.
-- Vegetation: detailed trees only near the jeep (per cell), the middle and far layers in a
-  few global instanced meshes rebuilt only when cells change, dithered LOD cross-fades,
-  undergrowth near the jeep only, tree limits per preset, colliders only near the jeep.
-- Atmosphere: computed in the existing fog step of every shader (a few ALU, no extra pass).
-- Shadows: one directional light following the jeep, map size from the preset.
-- Dynamic resolution within `[0.55, 1]` × capped pixel ratio; "Auto" quality steps the preset
-  down/up and records the level it settles on in Settings for the next start.
+- Terrain: generation, patch building, far field, props and ground-cover placement in a Web
+  Worker, compact attributes, pooled buffers, a triangle budget per preset (far rings shrink
+  first, faces keep their size), steep-edge refinement only on the finest level, frustum
+  culling per patch; the far field is one draw call.
+- Vegetation: detailed trees instanced only within the near range, the middle and far layers
+  in a few global instanced meshes, ground cover in one capped instanced mesh per kind,
+  refilled in place as the camera moves (no allocations per frame), dithered or shrinking
+  LOD transitions, colliders only near the jeep. Caps per preset (High / Medium / Low): trees
+  8000 / 3500 / 1500, grass 30000 / 12000 / 4000, flowers 8000 / 3000 / 800.
+- Measured in the benchmark view (draw calls and triangles per frame, shadow pass
+  included): High ≈ 220 calls / 2.5 M triangles, Medium ≈ 150–200 / 0.85–1.3 M, Low ≈ 190 /
+  0.6 M (`node scripts/benchmark-screenshots.mjs` prints the table).
+- Atmosphere and colour grade: computed in the existing fog and tone-mapping steps (a few
+  ALU, no extra pass).
+- Weak devices ("Auto" quality): dynamic resolution down to 0.85 only, then **staged
+  degradation** inside the preset — wind off, grass and flowers at 60 %, shorter far forest
+  and fewer trees, half the shadow map (never below 1024) — and only then the next preset
+  (which also has a smaller far field); recovery in reverse. The level it settles on is
+  remembered for the next start. Medium is the mobile default.
 - Pooled particles and debris; everything a state creates is disposed in `exit()`.
 
 ## 13. Persistence
@@ -394,6 +436,11 @@ the jeeps and drops time records, medals and the replay ghosts. v5 adds bought p
 accessories and, while `config.dev.testCoins` is set, tops profiles up to the test coins.
 
 ## 14. Testing
+
+Visual benchmark: `?shot=benchmark[&quality=high|medium|low]` parks the jeep at a fixed
+point of the main trail (seed, day, clear, default chase camera, physics frozen);
+`scripts/benchmark-screenshots.mjs` renders it at 1280×720 and 844×390 in every preset into
+`docs/screenshots/benchmark-*.png` and fails on console errors or shader warnings.
 
 Vitest:
 
@@ -414,6 +461,11 @@ Vitest:
   palette, smooth between neighbouring vertices and faces, AO within its range;
 - tyre tracks: capacity, ring order, pooling, dirty ranges, ground-following vertices, none in
   water;
+- road and ruts: width 6–8 m, ruts along the whole trail with a 3–5 cm depression peaking on
+  the rut lines, crisp ribbons following the spline (lateral error < 8 cm) on the ground;
+- ground cover: trail kept clear (pebbles only), boulders never on the driving line, dense
+  grass and clustered flowers in four colours, caps per preset (and at 60 % when degraded),
+  prop colours only from palette tones (pines: blends of their two species tones);
 - drivability: a bot drives every mountain's whole main trail with the real jeep physics, no
   stuck, no roll-over, never lost;
 - jeep handling and feel, tree tiers and debris, objectives, save migrations (v5, test coins,

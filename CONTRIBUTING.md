@@ -126,30 +126,60 @@ they cannot change the drivable terrain. Put the nearer, smaller ranges first-to
 order you like: the aerial perspective gives each distance its own tone. Far-field spacing
 and extent per quality preset are `farSpacing` / `farExtent` in `src/config.ts`.
 
-## How to add a tree species
+## How to add a tree species or a pine variant
 
-Add a `TreeSpeciesDef` to `treeSpecies` in `src/data/vegetation.ts`:
+Trees are stylised low-poly pines built by `PropGeometry.pineTree(form, dark, light, sun,
+snowy, seed, spruce)` in `src/world/propGeometry.ts`: a short trunk and `4 + form` faceted
+cone tiers (`form` 0 young, 1 medium, 2 tall; `spruce` adds a tier and slims them), two greens
+baked from the sun direction.
 
-- `shape`: one of the crown shapes built in `PropGeometry.species()` (`pine`, `spruce`,
-  `broadleaf`, `larch`, `dwarf`) — a new shape needs a case there and in `speciesLow()`;
-- `heights` per age in metres (young / medium / old: the ages are also the destructible
-  tiers of `data/trees.ts`), crown `width` as a fraction of the height;
-- `zone`: normalised altitude band (0 = valley line, 1 = tree line), `moisture` band and
-  relative `weight`; `foliage` palette ramp and tones; optional `snowCap` (m below the snow
-  line where the crown gets snow).
+- **A species**: add a `TreeSpeciesDef` to `treeSpecies` in `src/data/vegetation.ts` —
+  `shape` (`pine`, `spruce` or `larch`), `heights` per age in metres (6–25 m; the ages are
+  also the destructible tiers of `data/trees.ts`), crown `width` as a fraction of the height,
+  `zone` (normalised altitude band: 0 = valley line, 1 = tree line), `moisture` band,
+  relative `weight`, `foliage` palette ramp and its two tones `[shaded, sunlit]`, optional
+  `snowCap` (m below the snow line where the crown gets snow). Props builds 3 forms × plain /
+  snowy and a middle-distance model for it automatically.
+- **A pine variant** (another silhouette): add a parameter to `pineTree()` (tier count, tier
+  profile, trunk height) and a `TreeShape` that selects it in the `Props` constructor; keep
+  the unit size (1 m tall, crown 1 m wide, origin at the trunk base) and give `pineLow()` a
+  matching three-tier silhouette so the LOD cross-fade stays smooth.
 
-`tests/props.test.ts` checks heights, spacing and placement rules for every tree placed.
+`tests/props.test.ts` checks heights, crown ratios, spacing and placement rules for every tree
+placed; `tests/groundCover.test.ts` that crown colours stay between the two species tones.
 
 ## How to add an ecology rule
 
-The density of trees is computed per 8 m grid point in `placeCell()`
-(`src/world/propPlacement.ts`) from `BiomeModel.forestDensity()` (altitude, slope, wetness,
-clearings) and the knobs of `ecology` in `src/data/vegetation.ts`: `minTreeDistance`
-(Poisson disk), `clumping` (exponent: larger = more compact woods and wider glades),
-`clusterScale`, `treeLineDensity` / `treeLineHeight`, `maxSlope` and `trailClearance`. To add
-a rule, change the grid density `D[o]` (e.g. fewer trees on scree: multiply by
-`1 - weights[Mat.Scree]`) or a species weight in `speciesWeights()`. Undergrowth kinds and
-habitats are the `undergrowth` list in the same data file.
+`ecologyAt()` (`src/world/propPlacement.ts`) samples one point for trees (8 m grid per cell)
+and ground cover (8 m grid per tile): forest density from `BiomeModel` (altitude, slope,
+wetness, clearings) shaped by the knobs of `ecology` in `src/data/vegetation.ts` —
+`minTreeDistance` (Poisson disk), `clumping` (larger = more compact woods and wider glades),
+`clusterScale`, `treeLineDensity` / `treeLineHeight`, `loneTrees`, `maxSlope`,
+`trailClearance`. To add a rule, change `out[0]` there (e.g. fewer trees on scree: multiply by
+`1 - weights[Mat.Scree]`), a habitat (`out[6..8]`) or a species weight in `speciesWeights()`.
+
+## How to add a ground-cover type
+
+1. Add the kind to `UndergrowthKind` and an `UndergrowthDef` to `undergrowth` in
+   `src/data/vegetation.ts`: `size`, `habitat` (`forest`, `meadow`, `grass`, `edge`, `road`),
+   `density` per 100 m², cap group (`grass`, `flowers`, `cover` → the preset limits
+   `grassLimit`, `flowerLimit`, `coverLimit`), `wind`, `shadow`, `reach` (fraction of the
+   cover distance where it is still drawn).
+2. Build its unit-size geometry in `PropGeometry.undergrowth()` with palette tones only.
+3. If it needs a special rule (like flower patches or pebbles on the trail), add it in
+   `placeCover()` (`src/world/coverPlacement.ts`; pure, runs in the terrain worker).
+
+`GroundCover` creates one capped instanced mesh per kind; `tests/groundCover.test.ts` checks
+the trail stays clear, the caps per preset and the palette colours.
+
+## How to add a rock type
+
+Add the id to `ROCK_TYPES` and, if it is placed for a new reason, to `RockReason` /
+`REASONS` in `src/world/propPlacement.ts`; place it in the rocks section of `placeCell()`
+(never closer to the trail band than its size: see the boulder groups); build its geometry
+in `PropGeometry` (`boulder()` shows flat facets and a lighter top) and map it in the `Props`
+constructor (`rockGeo`). Rocks larger than 0.6 m get a collider. `tests/props.test.ts` keeps
+the rock density low; `tests/groundCover.test.ts` keeps boulders off the driving line.
 
 ## How to add a palette material or theme
 
@@ -164,6 +194,11 @@ dark → light (61 terrain colours and 9 for props).
   aspect, curvature, wetness...) and a tone bias in `BIAS` (`src/terrain/splat.ts`).
   `tests/palette.test.ts` checks that every material has a ramp and that colours change
   smoothly.
+- **The daytime look**: the default palette is tuned for day / clear (yellow-green meadows,
+  deep blue-green pines, warm orange road, grey-brown rocks); the light comes from the
+  `day` entry of `timesOfDay` (`src/data/environment.ts`: sun elevation, azimuth, colour and
+  intensity, hemisphere sky and ground colours, sky gradient) and the post-ACES grade from
+  `config.graphics.grade`.
 - **A time of day or weather mood**: add or edit an entry of `timeThemes` / `weatherThemes`
   (`tint`, `tintAmount`, `brightness`, `desaturate`). `resolvePalette()` applies the
   palette, then the time theme, then the weather theme, once when a world is built. A new time

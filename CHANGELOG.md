@@ -4,6 +4,46 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [2.3.0] - 2026-11-14
+
+Look update: a crisp, vibrant stylised picture close to the reference target (benchmark view
+`?shot=benchmark`).
+
+### Added
+
+- Contact shadow under the jeep; shadows on every preset (2048 High, 1024 Medium/Low),
+  frustum shifted ahead along the view.
+- Baked wheel ruts along every trail (3–5 cm, vertex colours, crisp ribbons near the camera)
+  and pebbles on the road.
+- Stylised low-poly pines (4–6 faceted tiers, short trunk, lean, two greens baked from the
+  sun), denser groves, lone meadow trees.
+- Ground cover per tile in the worker: grass tufts, clustered flower patches in four colours,
+  bushes, ferns, logs, stumps, pebbles; capped instanced meshes with per-instance reach;
+  wind sway (off on Low). Boulder groups beside the trails and on slopes.
+- Visual benchmark route `?shot=benchmark[&quality=..]` and
+  `scripts/benchmark-screenshots.mjs` (3 presets × 1280×720 / 844×390, stats table).
+- Staged degradation on weak devices before dropping a preset (wind, grass/flower density,
+  far forest, shadow map ≥ 1024).
+- Tests: ruts (depth, spline following), ground cover (trail clear, boulders off the driving
+  line, clustered flowers, caps per preset and degraded, palette-only colours), tree crown
+  ratios.
+
+### Changed
+
+- Clarity: MSAA on every preset, pixel ratio min(devicePixelRatio, 2) (1.5 on Low), dynamic
+  resolution never below 0.85.
+- Light: warm 40° sun from behind-left of the default view, cool sky fill, post-ACES grade
+  (saturation, contrast); default palette retuned (yellow-green meadows, deep blue-green
+  foliage, warm orange road).
+- Fog kept but starts at 300 m and thins above the camera (snowy peaks over valley fog);
+  clean blue sky, shaded clouds.
+- Far ranges: jagged crests, snow only on the upper peaks, blue-grey rock below.
+- Trails 6.5–8 m wide (branches 5–7 m); the road fades into the meadow through a yellow-green
+  fringe; live tyre tracks darker than the ruts.
+- Chase camera higher and slightly farther (pitch ~20°, FOV 65); wide camera retuned.
+- Tree limits 8000 / 3500 / 1500; near trees instanced only within range.
+- Undergrowth moved from the 320 m prop cells to 64 m cover tiles; dwarf pines dropped.
+
 ## [Unreleased]
 
 ### Changed

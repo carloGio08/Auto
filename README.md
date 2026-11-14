@@ -21,6 +21,22 @@ follows the repository name, e.g. `/mountain-drop/` if the repository is renamed
 | **Mobile (landscape, touch)**                  | **Mobile off-road**                                     |
 | ![Mobile](docs/screenshots/mobile-drive.png)   | ![Mobile off-road](docs/screenshots/mobile-offroad.png) |
 
+### Visual benchmark (`?shot=benchmark`, same seed, spot, time of day and camera)
+
+| Reference target (bottom half)                             | High preset, 1280×720                                          |
+| ---------------------------------------------------------- | -------------------------------------------------------------- |
+| ![Target](docs/reference/target.png)                       | ![High desktop](docs/screenshots/benchmark-high-desktop.png)   |
+| **Medium (mobile default), 1280×720**                      | **Low, 1280×720**                                              |
+| ![Medium](docs/screenshots/benchmark-medium-desktop.png)   | ![Low](docs/screenshots/benchmark-low-desktop.png)             |
+| **High, 844×390**                                          | **Medium, 844×390**                                            |
+| ![High mobile](docs/screenshots/benchmark-high-mobile.png) | ![Medium mobile](docs/screenshots/benchmark-medium-mobile.png) |
+
+What still differs from the reference: the far snowy ranges sit higher in the frame and
+partly in the valley fog (kept on purpose, so you cannot see too far); the sky shows less of
+its blue at the default pitch; flowers are smaller and fewer than the painted ones; the
+benchmark screenshots come from a headless software renderer, so frame rates were not
+measured on real phones.
+
 ### Before / after (landscape update, same seed, position and camera)
 
 | Before                                                               | After                                                              |
@@ -32,13 +48,19 @@ follows the repository name, e.g. `/mountain-drop/` if the repository is renamed
 
 ## Features
 
-- **Distant ranges and atmosphere**: a far-field ring of terrain to ~20 km built from the
-  same landforms plus distant ranges in the data; aerial perspective (ridges fade into the
-  sky's blue in tone steps) and height fog thick in the valleys, sun halo, clouds on three
-  layers — no painted backdrop, no fog band.
-- **Real forests**: tree species with realistic heights (6–25 m), Poisson-disk woods with
-  glades and soft edges by ecology, larches and dwarf pines at the tree line, undergrowth
-  near the jeep, canopy masses far away, dithered LOD transitions.
+- **Crisp, vibrant look**: MSAA, full pixel ratio (up to 2), no blur; a warm 40° sun with
+  clear cast shadows from the jeep, trees, boulders and flowers (plus a contact shadow under
+  the jeep), a cool sky fill, ACES with a touch more saturation and contrast.
+- **Distant ranges and atmosphere**: jagged snow-capped ranges with blue-grey rock in a
+  far-field ring of terrain to ~20 km built from the same landforms; aerial perspective,
+  valley fog that starts far away (the middle distance stays sharp) and thins on the high
+  peaks, a clean blue sky with shaded low-poly clouds.
+- **Pine forests and lush meadows**: stylised faceted pines (4–6 tiers, two greens) in dense
+  groves with clearings and lone trees, 6–25 m tall; grass tufts, clustered flower patches
+  (yellow, red, purple, white), bushes, ferns, pebbles and groups of big faceted boulders;
+  light wind; smooth LOD with no pop-in.
+- **A road that reads**: 6–8 m wide orange-brown trails with two long baked wheel ruts
+  following every bend, pebbles, and your own darker tyre tracks on top.
 
 - **A designed, organic mountain**: data-driven landforms (crests, valleys, cirques,
   terraces, high meadows, saddles, steep faces, foothills, lake basin) blended with smooth
@@ -111,6 +133,9 @@ fly-over and exposes `window.__md`), **F3** (FPS / draw-call overlay), **F4** in
 with `?debug` (map of slopes, trails, fords, landforms and the jeep).
 `node scripts/compare-screenshots.mjs <label>` captures fixed viewpoints (needs the preview
 server) for before/after comparisons.
+`?shot=benchmark[&quality=high|medium|low]` opens the fixed benchmark view;
+`node scripts/benchmark-screenshots.mjs` renders it in every preset at 1280×720 and 844×390
+into `docs/screenshots/` and prints draw calls, triangles and instance counts.
 
 ## Tuning
 
@@ -130,6 +155,8 @@ The most useful knobs for the driving feel:
 | jeep `suspension.dampingRebound`, `antiRoll*`          | Bounce and body roll.                                      |
 | jeep `aero.drag`, `engine.engineBrake`                 | Top speed on the flat and speed held on long descents.     |
 | `camera.chaseDistance` / `chaseHeight` / `descentLift` | Framing of the slope ahead.                                |
+| `world.fogStart` / `fogVisibility`                     | Where the fog starts and how far you can see.              |
+| `graphics.grade`, `world.vividness`                    | Saturation and contrast of the whole picture.              |
 
 ## Code structure
 

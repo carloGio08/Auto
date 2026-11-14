@@ -1,7 +1,7 @@
 {
   "name": "mountain-drop",
   "private": true,
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Low-poly off-road descent of a huge mountain in a 4x4 jeep, built with Three.js, Vite and TypeScript.",
   "type": "module",
   "license": "MIT",
