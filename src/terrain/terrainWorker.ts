@@ -19,6 +19,7 @@ export type WorkerResponse =
   | { type: 'progress'; id: number; progress: number }
   | { type: 'generated'; id: number; data: CourseData }
   | { type: 'error'; id: number; message: string }
+  | { type: 'patchError'; key: number; gen: number; message: string }
   | { type: 'patch'; key: number; gen: number; result: PatchArrays };
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
@@ -52,7 +53,14 @@ scope.onmessage = (e: MessageEvent<WorkerRequest>): void => {
       });
     }
   } catch (err) {
-    const id = 'id' in msg ? msg.id : -1;
-    scope.postMessage({ type: 'error', id, message: String(err) } as WorkerResponse);
+    if (msg.type === 'patch')
+      scope.postMessage({
+        type: 'patchError',
+        key: msg.req.key,
+        gen: msg.req.gen,
+        message: String(err),
+      } as WorkerResponse);
+    else if (msg.type === 'generate')
+      scope.postMessage({ type: 'error', id: msg.id, message: String(err) } as WorkerResponse);
   }
 };

@@ -37,11 +37,6 @@ export class Heightfield {
     this.inv = 1 / data.spacing;
   }
 
-  /** World extent covered (inclusive). */
-  get max(): number {
-    return this.min + (this.n - 1) * this.spacing;
-  }
-
   /** Smooth height (cubic B-spline). */
   sample(x: number, z: number): number {
     const n = this.n;

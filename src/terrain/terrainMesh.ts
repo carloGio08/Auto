@@ -352,11 +352,6 @@ export class TerrainMesh {
     return this.shown.size;
   }
 
-  /** Longest horizontal triangle edge (m) of the finest patches (tests). */
-  get maxLod0Edge(): number {
-    return this.finestCell * Math.SQRT2;
-  }
-
   dispose(): void {
     this.backend.cancelAll();
     for (const nd of this.nodes.values()) {

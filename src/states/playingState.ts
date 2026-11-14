@@ -1,3 +1,4 @@
+import { DebugMap } from '../ui/debugMap';
 import { createRoadPoint } from '../terrain/road';
 import type { GameContext, StateId } from '../core/context';
 import type { GameState } from '../core/stateMachine';
@@ -24,6 +25,13 @@ export class PlayingState implements GameState<StateId> {
 
   private readonly onVisibility = (): void => {
     if (document.hidden && !this.paused && this.session.phase !== 'finished') this.openPause();
+  };
+  /** Development map (F4 in dev builds or with ?debug). */
+  private debugMap: DebugMap | null = null;
+  private readonly onDebugKey = (e: KeyboardEvent): void => {
+    if (e.code !== 'F4' || !this.session) return;
+    this.debugMap ??= new DebugMap(this.session.course);
+    this.debugMap.toggle();
   };
   private readonly onResize = (): void =>
     this.session.camera.resize(this.ctx.renderer.width / this.ctx.renderer.height);
@@ -76,6 +84,8 @@ export class PlayingState implements GameState<StateId> {
     );
     document.addEventListener('visibilitychange', this.onVisibility);
     window.addEventListener('resize', this.onResize);
+    if (import.meta.env.DEV || new URLSearchParams(location.search).has('debug'))
+      window.addEventListener('keydown', this.onDebugKey);
     // Debug hook for automated tests (dev builds or ?e2e only).
     if (import.meta.env.DEV || new URLSearchParams(location.search).has('e2e')) {
       const s = this.session;
@@ -88,6 +98,15 @@ export class PlayingState implements GameState<StateId> {
           const p = s.course.road.pointAt(dist, createRoadPoint());
           s.teleport(p.x, p.z, Math.atan2(p.tx, p.tz));
           s.progressS = dist;
+        },
+        /**
+         * Drops the jeep off the trail: `lateral` metres to the side of main-trail position
+         * `dist`, facing along the trail, with the autopilot off.
+         */
+        offroad: (dist: number, lateral: number) => {
+          const p = s.course.road.pointAt(dist, createRoadPoint());
+          s.autopilot = null;
+          s.teleport(p.x + p.tz * lateral, p.z - p.tx * lateral, Math.atan2(p.tx, p.tz));
         },
         /** Launches the jeep at the nearest tree of a tier; returns its id or null. */
         aimAtTree: (tier: 'young' | 'medium' | 'old', speed = 14) => {
@@ -194,6 +213,14 @@ export class PlayingState implements GameState<StateId> {
     }
     s.update(this.paused ? 0 : dt, alpha);
     this.hud.update(dt);
+    if (this.debugMap?.visible) {
+      const ph = s.vehicle.physics;
+      const f = ph.quaternion;
+      // Heading of the nose (+Z rotated by the orientation) projected on the ground.
+      const fx = 2 * (f.x * f.z + f.w * f.y);
+      const fz = 1 - 2 * (f.x * f.x + f.y * f.y);
+      this.debugMap.update(ph.position.x, ph.position.z, Math.atan2(fx, fz));
+    }
     if (s.phase === 'finished' && !this.resultsShown && s.finishTimer > 2.2) {
       this.resultsShown = true;
       s.summary = finalizeRun(ctx, s);
@@ -234,6 +261,9 @@ export class PlayingState implements GameState<StateId> {
     document.removeEventListener('visibilitychange', this.onVisibility);
     window.removeEventListener('resize', this.onResize);
     window.removeEventListener('pointerdown', this.onSkipTap);
+    window.removeEventListener('keydown', this.onDebugKey);
+    this.debugMap?.dispose();
+    this.debugMap = null;
     this.offs.forEach((o) => o());
     ctx.input.remove('touch');
     ctx.input.remove('tilt');

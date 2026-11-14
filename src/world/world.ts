@@ -94,10 +94,10 @@ export class World {
     this.scene.fog = new Fog(this.fogColor, Math.min(120, far * 0.12), far);
   }
 
-  /** Incremental build around the start; iterate to completion. */
-  *build(): Generator<BuildStep> {
+  /** Incremental build around the start (or `focus`); iterate to completion. */
+  *build(focus?: { x: number; y: number; z: number }): Generator<BuildStep> {
     const course = this.course;
-    const st = course.start;
+    const st = focus ?? course.start;
     yield { stage: 'loading.terrain', progress: 0.3 };
     const pal = toPatchPalette(this.palette);
     const backend = this.terrainService
@@ -164,9 +164,9 @@ export class World {
   private async = true;
 
   /** Builds everything synchronously (menu background, tests). */
-  buildNow(): this {
+  buildNow(focus?: { x: number; y: number; z: number }): this {
     this.async = false;
-    for (const _ of this.build()) {
+    for (const _ of this.build(focus)) {
       /* drain */
     }
     this.async = true;

@@ -39,24 +39,50 @@ export class MenuBackdrop {
     this.world = new World({
       course,
       time: timesOfDay.sunset,
-      weather: { ...weathers.clear, fogDensity: 1.15 },
+      weather: { ...weathers.clear, fogDensity: 0.85 },
       preset: ctx.renderer.preset,
       terrain: ctx.terrain,
     });
-    this.world.buildNow();
-    // Park at the plateau edge facing the base, where the ground starts to fall away.
+    // Park on a gentle spot below the summit with an open view: the ground ahead keeps
+    // falling away (no rise blocking the view) for a few hundred metres. A few directions
+    // around the way to the base are tried; the best drop wins.
     const d = mountain;
-    this.downhill.set(d.base.x - d.summit.x, 0, d.base.z - d.summit.z).normalize();
-    const top = course.terrain.height(d.summit.x, d.summit.z);
-    let dist = d.summit.plateauRadius * 0.5;
-    while (dist < d.summit.plateauRadius * 5) {
-      const x = d.summit.x + this.downhill.x * (dist + 60);
-      const z = d.summit.z + this.downhill.z * (dist + 60);
-      if (course.terrain.height(x, z) < top - 30) break;
-      dist += 5;
+    const terrain = course.terrain;
+    const toBase = Math.atan2(d.base.x - d.summit.x, d.base.z - d.summit.z);
+    let best = -Infinity;
+    let bestK = d.summit.plateauRadius;
+    let bestA = toBase;
+    for (let da = -0.7; da <= 0.71; da += 0.175) {
+      const ang = toBase + da;
+      const ux = Math.sin(ang);
+      const uz = Math.cos(ang);
+      const at = (k: number): number => terrain.height(d.summit.x + ux * k, d.summit.z + uz * k);
+      for (let k = d.summit.plateauRadius * 0.6; k < 1400; k += 15) {
+        const h = at(k);
+        if (Math.abs(at(k + 5) - at(k - 5)) / 10 > 0.2) continue;
+        let open = true;
+        for (let a = 30; a <= 450 && open; a += 30) if (at(k + a) > h - a * 0.12) open = false;
+        if (!open) continue;
+        const score = h - at(k + 450) - k * 0.05;
+        if (score > best) {
+          best = score;
+          bestK = k;
+          bestA = ang;
+        }
+        break;
+      }
     }
+    this.downhill.set(Math.sin(bestA), 0, Math.cos(bestA));
+    const dist = bestK;
     this.carPos.set(d.summit.x + this.downhill.x * dist, 0, d.summit.z + this.downhill.z * dist);
-    this.carPos.y = course.terrain.groundHeight(this.carPos.x, this.carPos.z, top + 5);
+    this.carPos.y = terrain.groundHeight(
+      this.carPos.x,
+      this.carPos.z,
+      terrain.height(this.carPos.x, this.carPos.z) + 5,
+    );
+    this.world.buildNow(this.carPos);
+    // See the whole descent: the fog starts further away than during a run.
+    this.world.setFogScale(1.6);
     this.car = this.makeCar();
     this.camera = new PerspectiveCamera(55, ctx.renderer.width / ctx.renderer.height, 0.3, 13000);
     this.world.update(0, this.carPos, this.carPos, 50);
@@ -107,7 +133,7 @@ export class MenuBackdrop {
     const side = 2.2 * Math.min(1.6, cam.aspect / 1.4);
     cam.position.set(
       this.carPos.x - dirX * r - leftX * side,
-      this.carPos.y + 6.5 - this.parallaxY * 0.8,
+      this.carPos.y + 12 - this.parallaxY * 0.8,
       this.carPos.z - dirZ * r - leftZ * side,
     );
     const gy = this.world.course.terrain.groundHeight(
@@ -118,7 +144,7 @@ export class MenuBackdrop {
     cam.position.y = Math.max(cam.position.y, gy + 1.5);
     this.lookTarget.set(
       this.carPos.x + dirX * 420 + leftX * side * 36,
-      this.carPos.y - 120,
+      this.carPos.y - 230,
       this.carPos.z + dirZ * 420 + leftZ * side * 36,
     );
     cam.lookAt(this.lookTarget);

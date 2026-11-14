@@ -7,6 +7,7 @@ import type { WorkerRequest, WorkerResponse } from './terrainWorker';
 /** A course generation in progress (or done). Poll it from a state's update. */
 export interface TerrainJob {
   readonly key: string;
+  readonly def: MountainDef;
   progress: number;
   done: boolean;
   data: CourseData | null;
@@ -84,18 +85,47 @@ class WorkerBackend implements PatchBackend {
   constructor(
     private readonly service: TerrainService,
     readonly gen: number,
+    private readonly local: LocalBackend,
   ) {}
 
+  private failed = false;
+
   get pending(): number {
-    return this.waiting.size;
+    return this.waiting.size + this.local.pending;
   }
 
+  /** A patch the worker could not build: build it on the main thread. */
+  fail(key: number): void {
+    const cb = this.waiting.get(key);
+    const req = this.requests.get(key);
+    this.waiting.delete(key);
+    this.requests.delete(key);
+    if (cb && req) this.local.request(req, cb);
+  }
+
+  /** The worker is gone: everything pending and future goes to the main thread. */
+  fallBack(): void {
+    this.failed = true;
+    for (const key of [...this.waiting.keys()]) this.fail(key);
+  }
+
+  private readonly requests = new Map<number, Omit<PatchRequest, 'gen'>>();
+
   request(req: Omit<PatchRequest, 'gen'>, done: (r: PatchArrays) => void): void {
+    if (this.failed) {
+      this.local.request(req, done);
+      return;
+    }
     this.waiting.set(req.key, done);
+    this.requests.set(req.key, req);
     this.service.post({ type: 'patch', req: { ...req, gen: this.gen } });
   }
 
   recycle(r: PatchArrays): void {
+    if (this.failed) {
+      this.local.recycle(r);
+      return;
+    }
     const buffers = [r.position.buffer, r.color.buffer, r.normal.buffer] as ArrayBuffer[];
     this.service.post({ type: 'recycle', buffers }, buffers);
   }
@@ -104,14 +134,19 @@ class WorkerBackend implements PatchBackend {
     const cb = this.waiting.get(key);
     if (!cb) return;
     this.waiting.delete(key);
+    this.requests.delete(key);
     cb(r);
   }
 
   cancelAll(): void {
     this.waiting.clear();
+    this.requests.clear();
+    this.local.cancelAll();
   }
 
-  pump(): void {}
+  pump(budgetMs: number): void {
+    this.local.pump(budgetMs);
+  }
 }
 
 /**
@@ -128,7 +163,7 @@ export class TerrainService {
   private active: WorkerBackend | null = null;
 
   constructor(
-    private readonly maxCache = 3,
+    private readonly maxCache = 2,
     useWorker = typeof Worker !== 'undefined',
   ) {
     if (!useWorker) return;
@@ -146,6 +181,10 @@ export class TerrainService {
   }
 
   private onMessage(msg: WorkerResponse): void {
+    if (msg.type === 'patchError') {
+      if (this.active && msg.gen === this.active.gen) this.active.fail(msg.key);
+      return;
+    }
     if (msg.type === 'patch') {
       if (this.active && msg.gen === this.active.gen) this.active.receive(msg.key, msg.result);
       return;
@@ -159,10 +198,12 @@ export class TerrainService {
       job.done = true;
       this.byId.delete(msg.id);
     } else if (msg.type === 'error') {
-      job.error = msg.message;
+      // Generation failed in the worker: do it here instead (slower, but the game goes on).
+      console.warn('Terrain worker failed, generating on the main thread:', msg.message);
+      job.data = buildCourseData(job.def);
+      job.progress = 1;
       job.done = true;
       this.byId.delete(msg.id);
-      this.jobs.delete(job.key);
     }
   }
 
@@ -170,8 +211,14 @@ export class TerrainService {
   private failWorker(): void {
     this.worker?.terminate();
     this.worker = null;
-    this.active = null;
+    for (const job of this.byId.values()) {
+      job.data = buildCourseData(job.def);
+      job.progress = 1;
+      job.done = true;
+    }
     this.byId.clear();
+    this.active?.fallBack();
+    this.active = null;
   }
 
   /** Starts (or returns the cached / running) generation of a mountain. */
@@ -180,7 +227,7 @@ export class TerrainService {
     const existing = this.jobs.get(key);
     if (existing && !existing.error && (existing.done || this.worker))
       return this.touch(key, existing);
-    const job: TerrainJob = { key, progress: 0, done: false, data: null, error: null };
+    const job: TerrainJob = { key, def, progress: 0, done: false, data: null, error: null };
     this.jobs.set(key, job);
     if (this.worker) {
       const id = this.nextId++;
@@ -200,7 +247,7 @@ export class TerrainService {
     const job = this.jobs.get(keyOf(def));
     if (job?.data) return this.touch(job.key, job).data!;
     const data = buildCourseData(def);
-    const j: TerrainJob = { key: keyOf(def), progress: 1, done: true, data, error: null };
+    const j: TerrainJob = { key: keyOf(def), def, progress: 1, done: true, data, error: null };
     this.jobs.set(j.key, j);
     this.trim();
     return data;
@@ -229,7 +276,7 @@ export class TerrainService {
     if (!this.worker || !data) return new LocalBackend(course, palette);
     this.gen++;
     this.post({ type: 'activate', def: course.def, data, palette });
-    this.active = new WorkerBackend(this, this.gen);
+    this.active = new WorkerBackend(this, this.gen, new LocalBackend(course, palette));
     return this.active;
   }
 
