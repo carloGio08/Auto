@@ -26,10 +26,13 @@ export const timesOfDay: Record<TimeOfDayId, TimeOfDayDef> = {
     // Behind-left of the benchmark view (and most of the main trail's lower half).
     sunAzimuth: 1.0,
     sunColor: '#ffe4bd',
-    sunIntensity: 2.9,
+    // Balanced so steep sun-facing slopes keep their colour (no sun-bleached look).
+    sunIntensity: 2.4,
     ambientSky: '#a9cdf3',
-    ambientGround: '#56603c',
-    ambientIntensity: 0.88,
+    // Lighter bounce from the ground: steep faces turned away from the sun stay readable
+    // (no near-black bands on embankments).
+    ambientGround: '#7a8458',
+    ambientIntensity: 0.98,
     skyTop: '#2a6bd2',
     skyHorizon: '#cde6f6',
     skyBottom: '#e2eff7',

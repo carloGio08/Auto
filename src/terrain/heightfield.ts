@@ -17,6 +17,8 @@ export interface HeightfieldData {
   rough: Uint8Array;
   /** 0..255 declared flat zones (meadows, terraces, valley floors, basins). */
   flat: Uint8Array;
+  /** 0..255 meso-relief mask: slopes that get terracettes, gullies, ribs and bumps. */
+  meso: Uint8Array;
 }
 
 /**
@@ -106,6 +108,11 @@ export class Heightfield {
   /** Wetness 0..1 (valley floors, streams). */
   moisture(x: number, z: number): number {
     return this.bilinear8(this.data.moisture, x, z);
+  }
+
+  /** Meso-relief mask 0..1 (slopes of ~12–48° outside the declared flats). */
+  meso(x: number, z: number): number {
+    return this.bilinear8(this.data.meso, x, z);
   }
 
   /** Declared flat zone 0..1 (meadows, terraces, valley floors). */

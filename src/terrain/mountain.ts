@@ -3,6 +3,7 @@ import { clamp, smoothstep } from '../math/util';
 import { generateTerrain, type TerrainData } from './generator';
 import { Heightfield } from './heightfield';
 import type { MountainDef } from '../data/types';
+import { biomes } from '../data/biomes';
 import { createPolylineHit, PolylineIndex } from './polyline';
 
 /** A river: polyline with a monotone bed altitude, carved into the natural terrain. */
@@ -29,6 +30,7 @@ export class Mountain {
   /** Generated data (shared with workers). */
   readonly data: TerrainData;
   private readonly detail: Simplex2;
+  private readonly meso: Simplex2;
   private readonly detailAmp: number;
   private readonly detailRugged: number;
   private readonly detailInv: number;
@@ -43,6 +45,7 @@ export class Mountain {
     this.data = data ?? generateTerrain(def);
     this.field = new Heightfield(this.data.field);
     this.detail = new Simplex2(def.seed ^ 0x6d2b79f5);
+    this.meso = new Simplex2(def.seed ^ 0x2545f491);
     this.detailAmp = def.noise.detail.amplitude;
     this.detailRugged = def.noise.detail.rugged;
     this.detailInv = 1 / def.noise.detail.scale;
@@ -52,11 +55,74 @@ export class Mountain {
     return this.def.summit.height;
   }
 
-  /** Natural height without stream channels and lake basin (used to route trails). */
-  heightNoWater(x: number, z: number): number {
+  /** Large-scale natural height: heightmap and detail noise, no meso relief. */
+  heightMacro(x: number, z: number): number {
     const amp = this.detailAmp + this.detailRugged * this.field.rough(x, z);
     const k = this.detailInv;
     return this.field.sample(x, z) + amp * this.detail.fbm(x * k, z * k, 2);
+  }
+
+  /** Natural height without stream channels and lake basin (used to route trails). */
+  heightNoWater(x: number, z: number): number {
+    const h = this.heightMacro(x, z);
+    const m = this.field.meso(x, z);
+    return m > 0.004 ? h + m * this.mesoRelief(x, z, h) : h;
+  }
+
+  /**
+   * Meso relief of slopes (m, before the slope mask; smooth everywhere, no creases):
+   * terracettes (soft sinusoidal steps following the contour lines, from the altitude
+   * itself), gullies and rock ribs (narrow lines along a warped noise field), soft bumps.
+   * Amplitudes per biome (data/biomes.ts), blended from forest to open steep meadow with the
+   * altitude.
+   */
+  mesoRelief(x: number, z: number, h: number): number {
+    const b = this.def.biomes;
+    const open = clamp(
+      (h - b.denseForestLine) / Math.max(1, b.treeLine - 80 - b.denseForestLine),
+      0,
+      1,
+    );
+    const R = this.reliefMix(open);
+    const n = this.meso;
+    // Terracettes: period 2.4 m of altitude (closer together on steeper ground), faded in
+    // and out in patches; the amplitude is capped by the slope so the curvature stays
+    // bounded (no creases on the steepest faces).
+    const f = this.field;
+    const sl =
+      Math.hypot(f.sample(x + 3, z) - f.sample(x - 3, z), f.sample(x, z + 3) - f.sample(x, z - 3)) /
+      6;
+    const k = (2 * Math.PI * sl) / 2.4;
+    const amp = Math.min(R.terracettes * 0.7, 0.45 / Math.max(1e-3, k * k));
+    const t = h / 2.4 + 0.5 * n.noise(x / 37, z / 37);
+    const terr =
+      -amp * Math.sin(t * 2 * Math.PI) * smoothstep(-0.4, 0.3, n.noise(x / 90 + 3, z / 90));
+    // Ribs (raised lines) and gullies (sunken lines) on a warped field: Gaussian profiles.
+    const wx = x + 8 * n.noise(x / 70 - 7, z / 70 + 2);
+    const wz = z + 8 * n.noise(x / 70 + 5, z / 70 - 4);
+    const r = n.noise(wx / 46, wz / 46);
+    const g = n.noise(wx / 38 + 31, wz / 38 - 17);
+    const ribs = R.ribs * Math.exp(-(r * r) / 0.1);
+    const gullies = R.gullies * Math.exp(-(g * g) / 0.09);
+    const bumps = R.bumps * n.noise(x / 9, z / 9);
+    return terr + ribs - gullies + bumps;
+  }
+
+  private readonly mesoMix = { terracettes: 0, gullies: 0, ribs: 0, bumps: 0 };
+  private reliefMix(open: number): {
+    terracettes: number;
+    gullies: number;
+    ribs: number;
+    bumps: number;
+  } {
+    const a = biomes.forest.relief;
+    const c = biomes.steepMeadow.relief;
+    const o = this.mesoMix;
+    o.terracettes = a.terracettes + (c.terracettes - a.terracettes) * open;
+    o.gullies = a.gullies + (c.gullies - a.gullies) * open;
+    o.ribs = a.ribs + (c.ribs - a.ribs) * open;
+    o.bumps = a.bumps + (c.bumps - a.bumps) * open;
+    return o;
   }
 
   /** Lake bed: the valley dips below the lake level inside the lake radius. */
@@ -140,7 +206,7 @@ export class Mountain {
         let cnt = 0;
         for (let o = -3; o <= 3; o++) {
           const j = clamp(i + o, 0, n - 1);
-          sum += this.heightNoWater(xs[j], zs[j]);
+          sum += this.heightMacro(xs[j], zs[j]);
           cnt++;
         }
         bank[i] = sum / cnt;

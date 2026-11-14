@@ -22,17 +22,37 @@ for (let cz = -10; cz < 10; cz += 2)
   for (let cx = -10; cx < 10; cx += 2) cells.push(placeCell(course, cx, cz, SIZE, 1));
 
 describe('props placement', () => {
-  it('keeps rocks few (≤ 30 % of the old density), each one where it makes sense', () => {
+  it('groups rocks in outcrop clusters, each one where it makes sense', () => {
     let rocks = 0;
     let erratic = 0;
+    let clustered = 0;
+    let outcropRocks = 0;
     for (const c of cells) {
       const n = c.rocks.length / ROCK_STRIDE;
       rocks += n;
-      for (let i = 0; i < n; i++) if (rockReason(c, i) === 'erratic') erratic++;
+      for (let i = 0; i < n; i++) {
+        if (rockReason(c, i) === 'erratic') erratic++;
+        if (rockReason(c, i) !== 'boulders') continue;
+        outcropRocks++;
+        const x = c.rocks[i * ROCK_STRIDE + 1];
+        const z = c.rocks[i * ROCK_STRIDE + 3];
+        for (let j = 0; j < n; j++)
+          if (
+            j !== i &&
+            Math.hypot(c.rocks[j * ROCK_STRIDE + 1] - x, c.rocks[j * ROCK_STRIDE + 3] - z) < 6
+          ) {
+            clustered++;
+            break;
+          }
+      }
     }
     const perKm2 = rocks / (cells.length * (SIZE / 1000) ** 2);
-    expect(perKm2).toBeLessThan(BASELINE_ROCKS_PER_KM2 * 0.3);
-    expect(erratic / rocks).toBeLessThan(0.3);
+    // Outcrops make up most rocks, in clusters (not scattered uniformly), within a sane
+    // total; random erratics stay rare.
+    expect(outcropRocks / rocks).toBeGreaterThan(0.5);
+    expect(clustered / outcropRocks).toBeGreaterThan(0.85);
+    expect(perKm2).toBeLessThan(BASELINE_ROCKS_PER_KM2 * 3);
+    expect(erratic / rocks).toBeLessThan(0.1);
   });
 
   it('never puts a tree on a trail, in water or on slopes over ~40°, and keeps them apart', () => {

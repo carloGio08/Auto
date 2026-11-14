@@ -14,21 +14,23 @@ export const defaultPalette: Palette = {
   snow: ['#cdd8e3', '#dde5ed', '#e9eff4', '#f3f6f9', '#fbfcfd'],
   snowShade: ['#8e9db0', '#a5b4c5', '#bccad8'],
   snowRock: ['#8a8984', '#a3a29b'],
-  // Rock: warm greys and ochre, low saturation, in tune with the greens.
-  rockLight: ['#968c79', '#a69b86', '#b5ab95', '#c3baa4'],
-  rockDark: ['#5e574b', '#6d6556', '#7c7362', '#8c826e'],
-  scree: ['#988e7b', '#a89e8a', '#b8ae99', '#c7bea9'],
-  rockGrass: ['#80864f', '#979b5f'],
+  // Rock and scree: neutral greys (a hint of blue in the outcrops), not beige.
+  rockLight: ['#8c8e8c', '#9fa09d', '#b1b2ae', '#c3c4bf'],
+  rockDark: ['#5d605f', '#6c6f6c', '#7b7e7a', '#8b8d88'],
+  scree: ['#8f918c', '#a1a39d', '#b2b3ad', '#c2c3bc'],
+  rockGrass: ['#6a7a3c', '#84914a'],
   // Ground: earth (trails, bare soil), mud, sand.
   earth: ['#74462a', '#8e5630', '#a86837', '#be7a41', '#cf8f52'],
   mud: ['#4a3a2c', '#5a4532', '#6b533c'],
   sand: ['#c8b383', '#d8c493', '#e6d4a6'],
   // Vegetation: dry alpine grass, grass, flowering meadow, undergrowth, forest floor, moss.
-  dryGrass: ['#9e9a5a', '#b0a964', '#c2b872', '#d1c584'],
+  dryGrass: ['#7f8640', '#97933f', '#ab9a48', '#bea85a'],
   grass: ['#4f8030', '#619336', '#74a63c', '#89b844', '#9ec84f'],
   flowers: ['#86ab52', '#a4bd5e', '#d8c86c', '#d6a9c8'],
-  // Flower heads of the ground cover: yellow, red, purple, white.
-  blossom: ['#f2c230', '#d9443a', '#9a5fc9', '#f3efe6'],
+  // Flower heads of the ground cover: yellow, white, pink, purple, blue.
+  blossom: ['#f2c230', '#f3efe6', '#e88fb8', '#9a5fc9', '#5b7fe0'],
+  // Outcrop rocks and stones: pale blue-grey, lightest on the top faces.
+  outcrop: ['#7b8694', '#95a0ad', '#adb7c2', '#c9d1d9'],
   undergrowth: ['#3f5f2f', '#4c6d35', '#5b7c3d'],
   forest: ['#2a4a2a', '#345a31', '#3f6a38', '#4b7a40'],
   moss: ['#5d7a3a', '#6f8c43', '#82a050'],

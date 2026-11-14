@@ -3,7 +3,7 @@ import { buildCourseData, type Course, type CourseData } from './course';
 import { ArrayPool, PatchBuild, type PatchArrays, type PatchRequest } from './patchBuilder';
 import type { PatchPalette } from './splat';
 import { placeCell, type CellData } from '../world/propPlacement';
-import { placeCover } from '../world/coverPlacement';
+import { placeCover, type CoverData } from '../world/coverPlacement';
 import { buildFarField, type FarFieldArrays, type FarFieldRequest } from './farField';
 import type { WorkerRequest, WorkerResponse } from './terrainWorker';
 
@@ -40,13 +40,13 @@ export interface PatchBackend {
     full: boolean,
     done: (d: CellData) => void,
   ): void;
-  /** Ground cover of a tile (grass, flowers, bushes, pebbles...): COVER_STRIDE records. */
+  /** Ground cover of a tile (grass, flowers, shrubs, stones...) and its richness cells. */
   requestCover(
     tx: number,
     tz: number,
     size: number,
     density: number,
-    done: (d: Float32Array) => void,
+    done: (d: CoverData) => void,
   ): void;
 }
 
@@ -97,9 +97,9 @@ class LocalBackend implements PatchBackend {
     tz: number,
     size: number,
     density: number,
-    done: (d: Float32Array) => void,
+    done: (d: CoverData) => void,
   ): void {
-    this.cellQueue.push(() => done(placeCover(this.course, tx, tz, size, density)));
+    this.cellQueue.push(() => done(placeCover(this.course, tx, tz, size, density, this.palette)));
   }
 
   cancelAll(): void {
@@ -151,7 +151,7 @@ class WorkerBackend implements PatchBackend {
   }
 
   private readonly cellWaiting = new Map<number, (d: CellData) => void>();
-  private readonly coverWaiting = new Map<number, (d: Float32Array) => void>();
+  private readonly coverWaiting = new Map<number, (d: CoverData) => void>();
   private cellSeq = 1;
   private farDone: ((a: FarFieldArrays) => void) | null = null;
 
@@ -192,7 +192,7 @@ class WorkerBackend implements PatchBackend {
     tz: number,
     size: number,
     density: number,
-    done: (d: Float32Array) => void,
+    done: (d: CoverData) => void,
   ): void {
     if (this.failed) {
       this.local.requestCover(tx, tz, size, density, done);
@@ -203,7 +203,7 @@ class WorkerBackend implements PatchBackend {
     this.service.post({ type: 'cover', id, gen: this.gen, tx, tz, size, density });
   }
 
-  receiveCover(id: number, d: Float32Array): void {
+  receiveCover(id: number, d: CoverData): void {
     const cb = this.coverWaiting.get(id);
     if (!cb) return;
     this.coverWaiting.delete(id);

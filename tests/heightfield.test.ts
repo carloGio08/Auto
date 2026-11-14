@@ -37,8 +37,9 @@ describe.each(defs.map((d) => [d.id, d] as const))('mountain height(x, z): %s', 
     for (let x = -half; x < half; x += 37) {
       for (let z = -half; z < half; z += 37) {
         if (m.waterLevel(x, z) > m.height(x, z)) continue;
-        const h = m.heightNoWater(x, z);
-        const s = Math.hypot(m.heightNoWater(x + 2, z) - h, m.heightNoWater(x, z + 2) - h) / 2;
+        // Large-scale slopes: the meso relief (terracettes, gullies, ribs) is tested apart.
+        const h = m.heightMacro(x, z);
+        const s = Math.hypot(m.heightMacro(x + 2, z) - h, m.heightMacro(x, z + 2) - h) / 2;
         const deg = (Math.atan(s) * 180) / Math.PI;
         bins[deg < 8 ? 0 : deg < 25 ? 1 : deg < 38 ? 2 : 3]++;
         n++;
@@ -58,22 +59,24 @@ describe.each(defs.map((d) => [d.id, d] as const))('mountain height(x, z): %s', 
   it('has no spikes: bounded curvature of the natural surface', () => {
     const rng = new Rng(def.seed ^ 9);
     let worst = 0;
+    let worstMeso = 0;
+    const lapOf = (f: (x: number, z: number) => number, x: number, z: number): number => {
+      const e = 1;
+      const c = f(x, z);
+      return (f(x + e, z) + f(x - e, z) + f(x, z + e) + f(x, z - e) - 4 * c) / (e * e);
+    };
+    const macro = (x: number, z: number): number => m.heightMacro(x, z);
+    const meso = (x: number, z: number): number => m.heightNoWater(x, z) - m.heightMacro(x, z);
     for (let i = 0; i < 20000; i++) {
       const x = rng.range(-half * 0.8, half * 0.8);
       const z = rng.range(-half * 0.8, half * 0.8);
-      const e = 1;
-      const c = m.heightNoWater(x, z);
-      const lap =
-        (m.heightNoWater(x + e, z) +
-          m.heightNoWater(x - e, z) +
-          m.heightNoWater(x, z + e) +
-          m.heightNoWater(x, z - e) -
-          4 * c) /
-        (e * e);
-      worst = Math.max(worst, Math.abs(lap));
+      worst = Math.max(worst, Math.abs(lapOf(macro, x, z)));
+      worstMeso = Math.max(worstMeso, Math.abs(lapOf(meso, x, z)));
     }
-    // A spike or a crease would show as a huge second derivative at 1 m.
+    // A spike or a crease would show as a huge second derivative at 1 m. The meso relief
+    // (terracettes, gullies, ribs) is smooth too, with its own, larger bound.
     expect(worst).toBeLessThan(0.25);
+    expect(worstMeso).toBeLessThan(1.2);
   });
 
   it('is continuous (no steps from trail carving, rivers or the lake)', () => {

@@ -19,7 +19,8 @@ import { undergrowth } from '../data/vegetation';
 import type { Course } from '../terrain/course';
 import type { PatchBackend } from '../terrain/terrainService';
 import { applyAtmosphere } from './atmosphere';
-import { COVER_STRIDE, placeCover } from './coverPlacement';
+import { COVER_STRIDE, placeCover, type CoverData } from './coverPlacement';
+import { RICH_STRIDE } from './richness';
 import { PropGeometry } from './propGeometry';
 
 interface Tile {
@@ -29,6 +30,10 @@ interface Tile {
   cx: number;
   cz: number;
   data: Float32Array | null;
+  /** Distance to the camera at the last refill (m). */
+  dist: number;
+  /** Richness records of the tile's cells (debug probe). */
+  cells: Float32Array | null;
   asked: boolean;
 }
 
@@ -198,6 +203,8 @@ export class GroundCover {
         cx: (tx + 0.5) * this.size,
         cz: (tz + 0.5) * this.size,
         data: null,
+        cells: null,
+        dist: 0,
         asked: false,
       };
       this.tiles.set(key, t);
@@ -208,9 +215,10 @@ export class GroundCover {
   private ask(t: Tile): void {
     if (t.asked) return;
     t.asked = true;
-    const done = (d: Float32Array): void => {
+    const done = (d: CoverData): void => {
       if (!this.tiles.has(t.key)) return;
-      t.data = d;
+      t.data = d.items;
+      t.cells = d.cells;
       this.dirty = true;
     };
     const density = this.preset.propDensity;
@@ -248,6 +256,7 @@ export class GroundCover {
   }
 
   private readonly fill = new Int32Array(undergrowth.length);
+  private readonly order: Tile[] = [];
 
   private refill(camX: number, camZ: number): void {
     this.dirty = false;
@@ -258,10 +267,16 @@ export class GroundCover {
     fill.fill(0);
     const used = { grass: 0, flowers: 0, cover: 0 };
     let over = false;
+    // Nearest tiles first: when a cap is hit, it is the far instances that are left out.
+    const order = this.order;
+    order.length = 0;
     for (const t of this.tiles.values()) {
-      const d = t.data;
-      if (!d) continue;
-      if (Math.hypot(t.cx - camX, t.cz - camZ) > R + this.size) continue;
+      t.dist = Math.hypot(t.cx - camX, t.cz - camZ);
+      if (t.data && t.dist <= R + this.size) order.push(t);
+    }
+    order.sort((a, b) => a.dist - b.dist);
+    for (const t of order) {
+      const d = t.data!;
       for (let k = 0; k < d.length; k += COVER_STRIDE) {
         const kind = d[k];
         const u = undergrowth[kind];
@@ -299,6 +314,32 @@ export class GroundCover {
     );
     if (over) this.scale = Math.max(0.4, this.scale * 0.9);
     else if (full < 0.8 && this.scale < 1) this.scale = Math.min(1, this.scale * 1.04);
+  }
+
+  /**
+   * Richness record and instances per kind of the cover cell containing (x, z) (debug probe),
+   * or null when its tile is not loaded.
+   */
+  cellAt(x: number, z: number): { record: Float32Array; kinds: number[] } | null {
+    const s = this.size;
+    const tx = Math.floor(x / s);
+    const tz = Math.floor(z / s);
+    const t = this.tiles.get((tx + 4096) * 8192 + (tz + 4096));
+    if (!t?.data || !t.cells) return null;
+    const nc = Math.round(Math.sqrt(t.cells.length / RICH_STRIDE));
+    const cs = s / nc;
+    const ci = Math.min(nc - 1, Math.floor((x - tx * s) / cs));
+    const cj = Math.min(nc - 1, Math.floor((z - tz * s) / cs));
+    const c = cj * nc + ci;
+    const kinds = undergrowth.map(() => 0);
+    const x0 = tx * s + ci * cs;
+    const z0 = tz * s + cj * cs;
+    for (let k = 0; k < t.data.length; k += COVER_STRIDE) {
+      const px = t.data[k + 1];
+      const pz = t.data[k + 3];
+      if (px >= x0 && px < x0 + cs && pz >= z0 && pz < z0 + cs) kinds[t.data[k]]++;
+    }
+    return { record: t.cells.subarray(c * RICH_STRIDE, (c + 1) * RICH_STRIDE), kinds };
   }
 
   /** Instances currently drawn (all kinds). */

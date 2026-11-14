@@ -100,7 +100,7 @@ export class TrailRouter {
     this.occupied = new Uint8Array(this.n * this.n);
     for (let j = 0; j < this.n; j++)
       for (let i = 0; i < this.n; i++)
-        this.heights[j * this.n + i] = mountain.heightNoWater(
+        this.heights[j * this.n + i] = mountain.heightMacro(
           this.min + i * CELL,
           this.min + j * CELL,
         );

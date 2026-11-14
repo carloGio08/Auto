@@ -1,9 +1,9 @@
 import { hash2, Rng } from '../math/rng';
-import { Simplex2 } from '../math/noise';
 import { smoothstep } from '../math/util';
 import type { Course } from '../terrain/course';
 import { Mat } from '../terrain/biome';
 import { ecology, MIN_TREE_HEIGHT, treeSpecies } from '../data/vegetation';
+import { biomes, BIOME_IDS, type BiomeId } from '../data/biomes';
 
 /** Rock prop types (instanced per cell). */
 export const ROCK_TYPES = [
@@ -51,16 +51,6 @@ const weights = new Float32Array(Mat.Count);
 const GRID = 8;
 const FAR_GRID = 16;
 
-interface Cache {
-  seed: number;
-  cluster: Simplex2;
-}
-let cache: Cache | null = null;
-const clusterNoise = (seed: number): Simplex2 => {
-  if (!cache || cache.seed !== seed) cache = { seed, cluster: new Simplex2(seed ^ 0x7ee5) };
-  return cache.cluster;
-};
-
 /** Species weights at a normalised altitude and wetness (into `out`); returns the sum. */
 function speciesWeights(alt01: number, wet: number, out: Float32Array): number {
   let sum = 0;
@@ -79,7 +69,7 @@ function speciesWeights(alt01: number, wet: number, out: Float32Array): number {
 const sw = new Float32Array(treeSpecies.length);
 
 /** Floats per ecology sample (see ecologyAt). */
-export const ECO_STRIDE = 10;
+export const ECO_STRIDE = 12;
 
 /** Whether a point is inside the playable map (with a small margin). */
 export const insideMap = (course: Course, x: number, z: number): boolean =>
@@ -97,7 +87,6 @@ export function ecologyAt(course: Course, x: number, z: number, out: Float32Arra
   const bio = terrain.biomes;
   const def = course.def;
   const b = def.biomes;
-  const cluster = clusterNoise(def.seed);
   const h = terrain.height(x, z);
   const q = terrain.lastQuery;
   const roadEdge = q.found ? Math.abs(q.lateral - q.offset) - q.halfWidth : 1e4;
@@ -109,10 +98,10 @@ export function ecologyAt(course: Course, x: number, z: number, out: Float32Arra
   const a = h + bio.wobble(x, z);
   const alt01 = (a - b.valleyLine) / (b.treeLine - b.valleyLine);
   const dry = h < def.lake.level + 1.2 || terrain.waterLevel(x, z) > h - 0.3;
+  // The biome forest density already carries the woods/glades cluster noise.
   let dens = dry || slope > ecology.maxSlope ? 0 : bio.forest;
   dens = Math.pow(dens, ecology.clumping);
-  const cl = cluster.fbm(x / ecology.clusterScale, z / ecology.clusterScale, 2);
-  dens *= smoothstep(-0.35, 0.25, cl) * (0.75 + 0.5 * Math.max(0, cl));
+  const cl = bio.clusterValue;
   dens *= 1 - (1 - ecology.treeLineDensity) * smoothstep(0.75, 1.05, alt01);
   // A few lone trees in open meadows.
   if (!dry && slope < ecology.maxSlope * 0.8 && alt01 < 0.95)
@@ -130,6 +119,38 @@ export function ecologyAt(course: Course, x: number, z: number, out: Float32Arra
   out[7] = weights[Mat.Flowers];
   out[8] = weights[Mat.Grass] + weights[Mat.DryGrass] + weights[Mat.RockGrass] * 0.5;
   out[9] = dry ? 1 : 0;
+  out[10] = classifyBiome(weights, out[0], alt01, slope);
+  out[11] = bio.curvature;
+}
+
+const B = (id: BiomeId): number => BIOME_IDS.indexOf(id);
+const SNOWFIELD = B('snowfield');
+const ROCKBAND = B('rockBand');
+const SCREE = B('scree');
+const SHORE = B('shore');
+const FOREST = B('forest');
+const TREELINE = B('treeLine');
+const EDGE = B('forestEdge');
+const ALPINE = B('alpineMeadow');
+const STEEP = B('steepMeadow');
+const VALLEY = B('valleyMeadow');
+
+/**
+ * Biome of a point (index in BIOME_IDS) from its material weights, tree density, altitude
+ * (0 valley line .. 1 tree line) and slope: snowfield, rock band, scree, shore, forest, tree
+ * line, forest edge, then open meadows — alpine above the tree line, steep on slopes over
+ * ~17°, valley meadows below.
+ */
+export function classifyBiome(w: Float32Array, tree: number, alt01: number, slope: number): number {
+  if (w[Mat.Snow] + w[Mat.SnowShade] > 0.5) return SNOWFIELD;
+  if (w[Mat.RockLight] + w[Mat.RockDark] + w[Mat.SnowRock] > 0.55) return ROCKBAND;
+  if (w[Mat.Scree] > 0.4) return SCREE;
+  if (w[Mat.Sand] > 0.3) return SHORE;
+  if (tree > 0.35) return FOREST;
+  if (Math.abs(alt01 - 1) < 0.1) return TREELINE;
+  if (tree > 0.1) return EDGE;
+  if (slope > 0.3) return STEEP;
+  return alt01 > 1 ? ALPINE : VALLEY;
 }
 
 /**
@@ -184,9 +205,10 @@ export function placeCell(
     const j = Math.floor(fz);
     const u = fx - i;
     const v = fz - j;
-    const o = (j * gn + i) * 10 + k;
-    const a0 = D[o] + (D[o + 10] - D[o]) * u;
-    const a1 = D[o + gn * 10] + (D[o + gn * 10 + 10] - D[o + gn * 10]) * u;
+    const S = ECO_STRIDE;
+    const o = (j * gn + i) * S + k;
+    const a0 = D[o] + (D[o + S] - D[o]) * u;
+    const a1 = D[o + gn * S] + (D[o + gn * S + S] - D[o + gn * S]) * u;
     return a0 + (a1 - a0) * v;
   };
   const blocked = (x: number, z: number, clearance: number): boolean =>
@@ -387,35 +409,48 @@ export function placeCell(
       reasons.push(REASONS.indexOf(reason));
     }
 
-  // --- Boulder groups: 2–4 big faceted boulders beside a trail or on a slope ------------
-  const bs = 40;
-  const br = new Rng((cx * 15485863) ^ (cz * 32452843) ^ def.seed ^ 0xb01d);
-  for (let gz = 0; gz < size; gz += bs)
-    for (let gx = 0; gx < size; gx += bs) {
-      const x = x0 + gx + br.range(4, bs - 4);
-      const z = z0 + gz + br.range(4, bs - 4);
-      const roll = br.next();
-      const n = 2 + Math.floor(br.next() * 3);
-      const seedG = br.next() * 1000;
-      if (blocked(x, z, 3)) continue;
-      const edge = at(x, z, 5);
+  // --- Outcrops: clusters of 3–7 faceted rocks along the contour lines -----------------
+  // Rate per biome (data/biomes.ts), boosted on convex ribs and crests; sizes fall off from
+  // the middle of the cluster; never on (or reaching into) the driving line, never in water.
+  const ob = 25;
+  const orng = new Rng((cx * 15485863) ^ (cz * 32452843) ^ def.seed ^ 0xb01d);
+  for (let gz = 0; gz < size; gz += ob)
+    for (let gx = 0; gx < size; gx += ob) {
+      const x = x0 + gx + orng.range(2, ob - 2);
+      const z = z0 + gz + orng.range(2, ob - 2);
+      const roll = orng.next();
+      const n = 3 + Math.floor(orng.next() * 5);
+      const gseed = Math.floor(orng.next() * 1e6);
+      if (blocked(x, z, 3) || at(x, z, 9) > 0.01) continue;
+      const fx = Math.max(0, Math.min(gn - 1, Math.round((x - x0) / step)));
+      const fz = Math.max(0, Math.min(gn - 1, Math.round((z - z0) / step)));
+      const biome = biomes[BIOME_IDS[D[(fz * gn + fx) * ECO_STRIDE + 10]]];
       const slope = at(x, z, 4);
-      const nearTrail = edge > 3 && edge < 14 ? 0.22 : 0;
-      const onSlope = slope > 0.25 && slope < 0.75 ? 0.05 : 0;
-      if (roll >= (nearTrail + onSlope) * def.props.rocks * Math.max(0.5, density)) continue;
-      const gr = new Rng(Math.floor(seedG * 7919) ^ def.seed);
+      const rib = Math.max(0, -at(x, z, 11));
+      const onSlope = smoothstep(0.12, 0.3, slope) * (1 - smoothstep(1.1, 1.5, slope));
+      const rate = (biome.outcrops / 16) * (0.35 + onSlope) * (1 + 2.5 * rib);
+      if (roll >= rate * def.props.rocks * Math.max(0.5, density)) continue;
+      // Contour direction: perpendicular to the gradient.
+      const hx = terrain.height(x + 2, z) - terrain.height(x - 2, z);
+      const hz = terrain.height(x, z + 2) - terrain.height(x, z - 2);
+      const gl = Math.hypot(hx, hz);
+      const gr = new Rng(gseed ^ def.seed);
+      const a0 = gr.range(0, Math.PI * 2);
+      const tx = gl > 0.05 ? -hz / gl : Math.cos(a0);
+      const tz = gl > 0.05 ? hx / gl : Math.sin(a0);
+      let pos = -((n - 1) / 2) * 2.1;
       for (let k = 0; k < n; k++) {
-        const a = gr.range(0, Math.PI * 2);
-        const d = k === 0 ? 0 : gr.range(1.6, 4.2);
-        const px = x + Math.cos(a) * d;
-        const pz = z + Math.sin(a) * d;
-        const sz = (k === 0 ? 1.4 : 0.7) + gr.next() * (k === 0 ? 1.0 : 0.8);
-        // Never on (or reaching into) the driving line, never in water.
+        const mid = 1 - Math.abs(k - (n - 1) / 2) / Math.max(1, (n - 1) / 2);
+        const sz = 0.5 + mid * 1.3 + gr.next() * 0.7;
+        pos += k === 0 ? 0 : 1.2 + sz * 0.9 + gr.range(-0.3, 0.4);
+        const off = gr.range(-0.9, 0.9);
+        const px = x + tx * pos + tz * off;
+        const pz = z + tz * pos - tx * off;
         if (blocked(px, pz, 1.2 * sz + 1.5)) continue;
         const h = terrain.height(px, pz);
         if (terrain.waterLevel(px, pz) > h - 0.3) continue;
         const type = gr.next() < 0.5 ? 'boulder0' : 'boulder1';
-        rocks.push(ROCK_TYPES.indexOf(type), px, h - 0.2 * sz, pz, sz, gr.range(0, 6.28), 1);
+        rocks.push(ROCK_TYPES.indexOf(type), px, h - 0.22 * sz, pz, sz, gr.range(0, 6.28), 1);
         reasons.push(REASONS.indexOf('boulders'));
       }
     }

@@ -220,19 +220,70 @@ export class PropGeometry {
   undergrowth(kind: UndergrowthKind): BufferGeometry {
     const rng = new Rng(1200 + kind.length);
     switch (kind) {
-      case 'bush':
+      case 'shrubRound':
         return this.bush(0);
-      case 'grass': {
-        // Tuft of five low-poly blades, two greens, splayed outwards.
+      case 'shrubSpiky': {
+        // Spiky shrub: thin cones fanning out of a low dark core.
         const parts: BufferGeometry[] = [];
-        for (let i = 0; i < 5; i++) {
-          const blade = new ConeGeometry(0.07, 1, 3, 1);
+        const core = new OctahedronGeometry(0.35, 0);
+        core.scale(1, 0.6, 1);
+        core.translate(0, 0.2, 0);
+        parts.push(paint(core, this.pal.undergrowth[0]));
+        for (let i = 0; i < 9; i++) {
+          const spike = new ConeGeometry(0.09, 0.9, 4, 1);
+          spike.translate(0, 0.45, 0);
+          spike.rotateZ(rng.range(0.2, 0.75));
+          spike.rotateY((i / 9) * Math.PI * 2 + rng.range(-0.2, 0.2));
+          spike.scale(1, rng.range(0.6, 1.1), 1);
+          const c = i % 3 ? this.pal.undergrowth[2] : this.pal.grass[1];
+          parts.push(paint(spike, c));
+        }
+        return merge(parts);
+      }
+      case 'shrubMat': {
+        // Low mat (dwarf shrubs, heather): wide flattened clumps hugging the ground.
+        const parts: BufferGeometry[] = [];
+        for (let i = 0; i < 4; i++) {
+          const o = new OctahedronGeometry(0.42 + rng.next() * 0.2, 0);
+          o.scale(1.2, 0.38, 1);
+          o.rotateY(rng.range(0, 3));
+          o.translate(rng.range(-0.35, 0.35), 0.1, rng.range(-0.35, 0.35));
+          const c = i % 2 ? this.pal.moss[1] : this.pal.undergrowth[1];
+          parts.push(paint(o, c, this.pal.blossom[2], 0.12, i + 3));
+        }
+        return merge(parts);
+      }
+      case 'stone': {
+        // Small faceted stone: pale blue-grey, lighter top faces.
+        return this.boulder(2, 0.5);
+      }
+      case 'sapling':
+        // Young pine (1.4–3.2 m): the stylised pine, stocky form.
+        return this.pineTree(
+          0,
+          this.pal.foliage[1],
+          this.pal.foliage[3],
+          new Vector3(0.6, 0.6, 0.5).normalize(),
+          false,
+          9,
+        );
+      case 'grass': {
+        // Dense clump: eleven thin blades of varied height, two greens and a dry tip tone.
+        const parts: BufferGeometry[] = [];
+        for (let i = 0; i < 11; i++) {
+          const blade = new ConeGeometry(0.035, 1, 3, 1);
           blade.translate(0, 0.5, 0);
-          blade.rotateZ(rng.range(0.15, 0.45));
-          blade.rotateY((i / 5) * Math.PI * 2 + rng.range(-0.3, 0.3));
-          blade.scale(1, rng.range(0.7, 1.1), 1);
-          const c = i % 2 ? this.pal.grass[4] : this.pal.grass[2];
-          parts.push(paint(blade, c, this.pal.grass[3], 0.3, i));
+          blade.rotateZ(rng.range(0.05, 0.4));
+          blade.rotateY((i / 11) * Math.PI * 2 + rng.range(-0.3, 0.3));
+          blade.scale(1, rng.range(0.35, 0.8), 1);
+          blade.translate(rng.range(-0.12, 0.12), 0, rng.range(-0.12, 0.12));
+          const c =
+            i % 3 === 0
+              ? this.pal.grass[4]
+              : i % 3 === 1
+                ? this.pal.grass[2]
+                : this.pal.dryGrass[2];
+          parts.push(paint(blade, c));
         }
         return merge(parts);
       }
@@ -250,11 +301,13 @@ export class PropGeometry {
         return merge(parts);
       }
       case 'flowerY':
-      case 'flowerR':
+      case 'flowerW':
+      case 'flowerK':
       case 'flowerP':
-      case 'flowerW': {
+      case 'flowerB': {
         // Small clump: three stems with faceted heads and two leaves.
-        const colour = this.pal.blossom[['flowerY', 'flowerR', 'flowerP', 'flowerW'].indexOf(kind)];
+        const colour =
+          this.pal.blossom[['flowerY', 'flowerW', 'flowerK', 'flowerP', 'flowerB'].indexOf(kind)];
         const parts: BufferGeometry[] = [];
         for (let i = 0; i < 3; i++) {
           const a = (i / 3) * Math.PI * 2 + rng.range(-0.4, 0.4);
@@ -337,22 +390,24 @@ export class PropGeometry {
   }
 
   /**
-   * Big flat-faceted boulder (groups beside the trails and on slopes): a squashed,
-   * irregular dodecahedron with a flattened top, warm grey in three tones, the top faces
-   * lighter. Base slightly below the origin.
+   * Big flat-faceted boulder (outcrop clusters on slopes, ribs and crests): a squashed,
+   * irregular dodecahedron with a flattened top, pale blue-grey in three tones, the top faces
+   * lighter. Base slightly below the origin. `scale` < 1 for small stones.
    */
-  boulder(variant: number): BufferGeometry {
-    const g = new DodecahedronGeometry(1, 0);
-    wobble(g, 0.2, 960 + variant * 7);
+  boulder(variant: number, scale = 1): BufferGeometry {
+    const g = new DodecahedronGeometry(scale, 0);
+    wobble(g, 0.2 * scale, 960 + variant * 7);
     const pos = g.getAttribute('position');
     for (let i = 0; i < pos.count; i++) {
       const y = pos.getY(i);
       if (y > 0.35) pos.setY(i, 0.35 + (y - 0.35) * 0.25);
     }
-    g.scale(1.25 + variant * 0.2, 0.8, 1.0);
-    g.translate(0, 0.3, 0);
-    const tones = [this.pal.rockLight[1], this.pal.rockLight[2], this.pal.rockDark[3]];
-    const top = this.pal.rockLight[3];
+    g.scale(1.25 + (variant % 2) * 0.2, 0.8, 1.0);
+    g.translate(0, 0.3 * scale, 0);
+    // Pale blue-grey outcrop rock in three tones, the top faces lightest.
+    const o = this.pal.outcrop;
+    const tones = [o[1], o[2], o[0]];
+    const top = o[3];
     const out = paint(g, tones[variant % 3], tones[(variant + 1) % 3], 0.4, variant + 11);
     // Lighter top faces.
     const p = out.getAttribute('position');

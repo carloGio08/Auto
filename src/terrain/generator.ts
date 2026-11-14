@@ -114,9 +114,24 @@ export function generateTerrain(def: MountainDef, progress?: (p: number) => void
     rough[c] = Math.round(Math.min(1, roughF[c]) * 255);
     flat[c] = Math.round(flatF[c] * 255);
   }
+  // Meso-relief mask: slopes of ~12–48° outside the declared flats get terracettes, gullies,
+  // ribs and bumps at run time (Mountain.heightNoWater): no large smooth planes.
+  const mesoF = new Float32Array(N);
+  for (let j = 1; j < n - 1; j++)
+    for (let i = 1; i < n - 1; i++) {
+      const c = j * n + i;
+      const sl = Math.hypot(h[c + 1] - h[c - 1], h[c + n] - h[c - n]) / (2 * spacing);
+      const band =
+        Math.max(0, Math.min(1, (sl - 0.2) / 0.14)) *
+        (1 - Math.max(0, Math.min(1, (sl - 0.95) / 0.3)));
+      mesoF[c] = band * (1 - flatF[c]);
+    }
+  blur(mesoF, n, 1);
+  const meso = new Uint8Array(N);
+  for (let c = 0; c < N; c++) meso[c] = Math.round(Math.min(1, mesoF[c]) * 255);
   const streams = traceStreams(def, n, spacing, min, graph.receiver, outlet, h);
   progress?.(1);
-  return { field: { n, spacing, min, height: h, moisture, rough, flat }, streams };
+  return { field: { n, spacing, min, height: h, moisture, rough, flat, meso }, streams };
 }
 
 /** Follows the flow graph from each spring down to the lake, then smooths the polyline. */

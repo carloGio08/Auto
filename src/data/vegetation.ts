@@ -82,26 +82,29 @@ export const MIN_TREE_HEIGHT = 6;
 export type UndergrowthKind =
   | 'grass'
   | 'flowerY'
-  | 'flowerR'
-  | 'flowerP'
   | 'flowerW'
-  | 'bush'
+  | 'flowerK'
+  | 'flowerP'
+  | 'flowerB'
+  | 'shrubRound'
+  | 'shrubSpiky'
+  | 'shrubMat'
   | 'fern'
+  | 'stone'
+  | 'sapling'
   | 'pebble'
   | 'log'
   | 'stump';
 
 export interface UndergrowthDef {
   kind: UndergrowthKind;
-  /** Base size (m) and random range factor. */
+  /** Size range (m, the unit model is scaled by it). */
   size: [number, number];
   /**
-   * Where it grows: 'forest' floor, 'meadow' (flower patches), 'grass', forest 'edge',
-   * 'road' (pebbles on and beside the trails).
+   * How instances gather: 'patch' (flowers: tight patches of one or two colours), 'group'
+   * (shrubs, saplings: loose groups), 'scatter' (grass clumps, stones, ferns...).
    */
-  habitat: 'forest' | 'meadow' | 'grass' | 'edge' | 'road';
-  /** Instances per 100 m² at full habitat (before the preset density). */
-  density: number;
+  layout: 'patch' | 'group' | 'scatter';
   /** Instance cap group (preset limits: grassLimit, flowerLimit, coverLimit). */
   cap: 'grass' | 'flowers' | 'cover';
   /** Sways in the wind (vertex shader; off on the Low preset). */
@@ -112,82 +115,90 @@ export interface UndergrowthDef {
   reach: number;
 }
 
+const flower = (kind: UndergrowthKind): UndergrowthDef => ({
+  kind,
+  size: [0.4, 0.65],
+  layout: 'patch',
+  cap: 'flowers',
+  wind: true,
+  shadow: true,
+  reach: 0.85,
+});
+
+/** Every ground-cover kind; which ones grow where is in data/biomes.ts. */
 export const undergrowth: UndergrowthDef[] = [
-  {
-    kind: 'flowerY',
-    size: [0.4, 0.65],
-    habitat: 'meadow',
-    density: 110,
-    cap: 'flowers',
-    wind: true,
-    shadow: true,
-    reach: 0.85,
-  },
-  {
-    kind: 'flowerR',
-    size: [0.4, 0.65],
-    habitat: 'meadow',
-    density: 110,
-    cap: 'flowers',
-    wind: true,
-    shadow: true,
-    reach: 0.85,
-  },
-  {
-    kind: 'flowerP',
-    size: [0.4, 0.65],
-    habitat: 'meadow',
-    density: 110,
-    cap: 'flowers',
-    wind: true,
-    shadow: true,
-    reach: 0.85,
-  },
-  {
-    kind: 'flowerW',
-    size: [0.4, 0.65],
-    habitat: 'meadow',
-    density: 110,
-    cap: 'flowers',
-    wind: true,
-    shadow: true,
-    reach: 0.85,
-  },
+  flower('flowerY'),
+  flower('flowerW'),
+  flower('flowerK'),
+  flower('flowerP'),
+  flower('flowerB'),
   {
     kind: 'grass',
-    size: [0.55, 1.05],
-    habitat: 'grass',
-    density: 90,
+    size: [0.5, 1],
+    layout: 'scatter',
     cap: 'grass',
     wind: true,
     shadow: false,
     reach: 1,
   },
   {
-    kind: 'bush',
+    kind: 'shrubRound',
     size: [0.8, 1.5],
-    habitat: 'edge',
-    density: 1.2,
+    layout: 'group',
     cap: 'cover',
     wind: false,
     shadow: true,
     reach: 1,
   },
   {
+    kind: 'shrubSpiky',
+    size: [0.7, 1.3],
+    layout: 'group',
+    cap: 'cover',
+    wind: false,
+    shadow: true,
+    reach: 1,
+  },
+  {
+    kind: 'shrubMat',
+    size: [0.9, 1.8],
+    layout: 'group',
+    cap: 'cover',
+    wind: false,
+    shadow: true,
+    reach: 0.9,
+  },
+  {
     kind: 'fern',
     size: [0.5, 0.9],
-    habitat: 'forest',
-    density: 6,
+    layout: 'scatter',
     cap: 'cover',
     wind: true,
     shadow: false,
     reach: 0.8,
   },
   {
+    kind: 'stone',
+    size: [0.25, 0.7],
+    layout: 'scatter',
+    cap: 'cover',
+    wind: false,
+    shadow: true,
+    reach: 0.85,
+  },
+  {
+    kind: 'sapling',
+    size: [1.4, 3.2],
+    layout: 'group',
+    cap: 'cover',
+    wind: false,
+    shadow: true,
+    reach: 1,
+  },
+  {
     kind: 'pebble',
     size: [0.14, 0.38],
-    habitat: 'road',
-    density: 36,
+    layout: 'scatter',
     cap: 'cover',
     wind: false,
     shadow: false,
@@ -196,8 +207,7 @@ export const undergrowth: UndergrowthDef[] = [
   {
     kind: 'log',
     size: [3, 6],
-    habitat: 'forest',
-    density: 0.08,
+    layout: 'scatter',
     cap: 'cover',
     wind: false,
     shadow: true,
@@ -206,8 +216,7 @@ export const undergrowth: UndergrowthDef[] = [
   {
     kind: 'stump',
     size: [0.5, 0.9],
-    habitat: 'forest',
-    density: 0.16,
+    layout: 'scatter',
     cap: 'cover',
     wind: false,
     shadow: true,
@@ -215,8 +224,12 @@ export const undergrowth: UndergrowthDef[] = [
   },
 ];
 
-/** Flower patches: noise scale (m) and threshold (higher = fewer, tighter patches). */
+/** Pebbles on and beside the trails (per 100 m² on the band). */
+export const roadPebbles = 36;
+
+/** Flower patches and shrub groups: noise scales (m) and thresholds (higher = tighter). */
 export const flowerPatches = { scale: 6, threshold: 0.45, colourCell: 14 };
+export const shrubGroups = { scale: 9, threshold: 0.55 };
 
 /**
  * Ecology rules: minimum distance between trees (Poisson disk, m), how strongly forests

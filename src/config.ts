@@ -170,8 +170,8 @@ export const config = {
      * the horizon colour, 63 % at start + V and 95 % at start + 1.7 V (thinner on high peaks).
      * Foggier weather divides both by √fogDensity.
      */
-    fogVisibility: 650,
-    fogStart: 300,
+    fogVisibility: 900,
+    fogStart: 450,
     /**
      * Baked wheel ruts along every trail: centre ±offset m from the spline, depth range (m,
      * tiny: no effect on handling), and the crisp ribbons drawn near the camera (radius,
@@ -349,6 +349,19 @@ export const config = {
     trailDistance: 9200,
     time: 'day' as const,
     weather: 'clear' as const,
+    /**
+     * Worst-case richness spots (`?shot=richness&spot=N`): zones that used to look bland,
+     * as a main-trail distance (m), a lateral offset off the trail (m, + = right of the
+     * direction of travel) and a name. Camera: default chase, facing down the trail.
+     */
+    spots: [
+      { name: 'steep-meadow-1200', s: 4500, lateral: 16 },
+      { name: 'dry-slope-1340', s: 3300, lateral: -22 },
+      { name: 'scree-edge-1360', s: 3300, lateral: 26 },
+      { name: 'tree-line-1040', s: 5700, lateral: 22 },
+      { name: 'steep-meadow-930', s: 6300, lateral: -20 },
+      { name: 'steep-slope-590', s: 9900, lateral: 22 },
+    ] as { name: string; s: number; lateral: number }[],
   },
 
   /** Feature flags: toggle whole features without touching code. */

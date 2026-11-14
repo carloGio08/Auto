@@ -2,6 +2,7 @@ import { Simplex2 } from '../math/noise';
 import { clamp, smoothstep } from '../math/util';
 import type { PaletteKey, SurfaceId } from '../data/types';
 import type { Mountain } from './mountain';
+import { ecology } from '../data/vegetation';
 
 /** Terrain materials, each a ramp of the palette. */
 export const MATERIALS = [
@@ -94,7 +95,12 @@ export class BiomeModel {
   /** Forest density at the last point (0..1). */
   forest = 0;
 
+  private readonly cluster: Simplex2;
+  /** Cluster noise at the last forestDensity() point (−1..1). */
+  clusterValue = 0;
+
   constructor(private readonly mountain: Mountain) {
+    this.cluster = new Simplex2(mountain.def.seed ^ 0x7ee5);
     this.noise = new Simplex2(mountain.def.seed ^ 0x3b10);
     this.patch = new Simplex2(mountain.def.seed ^ 0x9e37);
   }
@@ -136,7 +142,12 @@ export class BiomeModel {
     const wet = 0.65 + 0.5 * moisture;
     const n = this.noise.fbm(x / 520 + 3.3, z / 520 - 1.7, 3);
     const clearings = smoothstep(-0.3, 0.3, n);
-    return clamp(alt * steep * flat * wet * clearings, 0, 1);
+    // Woods and glades: the same low-frequency cluster noise the tree placement uses, so the
+    // forest-floor colour only appears where trees actually stand (no dark floor in glades).
+    const cl = this.cluster.fbm(x / ecology.clusterScale, z / ecology.clusterScale, 2);
+    const woods = smoothstep(-0.35, 0.25, cl) * (0.75 + 0.5 * Math.max(0, cl));
+    this.clusterValue = cl;
+    return clamp(alt * steep * flat * wet * clearings * woods, 0, 1);
   }
 
   /**
@@ -145,6 +156,7 @@ export class BiomeModel {
    */
   weights(p: BiomePoint, out: Float32Array): Float32Array {
     out.fill(0);
+    this.clusterValue = 0;
     const m = this.mountain;
     const def = m.def;
     const b = def.biomes;
@@ -178,22 +190,30 @@ export class BiomeModel {
 
     // Rock: steep faces, rugged crests (convex) up high.
     const crest = Math.max(0, -cv) * smoothstep(b.rockLine - 250, b.rockLine + 50, a);
+    // Steep meadows stay green: bare rock on cliffs (> ~35°), as patches on steep slopes
+    // (outcrop zones, ~50 m), on rugged ground and on crests.
+    const rockPatch = smoothstep(0.35, 0.75, this.patch.noise(x / 48 + 13, z / 48 - 5));
     let rock =
-      smoothstep(0.42, 1.05, slope) +
-      rough * 0.6 * smoothstep(0.3, 0.55, slope) +
+      smoothstep(0.7, 1.15, slope) +
+      rockPatch * 0.5 * smoothstep(0.45, 0.8, slope) +
+      rough * 0.6 * smoothstep(0.45, 0.8, slope) +
       crest * 0.45 * smoothstep(0.15, 0.35, slope);
-    rock = clamp(rock, 0, 1.2) * (1 - snowAll * 0.75);
-    const lightFrac = clamp(0.25 + 0.6 * smoothstep(b.treeLine, b.snowLine, a) - cv * 0.3, 0, 1);
+    // Trail cuts and fills are fresh soil and grass, not rock (they carry no rock props).
+    rock = clamp(rock, 0, 1.2) * (1 - snowAll * 0.75) * smoothstep(3, 12, p.roadEdge);
+    const lightFrac = clamp(0.55 + 0.4 * smoothstep(b.treeLine, b.snowLine, a) - cv * 0.25, 0, 1);
     out[Mat.RockLight] = rock * lightFrac;
     out[Mat.RockDark] = rock * (1 - lightFrac);
     out[Mat.SnowRock] = rock * Math.max(0, 1 - Math.abs(a - sn) / 160) * 0.9;
 
     // Scree aprons: concave, moderately steep, above the forest.
+    // Scree aprons: concave or rugged ground at the foot of rock, above the forest (not
+    // whole meadow slopes).
     out[Mat.Scree] =
       smoothstep(0.3, 0.52, slope) *
       (1 - smoothstep(0.8, 1.0, slope)) *
-      smoothstep(b.treeLine - 180, b.treeLine + 60, a) *
-      clamp(0.3 + Math.max(0, cv) * 0.8 + rough * 0.4, 0, 1.2) *
+      smoothstep(b.treeLine - 20, b.treeLine + 160, a) *
+      clamp(Math.max(0, cv) * 1.3 + rough * 0.7 - 0.12, 0, 1.2) *
+      smoothstep(-0.15, 0.35, this.noise.noise(x / 140 + 7, z / 140 - 2)) *
       (1 - snowAll);
 
     // Vegetation fills what is left.
@@ -202,14 +222,29 @@ export class BiomeModel {
     const veg = Math.max(0, 1 - used) * (1 - shore);
     if (veg > 0) {
       const alpine = smoothstep(b.treeLine - 60, b.rockLine - 40, a);
-      out[Mat.RockGrass] = veg * smoothstep(b.rockLine - 180, b.rockLine + 60, a) * 0.55;
+      // Olive rocky grass: up high, and in patches on steep slopes.
+      out[Mat.RockGrass] =
+        veg *
+        (smoothstep(b.rockLine - 180, b.rockLine + 60, a) * 0.55 +
+          smoothstep(0.3, 0.6, slope) *
+            smoothstep(0.1, 0.5, this.patch.noise(x / 27 - 6, z / 27 + 2)) *
+            0.5);
       const dryN = 0.5 + 0.5 * this.patch.noise(x / 330 - 2, z / 330 + 6);
+      // Dry grass: alpine, in large patches, mid-scale patches (~35 m) and bands that follow
+      // the contour lines on slopes (sunnier, drier terraces between greener ones).
+      const midN = 0.5 + 0.5 * this.patch.noise(x / 36 + 3.1, z / 36 - 8.4);
+      const band =
+        smoothstep(0.15, 0.35, slope) *
+        (0.5 + 0.5 * Math.sin((h + 6 * this.patch.noise(x / 60, z / 60)) * 0.7));
+      const dryK = 0.25 + 0.5 * dryN + 0.35 * midN + 0.3 * band;
       out[Mat.DryGrass] =
-        veg * clamp(alpine * (0.35 + 0.65 * dryN) + Math.max(0, -cv) * 0.3, 0, 1) * (1 - wet);
+        veg * clamp(alpine * dryK * 0.8 + Math.max(0, -cv) * 0.3, 0, 1) * (1 - wet);
       const forest = this.forestDensity(x, z, h, slope, wet);
       this.forest = forest;
-      out[Mat.Forest] = veg * forest * forest;
-      out[Mat.Undergrowth] = veg * forest * (1 - forest) * 1.4;
+      // Forest floor only where trees can stand: not on the trail cuts and fills.
+      const nearTrail = smoothstep(2, 10, p.roadEdge);
+      out[Mat.Forest] = veg * forest * forest * nearTrail;
+      out[Mat.Undergrowth] = veg * forest * (1 - forest) * 0.9 * nearTrail;
       // Flowering meadows: gentle ground, mid altitude, in patches.
       const meadow =
         (1 - smoothstep(0.12, 0.3, slope)) *
@@ -223,7 +258,11 @@ export class BiomeModel {
         (1 - smoothstep(0.05, 0.14, slope)) *
         (a < b.treeLine ? 0.7 : 0);
       // Bare soil on steep grassy slopes.
-      const soil = smoothstep(0.42, 0.6, slope) * (1 - smoothstep(0.6, 0.8, slope)) * 0.35;
+      const soil =
+        smoothstep(0.35, 0.55, slope) *
+        (1 - smoothstep(0.75, 0.95, slope)) *
+        smoothstep(0.15, 0.55, this.patch.noise(x / 22 + 4, z / 22 + 9)) *
+        0.45;
       let taken = 0;
       for (let i = Mat.RockGrass; i < Mat.Count; i++) if (i !== Mat.Grass) taken += out[i];
       out[Mat.Earth] = veg * soil;

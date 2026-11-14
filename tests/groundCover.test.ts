@@ -22,7 +22,7 @@ for (let s = 600; s < road.main.length - 200; s += 400) {
   const p = road.pointAt(s, createRoadPoint());
   trailTiles.push([Math.floor(p.x / T), Math.floor(p.z / T)]);
 }
-const tiles = trailTiles.map(([tx, tz]) => placeCover(course, tx, tz, T, 1));
+const tiles = trailTiles.map(([tx, tz]) => placeCover(course, tx, tz, T, 1).items);
 const kindOf = (k: number): string => undergrowth[k].kind;
 
 describe('ground cover and boulders', () => {
@@ -67,8 +67,8 @@ describe('ground cover and boulders', () => {
         counts[n] = (counts[n] ?? 0) + 1;
         if (n.startsWith('flower')) flowers.push([d[k + 1], d[k + 3]]);
       }
-    expect(counts.grass).toBeGreaterThan(counts.flowerY + counts.flowerR);
-    for (const f of ['flowerY', 'flowerR', 'flowerP', 'flowerW'])
+    expect(counts.grass).toBeGreaterThan(counts.flowerY + counts.flowerW);
+    for (const f of ['flowerY', 'flowerW', 'flowerK', 'flowerP', 'flowerB'])
       expect(counts[f]).toBeGreaterThan(20);
     // Clustered: most flowers have another flower within 2 m.
     let close = 0;
@@ -112,7 +112,7 @@ describe('ground cover and boulders', () => {
       return out;
     };
     const g = new PropGeometry(palette);
-    for (const u of undergrowth)
+    for (const u of undergrowth.filter((v) => v.kind !== 'sapling'))
       for (const [r, gg, b] of colours(g.undergrowth(u.kind)))
         expect(isPalette(r, gg, b), u.kind).toBe(true);
     for (const v of [0, 1])

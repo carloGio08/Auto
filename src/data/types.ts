@@ -180,6 +180,7 @@ export type PaletteKey =
   | 'grass'
   | 'flowers'
   | 'blossom'
+  | 'outcrop'
   | 'undergrowth'
   | 'forest'
   | 'moss'

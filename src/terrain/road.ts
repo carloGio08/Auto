@@ -305,7 +305,7 @@ export class Road {
     const ds = SPACING;
     const raw = new Float32Array(count);
     for (let i = 0; i < count; i++)
-      raw[i] = mountain.heightNoWater(this.x[start + i], this.z[start + i]);
+      raw[i] = mountain.heightMacro(this.x[start + i], this.z[start + i]);
     const smooth = (src: Float32Array, half: number): Float32Array => {
       const out = new Float32Array(count);
       for (let i = 0; i < count; i++) {
@@ -510,8 +510,8 @@ export class Road {
       // Downhill side: compare the natural ground 8 m to the left and right.
       const nx = this.tz[g];
       const nz = -this.tx[g];
-      const hl = mountain.heightNoWater(this.x[g] + nx * 8, this.z[g] + nz * 8);
-      const hr = mountain.heightNoWater(this.x[g] - nx * 8, this.z[g] - nz * 8);
+      const hl = mountain.heightMacro(this.x[g] + nx * 8, this.z[g] + nz * 8);
+      const hr = mountain.heightMacro(this.x[g] - nx * 8, this.z[g] - nz * 8);
       const side = hl < hr ? 1 : -1;
       const len = 18;
       const ramp = 8;
