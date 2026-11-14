@@ -33,6 +33,8 @@ export interface TerrainMeshOptions {
   lod0Radius: number;
   /** Triangles drawn at most; the LOD rings shrink to respect it. */
   triangleBudget: number;
+  /** Largest number of cells per patch side (smaller patches waste fewer triangles). */
+  maxPatchCells?: number;
 }
 
 /**
@@ -42,10 +44,11 @@ export interface TerrainMeshOptions {
 export function lodLayout(
   lod0Cell: number,
   minRoot: number,
+  maxN = 96,
 ): { depth: number; n: number; root: number } {
   for (let depth = 4; depth <= 10; depth++) {
     const n = Math.ceil(minRoot / (lod0Cell * (1 << depth)));
-    if (n <= 96)
+    if (n <= maxN)
       return { depth, n: Math.max(16, n), root: Math.max(16, n) * lod0Cell * (1 << depth) };
   }
   return { depth: 10, n: 96, root: 96 * lod0Cell * 1024 };
@@ -70,8 +73,16 @@ export class TerrainMesh {
   private readonly shown = new Set<QuadNode>();
   private readonly desired: QuadNode[] = [];
   private time = 0;
-  /** LOD ring scale (1 = nominal, lower when over the triangle budget). */
-  lodScale = 1;
+  /**
+   * Ring scales under the triangle budget: the far rings (≥ 6 m faces) shrink first, the
+   * near ones (LOD0 and LOD1) only when the far ones are at their minimum.
+   */
+  farScale = 1;
+  nearScale = 1;
+  /** Scale of the LOD0 ring (1 = nominal). */
+  get lodScale(): number {
+    return this.nearScale;
+  }
   visibleTriangles = 0;
   builtTriangles = 0;
   private readonly rings: [number, number][];
@@ -84,7 +95,11 @@ export class TerrainMesh {
   ) {
     this.group.name = 'terrain';
     this.material = new MeshLambertMaterial({ vertexColors: true });
-    const layout = lodLayout(opts.lod0Cell, terrain.mountain.def.halfSize * 2.5);
+    const layout = lodLayout(
+      opts.lod0Cell,
+      terrain.mountain.def.halfSize * 2.5,
+      opts.maxPatchCells,
+    );
     this.rootSize = layout.root;
     this.rootMin = -layout.root / 2;
     this.maxDepth = layout.depth;
@@ -101,9 +116,11 @@ export class TerrainMesh {
 
   /** Finest face size (m) wanted at a distance. */
   targetCell(d: number): number {
-    const k = this.lodScale;
-    for (const [r, c] of this.rings) if (d < r * k) return c;
-    return this.rings[this.rings.length - 1][1];
+    const rings = this.rings;
+    for (let i = 0; i < rings.length; i++)
+      if (d < rings[i][0] * (i < 2 ? this.nearScale : this.farScale * this.nearScale))
+        return rings[i][1];
+    return rings[rings.length - 1][1];
   }
 
   /** Face size (m) of the finest level. */
@@ -290,8 +307,13 @@ export class TerrainMesh {
     this.visibleTriangles = tris;
     // Triangle budget: shrink the rings when over, relax them back when well under.
     const budget = this.opts.triangleBudget;
-    if (tris > budget) this.lodScale = Math.max(0.35, this.lodScale * 0.98);
-    else if (tris < budget * 0.8) this.lodScale = Math.min(1, this.lodScale * 1.005);
+    if (tris > budget) {
+      if (this.farScale > 0.4) this.farScale = Math.max(0.4, this.farScale * 0.98);
+      else this.nearScale = Math.max(0.45, this.nearScale * 0.98);
+    } else if (tris < budget * 0.8) {
+      if (this.nearScale < 1) this.nearScale = Math.min(1, this.nearScale * 1.005);
+      else this.farScale = Math.min(1, this.farScale * 1.005);
+    }
     // Ask for the closest missing patches (a few in flight at a time).
     missing.sort(
       (a, b) =>

@@ -104,6 +104,14 @@ export class BiomeModel {
     return 55 * this.noise.fbm(x / 900, z / 900, 2) + 18 * Math.sin(x / 240 + z / 610);
   }
 
+  /** Small tone patches (−1..1, ~12–40 m). */
+  fineNoise(x: number, z: number): number {
+    return (
+      0.6 * this.patch.noise(x / 38 - 4.2, z / 38 + 1.3) +
+      0.4 * this.patch.noise(x / 14, z / 14 + 7.7)
+    );
+  }
+
   /** Large patches (−1..1) used to vary tones and meadows (scale ~200 m and ~60 m). */
   patchNoise(x: number, z: number): number {
     return 0.7 * this.patch.noise(x / 210, z / 210) + 0.3 * this.patch.noise(x / 63 + 9.1, z / 63);
@@ -171,7 +179,7 @@ export class BiomeModel {
     // Rock: steep faces, rugged crests (convex) up high.
     const crest = Math.max(0, -cv) * smoothstep(b.rockLine - 250, b.rockLine + 50, a);
     let rock =
-      smoothstep(0.58, 0.9, slope) +
+      smoothstep(0.42, 1.05, slope) +
       rough * 0.6 * smoothstep(0.3, 0.55, slope) +
       crest * 0.45 * smoothstep(0.15, 0.35, slope);
     rock = clamp(rock, 0, 1.2) * (1 - snowAll * 0.75);

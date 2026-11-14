@@ -157,6 +157,10 @@ export const config = {
       lod4Cell: 48,
     },
     lodTolerance: 1.45,
+    /** Deterministic XZ jitter of terrain vertices (fraction of a cell): breaks stripes. */
+    terrainJitter: 0.25,
+    /** Baked ambient occlusion: darkening strength (0 = off) and ring radii (m). */
+    ao: { strength: 0.32, radii: [6, 18] as number[] },
     /** Max ms per frame spent building terrain patches on the main thread (no worker). */
     chunkBuildBudgetMs: 4,
     /** Props are generated and instanced per cell of this size (m). */
@@ -176,9 +180,11 @@ export const config = {
     presets: {
       low: {
         /** Terrain LOD0: face size (m), ring radius (m) and triangle budget. */
-        terrainCell: 2.5,
+        terrainCell: 2,
         lod0Radius: 160,
-        triangleBudget: 600_000,
+        triangleBudget: 650_000,
+        /** Cells per patch side at most (smaller patches: less waste, more draw calls). */
+        patchCells: 48,
         pixelRatioCap: 1,
         shadows: false,
         shadowMapSize: 512,
@@ -191,9 +197,10 @@ export const config = {
       },
       medium: {
         /** Terrain LOD0: face size (m), ring radius (m) and triangle budget. */
-        terrainCell: 1.5,
+        terrainCell: 1.25,
         lod0Radius: 180,
-        triangleBudget: 1_000_000,
+        triangleBudget: 1_100_000,
+        patchCells: 64,
         pixelRatioCap: 1.5,
         shadows: true,
         shadowMapSize: 1024,
@@ -206,9 +213,10 @@ export const config = {
       },
       high: {
         /** Terrain LOD0: face size (m), ring radius (m) and triangle budget. */
-        terrainCell: 1,
+        terrainCell: 0.85,
         lod0Radius: 200,
-        triangleBudget: 1_500_000,
+        triangleBudget: 1_800_000,
+        patchCells: 96,
         pixelRatioCap: 2,
         shadows: true,
         shadowMapSize: 2048,

@@ -1,6 +1,6 @@
 import type { ResolvedPalette } from '../data/palette';
 import type { PaletteKey } from '../data/types';
-import { hash2 } from '../math/rng';
+import { config } from '../config';
 import { Mat, MATERIALS } from './biome';
 import type { Terrain, TrailGround } from './terrain';
 
@@ -76,14 +76,12 @@ export class TerrainColorer {
   private readonly w = new Float32Array(Mat.Count);
   private readonly ramps: Float32Array[];
   private readonly c = new Float32Array(3);
-  private readonly seed: number;
 
   constructor(
     private readonly terrain: Terrain,
     private readonly palette: PatchPalette,
   ) {
     this.ramps = MATERIALS.map((m) => palette[m]);
-    this.seed = terrain.mountain.def.seed & 0xffff;
   }
 
   /** Adds `k` × the tone at t (0..1, continuous) of a ramp to the accumulator. */
@@ -115,8 +113,19 @@ export class TerrainColorer {
       edge = t.bandEdge(road.halfWidth[g], v.s, latB, v.x);
     }
     const roadEdge = g >= 0 ? Math.abs(latB) - edge : 1e4;
-    const w = bio.weights({ x: v.x, z: v.z, h: v.h, ny: v.ny, nz: v.nz, roadEdge }, this.w);
-    const P = bio.patchNoise(v.x, v.z);
+    // Materials use the ground slope over ±3 m, the same at every LOD: no flicker between
+    // neighbouring vertices from the fine detail, no colour pop between LODs.
+    const e = 3;
+    const gx = t.height(v.x + e, v.z) - t.height(v.x - e, v.z);
+    const gz = t.height(v.x, v.z + e) - t.height(v.x, v.z - e);
+    const gl = Math.hypot(gx, 2 * e, gz);
+    const w = bio.weights(
+      { x: v.x, z: v.z, h: v.h, ny: (2 * e) / gl, nz: -gz / gl, roadEdge },
+      this.w,
+    );
+    // Tone patches: large (~200 m, ~60 m) and small (~10–40 m), all low frequency, so
+    // neighbouring faces only step to adjacent tones of a ramp.
+    const P = bio.patchNoise(v.x, v.z) + 0.35 * bio.fineNoise(v.x, v.z);
     const cv = bio.curvature;
     const wet = bio.moisture;
     const c = this.c;
@@ -126,15 +135,6 @@ export class TerrainColorer {
       if (k < 0.004) continue;
       const tone = 0.5 + 0.36 * P + BIAS[i] - 0.18 * cv - (i >= Mat.DryGrass ? 0.2 * wet : 0);
       this.add(this.ramps[i], tone, k);
-    }
-    // Flower specks: yellow and pink accents in flowering meadows.
-    if (w[Mat.Flowers] > 0.15) {
-      const hsh = hash2(Math.floor(v.x * 1.3), Math.floor(v.z * 1.3), this.seed + 5);
-      if (hsh < 0.16 * w[Mat.Flowers]) {
-        const fl = this.ramps[Mat.Flowers];
-        const acc = hsh < 0.08 * w[Mat.Flowers] ? 2 : 3;
-        for (let j = 0; j < 3; j++) c[j] = c[j] * 0.45 + fl[acc * 3 + j] * 0.55;
-      }
     }
     // The trail: soft irregular edge, then its own surface.
     if (g >= 0) {
@@ -153,9 +153,36 @@ export class TerrainColorer {
         }
       }
     }
-    out[o] = c[0];
-    out[o + 1] = c[1];
-    out[o + 2] = c[2];
+    // Baked ambient occlusion: hollows, the foot of slopes and the trail edges are darker.
+    const ao = this.occlusion(v.x, v.z, roadEdge);
+    out[o] = c[0] * ao;
+    out[o + 1] = c[1] * ao;
+    out[o + 2] = c[2] * ao;
+  }
+
+  /**
+   * Ambient occlusion factor in [1 − strength, 1]: compares the height with the mean of two
+   * rings of the heightmap (6 samples each) – ground lower than its surroundings sees less
+   * sky – and darkens the 1–2 m beside the worn band of trails.
+   */
+  occlusion(x: number, z: number, roadEdge: number): number {
+    const ao = config.world.ao;
+    if (ao.strength <= 0) return 1;
+    const f = this.terrain.mountain.field;
+    const h = f.sample(x, z);
+    let occ = 0;
+    for (let r = 0; r < ao.radii.length; r++) {
+      const R = ao.radii[r];
+      let sum = 0;
+      for (let k = 0; k < 6; k++) sum += f.sample(x + RING_X[k] * R, z + RING_Z[k] * R);
+      occ += Math.max(0, sum / 6 - h) / R;
+    }
+    occ *= 1.6;
+    if (roadEdge > -0.6 && roadEdge < 1.6) {
+      const u = (roadEdge - 0.5) / 1.1;
+      occ += 0.45 * (1 - u * u);
+    }
+    return 1 - ao.strength * Math.min(1, occ);
   }
 
   private trailColor(kind: TrailGround, v: VertexInfo, g: number, P: number): void {
@@ -163,18 +190,16 @@ export class TerrainColorer {
     // The worn surface changes tone every few tens of metres.
     const along =
       0.5 + 0.22 * Math.sin(v.s / 23 + v.trail * 1.7) + 0.14 * Math.sin(v.s / 7.3) + 0.12 * P;
-    const stone = hash2(Math.floor(v.x * 2.1), Math.floor(v.z * 2.1), this.seed + 9) < 0.012;
     switch (kind) {
       case 'dirt':
-        this.add(pal.earth, along + 0.1, stone ? 0.5 : 1);
-        if (stone) this.add(pal.rockLight, 0.5, 0.5);
+        this.add(pal.earth, along + 0.1, 1);
         break;
       case 'rut':
         this.add(pal.earth, along - 0.35, 1);
         break;
       case 'gravel':
         this.add(pal.scree, along + 0.1, 0.7);
-        this.add(stone ? pal.rockDark : pal.rockLight, 0.6, 0.3);
+        this.add(pal.rockLight, 0.6, 0.3);
         break;
       case 'grass':
         this.add(pal.dryGrass, along, 0.5);
@@ -197,6 +222,9 @@ export class TerrainColorer {
     }
   }
 }
+
+const RING_X = Array.from({ length: 6 }, (_, k) => Math.cos((k * Math.PI) / 3));
+const RING_Z = Array.from({ length: 6 }, (_, k) => Math.sin((k * Math.PI) / 3));
 
 const smooth = (e0: number, e1: number, x: number): number => {
   const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));

@@ -110,6 +110,7 @@ export class World {
         lod0Cell: this.preset.terrainCell,
         lod0Radius: this.preset.lod0Radius,
         triangleBudget: this.preset.triangleBudget,
+        maxPatchCells: this.preset.patchCells,
       },
       backend,
     );

@@ -12,12 +12,12 @@ export const defaultPalette: Palette = {
   // Snow: sunlit, shaded (blue-grey) and the snow → rock transition.
   snow: ['#cdd8e3', '#dde5ed', '#e9eff4', '#f3f6f9', '#fbfcfd'],
   snowShade: ['#8e9db0', '#a5b4c5', '#bccad8'],
-  snowRock: ['#7e8996', '#97a2ae'],
-  // Rock: light (high crests, convex) and dark (faces, hollows), scree, rock → grass.
-  rockLight: ['#8a8580', '#9b958f', '#aca69f', '#bdb7ae'],
-  rockDark: ['#4f4c4b', '#5d5958', '#6b6765', '#7a7572'],
-  scree: ['#8f877c', '#a1988b', '#b2a99b', '#c4bcad'],
-  rockGrass: ['#7d8460', '#929a6c'],
+  snowRock: ['#8a8984', '#a3a29b'],
+  // Rock: warm greys and ochre, low saturation, in tune with the greens.
+  rockLight: ['#968c79', '#a69b86', '#b5ab95', '#c3baa4'],
+  rockDark: ['#5e574b', '#6d6556', '#7c7362', '#8c826e'],
+  scree: ['#988e7b', '#a89e8a', '#b8ae99', '#c7bea9'],
+  rockGrass: ['#80864f', '#979b5f'],
   // Ground: earth (trails, bare soil), mud, sand.
   earth: ['#6e5038', '#84613f', '#9a744c', '#b0885c', '#c49c6e'],
   mud: ['#4a3a2c', '#5a4532', '#6b533c'],
