@@ -1,4 +1,4 @@
-import { Color, Fog, Scene, Vector3, type Texture } from 'three';
+import { Color, Fog, Scene, Vector3 } from 'three';
 import type { QualityPreset } from '../config';
 import {
   defaultPalette,
@@ -11,7 +11,6 @@ import type { TimeOfDayDef, WeatherDef } from '../data/types';
 import type { I18nKey } from '../i18n/en';
 import type { Course } from '../terrain/course';
 import { TerrainMesh } from '../terrain/terrainMesh';
-import { createParticleTexture } from '../effects/sprite';
 import { CollisionWorld } from './colliders';
 import { Lighting } from './lighting';
 import { Props } from './props';
@@ -45,7 +44,6 @@ export class World {
   readonly weather: WeatherDef;
   readonly palette: ResolvedPalette;
   preset: QualityPreset;
-  readonly particleTexture: Texture;
   terrainMesh!: TerrainMesh;
   props!: Props;
   structures!: Structures;
@@ -66,7 +64,6 @@ export class World {
       timeThemes[this.time.id],
       weatherThemes[this.weather.id],
     );
-    this.particleTexture = createParticleTexture();
     this.fogColor = new Color(this.time.fogColor).lerp(
       new Color('#a7b0ba'),
       this.weather.overcast * 0.6,
@@ -114,10 +111,10 @@ export class World {
     this.lighting.follow(new Vector3(st.x, st.y, st.z));
     if (this.weather.snowfall > 0) {
       this.snow = new Snowfall(
-        Math.round(this.preset.particles * 0.9 * this.weather.snowfall),
-        this.particleTexture,
+        Math.round(this.preset.particles * 0.5 * this.weather.snowfall),
+        this.palette.snow[0],
       );
-      this.scene.add(this.snow.points);
+      this.scene.add(this.snow.mesh);
     }
     yield { stage: 'loading.vehicle', progress: 0.94 };
   }
@@ -160,7 +157,6 @@ export class World {
     this.water?.dispose();
     this.snow?.dispose();
     this.lighting?.dispose();
-    this.particleTexture.dispose();
     this.colliders.clear();
     this.scene.clear();
   }

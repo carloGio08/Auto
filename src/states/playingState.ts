@@ -61,7 +61,10 @@ export class PlayingState implements GameState<StateId> {
     );
     // Quality changes (settings or automatic downgrade) apply to the running world.
     this.offs.push(
-      ctx.renderer.onQualityChange(() => this.session.world.setQuality(ctx.renderer.preset)),
+      ctx.renderer.onQualityChange(() => {
+        this.session.world.setQuality(ctx.renderer.preset);
+        this.session.effects.setQuality(ctx.renderer.preset);
+      }),
     );
     document.addEventListener('visibilitychange', this.onVisibility);
     window.addEventListener('resize', this.onResize);
