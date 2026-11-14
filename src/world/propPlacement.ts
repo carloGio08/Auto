@@ -400,7 +400,7 @@ export function placeCell(
       if (blocked(x, z, 3)) continue;
       const edge = at(x, z, 5);
       const slope = at(x, z, 4);
-      const nearTrail = edge > 3 && edge < 14 ? 0.11 : 0;
+      const nearTrail = edge > 3 && edge < 14 ? 0.22 : 0;
       const onSlope = slope > 0.25 && slope < 0.75 ? 0.05 : 0;
       if (roll >= (nearTrail + onSlope) * def.props.rocks * Math.max(0.5, density)) continue;
       const gr = new Rng(Math.floor(seedG * 7919) ^ def.seed);

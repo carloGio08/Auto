@@ -54,12 +54,27 @@ async function shot(preset, device) {
   await page.waitForFunction(() => document.documentElement.dataset.benchmark === 'running');
   // Let the terrain, props and shadows stream in around the parked jeep.
   await page.waitForTimeout(Number(process.env.SETTLE_MS ?? 12000));
+  const stats = await page.evaluate(() => {
+    const md = window.__md;
+    const w = md.session.world;
+    const r = md.renderInfo();
+    return {
+      calls: r.calls,
+      triangles: r.triangles,
+      trees: w.props.visibleTrees,
+      grass: w.cover.counts.grass,
+      flowers: w.cover.counts.flowers,
+      cover: w.cover.counts.cover,
+    };
+  });
+  report.push({ preset, device, ...stats });
   const file = `${OUT}/benchmark-${preset}-${device}.png`.replace(/\/\//g, '/');
   await page.screenshot({ path: file, timeout: 120000 });
   console.log(`  ${file} (${((Date.now() - t0) / 1000).toFixed(0)} s)`);
   await context.close();
 }
 
+const report = [];
 await mkdir(OUT, { recursive: true });
 try {
   for (const p of PRESETS) for (const dv of devices) await shot(p, dv);
@@ -71,4 +86,5 @@ if (errors.length) {
   console.error(`Failed with ${errors.length} error(s):\n${errors.join('\n')}`);
   process.exit(1);
 }
+console.table(report);
 console.log('Benchmark screenshots done.');

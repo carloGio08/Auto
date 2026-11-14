@@ -257,7 +257,7 @@ export class Props {
     return {
       near: p.treeNear * this.nearScale,
       mid: Math.max(p.treeNear * this.nearScale + 80, p.propDistance * this.midScale),
-      far: p.canopyDistance,
+      far: p.canopyDistance * (this.degrade ? 0.65 : 1),
       col: config.world.colliderRadius,
     };
   }
@@ -509,7 +509,7 @@ export class Props {
     const r = this.ranges;
     const counts = this.mid.map(() => 0);
     // Hard cap: the middle layer gets what the detailed trees leave of the preset limit.
-    const cap = Math.max(0, this.preset.treeLimit - this.nearTrees);
+    const cap = Math.max(0, this.treeLimit - this.nearTrees);
     let total = 0;
     const midR = r.mid + 60;
     for (const cell of this.cells.values()) {
@@ -644,7 +644,7 @@ export class Props {
       this.lastZ = camZ;
       this.globalDirty = false;
       // Tree limit: shrink the middle range when over, relax it when well under.
-      const limit = this.preset.treeLimit;
+      const limit = this.treeLimit;
       if (this.visibleTrees > limit) {
         if (this.midScale > 0.35) this.midScale = Math.max(0.35, this.midScale * 0.9);
         else this.nearScale = Math.max(0.5, this.nearScale * 0.92);
@@ -735,6 +735,19 @@ export class Props {
     this.compose(t.x, t.y, t.z, t.width * k, t.height * k, r);
     slot.mesh.setMatrixAt(slot.slot, m);
     slot.mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  private degrade = 0;
+
+  /** Weak devices: 1 = shorter far forest and fewer trees. */
+  setDegrade(level: number): void {
+    if (level === this.degrade) return;
+    this.degrade = level;
+    this.globalDirty = true;
+  }
+
+  private get treeLimit(): number {
+    return Math.floor(this.preset.treeLimit * (this.degrade ? 0.75 : 1));
   }
 
   setQuality(preset: QualityPreset): void {

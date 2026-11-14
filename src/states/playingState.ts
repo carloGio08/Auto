@@ -67,6 +67,7 @@ export class PlayingState implements GameState<StateId> {
       const p = this.session.course.road.pointAt(config.benchmark.trailDistance, createRoadPoint());
       this.session.teleport(p.x, p.z, Math.atan2(p.tx, p.tz));
       this.session.camera.mode = 'chase';
+      this.session.camera.snap(this.session.vehicle, this.session.course.terrain);
       this.frozen = true;
       document.documentElement.dataset.benchmark = 'running';
     } else this.session.start(!query.has('autopilot') && !query.has('e2e'));
@@ -89,6 +90,9 @@ export class PlayingState implements GameState<StateId> {
         ({ impact }) => ctx.save.data.settings.haptics && impact > 3 && vibrate(25),
       ),
     );
+    // Fine degradation steps of the automatic quality (weak devices).
+    this.offs.push(ctx.renderer.onDegrade((level) => this.session.world.setDegrade(level)));
+    if (ctx.renderer.degrade) this.session.world.setDegrade(ctx.renderer.degrade);
     // Quality changes (settings or automatic downgrade) apply to the running world.
     this.offs.push(
       ctx.renderer.onQualityChange(() => {
@@ -105,6 +109,8 @@ export class PlayingState implements GameState<StateId> {
       const s = this.session;
       (window as unknown as { __md?: object }).__md = {
         session: s,
+        /** Renderer statistics of the last frame (draw calls, triangles). */
+        renderInfo: () => ({ ...ctx.renderer.gl.info.render }),
         /** Drops the jeep inside the base zone: the run finishes on the next step. */
         finish: () => s.teleport(s.course.base.x, s.course.base.z, 0),
         /** Moves the jeep to a main-trail position (metres from the summit). */

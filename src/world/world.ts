@@ -266,6 +266,18 @@ export class World {
     return this;
   }
 
+  /**
+   * Fine degradation within the preset (weak devices, see Renderer.degrade): 1 no wind,
+   * 2 grass and flowers × 0.6, 3 far forest (canopy distance × 0.65, tree limit × 0.75),
+   * 4 shadow map halved, never below 1024.
+   */
+  setDegrade(level: number): void {
+    this.cover.setDegrade(level);
+    this.props.setDegrade(level >= 3 ? 1 : 0);
+    const size = this.preset.shadowMapSize;
+    this.lighting.setShadows(this.preset.shadows, level >= 4 ? Math.max(1024, size / 2) : size);
+  }
+
   setQuality(preset: QualityPreset): void {
     this.preset = preset;
     this.applyFog();

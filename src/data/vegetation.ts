@@ -185,9 +185,9 @@ export const undergrowth: UndergrowthDef[] = [
   },
   {
     kind: 'pebble',
-    size: [0.1, 0.28],
+    size: [0.14, 0.38],
     habitat: 'road',
-    density: 16,
+    density: 36,
     cap: 'cover',
     wind: false,
     shadow: false,
@@ -216,7 +216,7 @@ export const undergrowth: UndergrowthDef[] = [
 ];
 
 /** Flower patches: noise scale (m) and threshold (higher = fewer, tighter patches). */
-export const flowerPatches = { scale: 6, threshold: 0.5, colourCell: 14 };
+export const flowerPatches = { scale: 6, threshold: 0.45, colourCell: 14 };
 
 /**
  * Ecology rules: minimum distance between trees (Poisson disk, m), how strongly forests

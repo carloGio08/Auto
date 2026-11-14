@@ -91,6 +91,11 @@ describe('ground cover and boulders', () => {
       expect(gc.counts.flowers).toBeLessThanOrEqual(preset.flowerLimit);
       expect(gc.counts.cover).toBeLessThanOrEqual(preset.coverLimit);
       expect(gc.counts.grass).toBeGreaterThan(200);
+      // Weak devices: no wind, grass and flowers at most 60 % of the caps.
+      gc.setDegrade(2);
+      gc.update(p.x + 100, p.z, 7);
+      expect(gc.counts.grass).toBeLessThanOrEqual(Math.floor(preset.grassLimit * 0.6));
+      expect(gc.counts.flowers).toBeLessThanOrEqual(Math.floor(preset.flowerLimit * 0.6));
       gc.dispose();
     },
     60000,

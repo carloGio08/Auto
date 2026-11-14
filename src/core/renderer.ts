@@ -27,6 +27,14 @@ export class Renderer {
   private slowStreak = 0;
   private fastStreak = 0;
   private readonly listeners = new Set<(id: QualityPresetId) => void>();
+  private readonly degradeListeners = new Set<(level: number) => void>();
+  /**
+   * Fine degradation inside a preset before dropping to the next one (see
+   * World.setDegrade): 1 no wind, 2 thinner grass and flowers, 3 shorter far forest,
+   * 4 smaller shadow map (never below 1024). Dynamic resolution never goes below 0.85.
+   */
+  degrade = 0;
+  static readonly MAX_DEGRADE = 4;
   private readonly autoCeiling: QualityPresetId;
   width = 1;
   height = 1;
@@ -67,7 +75,19 @@ export class Renderer {
     return () => this.listeners.delete(fn);
   }
 
+  onDegrade(fn: (level: number) => void): () => void {
+    this.degradeListeners.add(fn);
+    return () => this.degradeListeners.delete(fn);
+  }
+
+  private setDegrade(level: number): void {
+    if (level === this.degrade) return;
+    this.degrade = level;
+    this.degradeListeners.forEach((l) => l(level));
+  }
+
   applySetting(setting: QualitySetting): void {
+    this.setDegrade(0);
     this.setting = setting;
     this.setPreset(setting === 'auto' ? this.autoCeiling : setting);
     this.scale = 1;
@@ -106,10 +126,12 @@ export class Renderer {
         this.scale = Math.max(dr.minScale, this.scale - 0.1);
         this.resize();
       } else if (this.setting === 'auto' && ++this.slowStreak >= 3) {
+        this.slowStreak = 0;
         const idx = ORDER.indexOf(this.presetId);
-        if (idx > 0) {
-          this.slowStreak = 0;
+        if (this.degrade < Renderer.MAX_DEGRADE) this.setDegrade(this.degrade + 1);
+        else if (idx > 0) {
           this.scale = 0.85;
+          this.setDegrade(0);
           this.setPreset(ORDER[idx - 1]);
         }
       }
@@ -119,11 +141,10 @@ export class Renderer {
         this.scale = Math.min(1, this.scale + 0.05);
         this.resize();
       } else if (this.setting === 'auto' && ++this.fastStreak >= 8) {
+        this.fastStreak = 0;
         const idx = ORDER.indexOf(this.presetId);
-        if (idx < ORDER.indexOf(this.autoCeiling)) {
-          this.fastStreak = 0;
-          this.setPreset(ORDER[idx + 1]);
-        }
+        if (this.degrade > 0) this.setDegrade(this.degrade - 1);
+        else if (idx < ORDER.indexOf(this.autoCeiling)) this.setPreset(ORDER[idx + 1]);
       }
     }
   }

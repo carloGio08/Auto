@@ -143,7 +143,19 @@ export class GroundCover {
 
   private capOf(group: 'grass' | 'flowers' | 'cover'): number {
     const p = this.preset;
-    return group === 'grass' ? p.grassLimit : group === 'flowers' ? p.flowerLimit : p.coverLimit;
+    const thin = this.degrade >= 2 && group !== 'cover' ? 0.6 : 1;
+    const cap =
+      group === 'grass' ? p.grassLimit : group === 'flowers' ? p.flowerLimit : p.coverLimit;
+    return Math.floor(cap * thin);
+  }
+
+  private degrade = 0;
+
+  /** Weak devices: 1 no wind, 2 grass and flowers capped at 60 %. */
+  setDegrade(level: number): void {
+    this.degrade = level;
+    uniforms.uWind.value = this.preset.wind && level < 1 ? 1 : 0;
+    this.dirty = true;
   }
 
   private build(
@@ -296,7 +308,7 @@ export class GroundCover {
 
   setQuality(preset: QualityPreset): void {
     this.preset = preset;
-    uniforms.uWind.value = preset.wind ? 1 : 0;
+    uniforms.uWind.value = preset.wind && this.degrade < 1 ? 1 : 0;
     // Caps may change: rebuild the meshes (geometries and materials are kept).
     const [windMat, stillMat, windDepth, stillDepth] = this.mats;
     for (const im of this.meshes) {
