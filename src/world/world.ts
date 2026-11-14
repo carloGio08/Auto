@@ -11,6 +11,8 @@ import type { TimeOfDayDef, WeatherDef } from '../data/types';
 import type { I18nKey } from '../i18n/en';
 import type { Course } from '../terrain/course';
 import { TerrainMesh } from '../terrain/terrainMesh';
+import { toPatchPalette } from '../terrain/splat';
+import { TerrainService } from '../terrain/terrainService';
 import { CollisionWorld } from './colliders';
 import { Lighting } from './lighting';
 import { Props } from './props';
@@ -24,11 +26,15 @@ export interface WorldOptions {
   time: TimeOfDayDef;
   weather: WeatherDef;
   preset: QualityPreset;
+  /** Builds terrain patches in the worker when given (else on the main thread). */
+  terrain?: TerrainService;
 }
 
 export interface BuildStep {
   stage: I18nKey;
   progress: number;
+  /** Waiting for a worker: nothing more to do this frame. */
+  wait?: boolean;
 }
 
 /**
@@ -53,9 +59,11 @@ export class World {
   snow: Snowfall | null = null;
   readonly fogColor: Color;
   private elapsed = 0;
+  private readonly terrainService: TerrainService | undefined;
 
   constructor(opts: WorldOptions) {
     this.course = opts.course;
+    this.terrainService = opts.terrain;
     this.time = opts.time;
     this.weather = opts.weather;
     this.preset = opts.preset;
@@ -91,10 +99,26 @@ export class World {
     const course = this.course;
     const st = course.start;
     yield { stage: 'loading.terrain', progress: 0.3 };
-    this.terrainMesh = new TerrainMesh(course.terrain, this.palette, this.preset.terrainCells);
+    const pal = toPatchPalette(this.palette);
+    const backend = this.terrainService
+      ? this.terrainService.backend(course, pal)
+      : TerrainService.local(course, pal);
+    this.terrainMesh = new TerrainMesh(
+      course.terrain,
+      pal,
+      {
+        lod0Cell: this.preset.terrainCell,
+        lod0Radius: this.preset.lod0Radius,
+        triangleBudget: this.preset.triangleBudget,
+      },
+      backend,
+    );
     this.scene.add(this.terrainMesh.group);
-    for (const p of this.terrainMesh.prebuild(st.x, st.y + 4, st.z))
-      yield { stage: 'loading.terrain', progress: 0.3 + p * 0.35 };
+    const async = !!this.terrainService && this.async;
+    const gen = async
+      ? this.terrainMesh.prebuildAsync(st.x, st.y + 4, st.z)
+      : this.terrainMesh.prebuild(st.x, st.y + 4, st.z);
+    for (const p of gen) yield { stage: 'loading.terrain', progress: 0.3 + p * 0.35, wait: async };
     yield { stage: 'loading.road', progress: 0.68 };
     this.water = new Water(course, this.palette);
     this.scene.add(this.water.group);
@@ -136,11 +160,16 @@ export class World {
     this.props.prebuild(x, z);
   }
 
+  /** Whether build() waits for the worker (false: everything on the main thread). */
+  private async = true;
+
   /** Builds everything synchronously (menu background, tests). */
   buildNow(): this {
+    this.async = false;
     for (const _ of this.build()) {
       /* drain */
     }
+    this.async = true;
     return this;
   }
 

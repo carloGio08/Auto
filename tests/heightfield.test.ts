@@ -30,22 +30,50 @@ describe.each(defs.map((d) => [d.id, d] as const))('mountain height(x, z): %s', 
     expect(max).toBeGreaterThan(def.summit.height - 60);
   });
 
-  it('respects the slope limit (only a few explicit cliffs and the rim exceed it)', () => {
-    const rng = new Rng(def.seed);
-    let over = 0;
+  it('has the designed mix of slopes: flats, gentle and medium slopes, faces, few walls', () => {
+    const half = def.halfSize * 0.8;
+    const bins = [0, 0, 0, 0];
     let n = 0;
-    const lim = def.maxSlope;
-    for (let i = 0; i < 20000; i++) {
-      const x = rng.range(-half * 0.78, half * 0.78);
-      const z = rng.range(-half * 0.78, half * 0.78);
-      const nearCliff = def.cliffs.some((c) => Math.hypot(x - c.x, z - c.z) < c.length * 0.6);
-      if (nearCliff) continue;
-      const h = m.heightNoWater(x, z);
-      const s = Math.hypot(m.heightNoWater(x + 2, z) - h, m.heightNoWater(x, z + 2) - h) / 2;
-      n++;
-      if (s > lim) over++;
+    for (let x = -half; x < half; x += 37) {
+      for (let z = -half; z < half; z += 37) {
+        if (m.waterLevel(x, z) > m.height(x, z)) continue;
+        const h = m.heightNoWater(x, z);
+        const s = Math.hypot(m.heightNoWater(x + 2, z) - h, m.heightNoWater(x, z + 2) - h) / 2;
+        const deg = (Math.atan(s) * 180) / Math.PI;
+        bins[deg < 8 ? 0 : deg < 25 ? 1 : deg < 38 ? 2 : 3]++;
+        n++;
+      }
     }
-    expect(over / n).toBeLessThan(0.03);
+    const [flat, medium, steep, walls] = bins.map((b) => b / n);
+    // Target: ~25 % flat (<8°), ~45 % gentle/medium (8–25°), ~25 % steep (25–38°), <5 % walls.
+    expect(flat).toBeGreaterThan(0.19);
+    expect(flat).toBeLessThan(0.32);
+    expect(medium).toBeGreaterThan(0.38);
+    expect(medium).toBeLessThan(0.53);
+    expect(steep).toBeGreaterThan(0.18);
+    expect(steep).toBeLessThan(0.34);
+    expect(walls).toBeLessThan(0.05);
+  });
+
+  it('has no spikes: bounded curvature of the natural surface', () => {
+    const rng = new Rng(def.seed ^ 9);
+    let worst = 0;
+    for (let i = 0; i < 20000; i++) {
+      const x = rng.range(-half * 0.8, half * 0.8);
+      const z = rng.range(-half * 0.8, half * 0.8);
+      const e = 1;
+      const c = m.heightNoWater(x, z);
+      const lap =
+        (m.heightNoWater(x + e, z) +
+          m.heightNoWater(x - e, z) +
+          m.heightNoWater(x, z + e) +
+          m.heightNoWater(x, z - e) -
+          4 * c) /
+        (e * e);
+      worst = Math.max(worst, Math.abs(lap));
+    }
+    // A spike or a crease would show as a huge second derivative at 1 m.
+    expect(worst).toBeLessThan(0.25);
   });
 
   it('is continuous (no steps from trail carving, rivers or the lake)', () => {
@@ -65,7 +93,7 @@ describe.each(defs.map((d) => [d.id, d] as const))('mountain height(x, z): %s', 
       for (let s = 60; s < tr.length - 60; s += 29) {
         course.road.pointAt(s, p, ti);
         // Skip bridges and hairpin apexes (the inside of a tight bend has no "across").
-        if (course.road.flags[p.index] & 3) continue;
+        if (course.road.flags[p.index] & 3 || course.road.isBridgeAt(s, 8, ti)) continue;
         const c = terrain.height(p.x, p.z);
         expect(Math.abs(c - p.y)).toBeLessThan(0.5);
         const l = terrain.height(p.x + p.tz * p.halfWidth * 0.8, p.z - p.tx * p.halfWidth * 0.8);

@@ -34,12 +34,13 @@ export class MenuBackdrop {
 
   constructor(private readonly ctx: GameContext) {
     const mountain = ctx.registries.mountains.all()[0];
-    const course = new Course(mountain);
+    const course = new Course(mountain, ctx.terrain.getSync(mountain));
     this.world = new World({
       course,
       time: timesOfDay.sunset,
       weather: { ...weathers.clear, fogDensity: 1.15 },
       preset: ctx.renderer.preset,
+      terrain: ctx.terrain,
     });
     this.world.buildNow();
     // Park at the plateau edge facing the base, where the ground starts to fall away.

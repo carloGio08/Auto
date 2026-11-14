@@ -8,9 +8,10 @@ import {
   Vector3,
 } from 'three';
 import { config } from '../config';
-import { hash2 } from '../math/rng';
-import type { ResolvedPalette } from '../data/palette';
 import type { Terrain } from './terrain';
+import { PatchBuild, UNITS_PER_CELL, type PatchArrays, type PatchRequest } from './patchBuilder';
+import type { PatchBackend } from './terrainService';
+import type { PatchPalette } from './splat';
 
 interface QuadNode {
   key: number;
@@ -19,26 +20,44 @@ interface QuadNode {
   z0: number;
   size: number;
   mesh: Mesh | null;
+  arrays: PatchArrays | null;
+  requested: boolean;
   lastShown: number;
+  tris: number;
 }
 
-/** Incremental patch builder state (time-sliced across frames). */
-interface Build {
-  node: QuadNode;
-  n: number;
-  row: number;
-  H: Float32Array;
-  R: Float32Array;
-  W: Float32Array;
+export interface TerrainMeshOptions {
+  /** LOD0 face size (m): ~1 high, ~1.5 medium, ~2.5 low. */
+  lod0Cell: number;
+  /** Radius (m) of the LOD0 ring around the camera. */
+  lod0Radius: number;
+  /** Triangles drawn at most; the LOD rings shrink to respect it. */
+  triangleBudget: number;
 }
-
-const MAX_DEPTH = 6;
 
 /**
- * Quadtree terrain: square patches of N×N cells whose size halves near the camera (≈2.4–5 m
- * cells at the finest level depending on quality). Patches are flat-shaded with per-face
- * palette colours (two tones chosen by hash) and face normals (Int8), have skirts to hide LOD cracks, are built
- * incrementally within a per-frame time budget and evicted when unused.
+ * Picks the quadtree depth and cells per patch so that the finest patches have faces of
+ * `lod0Cell` metres and the root covers at least `minRoot` metres.
+ */
+export function lodLayout(
+  lod0Cell: number,
+  minRoot: number,
+): { depth: number; n: number; root: number } {
+  for (let depth = 4; depth <= 10; depth++) {
+    const n = Math.ceil(minRoot / (lod0Cell * (1 << depth)));
+    if (n <= 96)
+      return { depth, n: Math.max(16, n), root: Math.max(16, n) * lod0Cell * (1 << depth) };
+  }
+  return { depth: 10, n: 96, root: 96 * lod0Cell * 1024 };
+}
+
+/**
+ * Quadtree terrain. Each node is a square patch of N × N cells; nodes split while their cell
+ * size exceeds the target for their distance (LOD0 `lod0Cell` within `lod0Radius`, then about
+ * 2.5 m to 600 m, 6 m to 1.5 km, 16 m to 3.5 km and ~48 m beyond). Patches are flat-shaded, built in the
+ * terrain worker (or the main thread in time slices), use compact attributes (Int16
+ * positions, Uint8 colours, Int8 normals), have skirts against LOD cracks, recycle their
+ * buffers when evicted, and the rings shrink when the triangle budget is exceeded.
  */
 export class TerrainMesh {
   readonly group = new Group();
@@ -46,27 +65,50 @@ export class TerrainMesh {
   private readonly nodes = new Map<number, QuadNode>();
   private readonly rootSize: number;
   private readonly rootMin: number;
-  private n: number;
-  private build: Build | null = null;
-  private readonly queue: QuadNode[] = [];
+  private readonly maxDepth: number;
+  readonly n: number;
   private readonly shown = new Set<QuadNode>();
   private readonly desired: QuadNode[] = [];
   private time = 0;
-  private readonly lakeLevel: number;
+  /** LOD ring scale (1 = nominal, lower when over the triangle budget). */
+  lodScale = 1;
+  visibleTriangles = 0;
   builtTriangles = 0;
+  private readonly rings: [number, number][];
 
   constructor(
     private readonly terrain: Terrain,
-    private readonly palette: ResolvedPalette,
-    cellsPerPatch: number,
+    private readonly palette: PatchPalette,
+    private readonly opts: TerrainMeshOptions,
+    private readonly backend: PatchBackend,
   ) {
     this.group.name = 'terrain';
     this.material = new MeshLambertMaterial({ vertexColors: true });
-    const half = terrain.mountain.def.halfSize;
-    this.rootSize = half * 2.5;
-    this.rootMin = -this.rootSize / 2;
-    this.n = cellsPerPatch;
-    this.lakeLevel = terrain.mountain.def.lake.level;
+    const layout = lodLayout(opts.lod0Cell, terrain.mountain.def.halfSize * 2.5);
+    this.rootSize = layout.root;
+    this.rootMin = -layout.root / 2;
+    this.maxDepth = layout.depth;
+    this.n = layout.n;
+    const l = config.world.lod;
+    this.rings = [
+      [opts.lod0Radius, opts.lod0Cell],
+      [l.lod1Radius, Math.max(opts.lod0Cell * 2, l.lod1Cell)],
+      [l.lod2Radius, l.lod2Cell],
+      [l.lod3Radius, l.lod3Cell],
+      [Infinity, l.lod4Cell],
+    ];
+  }
+
+  /** Finest face size (m) wanted at a distance. */
+  targetCell(d: number): number {
+    const k = this.lodScale;
+    for (const [r, c] of this.rings) if (d < r * k) return c;
+    return this.rings[this.rings.length - 1][1];
+  }
+
+  /** Face size (m) of the finest level. */
+  get finestCell(): number {
+    return this.rootSize / (1 << this.maxDepth) / this.n;
   }
 
   private node(level: number, i: number, j: number): QuadNode {
@@ -81,7 +123,10 @@ export class TerrainMesh {
         z0: this.rootMin + j * size,
         size,
         mesh: null,
+        arrays: null,
+        requested: false,
         lastShown: 0,
+        tris: 0,
       };
       this.nodes.set(key, nd);
     }
@@ -118,36 +163,78 @@ export class TerrainMesh {
   }
 
   private collect(nd: QuadNode, cx: number, cz: number, above: number): void {
+    const cell = nd.size / this.n;
     if (
-      nd.level < MAX_DEPTH &&
-      this.distance(nd, cx, cz, above) < nd.size * config.world.lodSplit
+      nd.level < this.maxDepth &&
+      cell > this.targetCell(this.distance(nd, cx, cz, above)) * config.world.lodTolerance
     ) {
       for (const c of this.children(nd)) this.collect(c, cx, cz, above);
     } else this.desired.push(nd);
   }
 
-  /** Builds everything needed around a point synchronously (loading). */
+  private request(nd: QuadNode): Omit<PatchRequest, 'gen'> {
+    return { key: nd.key, x0: nd.x0, z0: nd.z0, size: nd.size, n: this.n };
+  }
+
+  /**
+   * Builds everything needed around a point. Synchronous on the main thread; yields progress
+   * (0..1) after each patch.
+   */
   *prebuild(x: number, y: number, z: number): Generator<number> {
-    this.ensureNow(this.node(0, 0, 0));
+    const root = this.node(0, 0, 0);
+    this.ensureNow(root);
     this.desired.length = 0;
-    this.collect(this.node(0, 0, 0), x, z, Math.max(0, y - this.terrain.height(x, z)));
+    this.collect(root, x, z, Math.max(0, y - this.terrain.height(x, z)));
+    const list = [...this.desired];
     let k = 0;
-    for (const nd of this.desired) {
+    for (const nd of list) {
       this.ensureNow(nd);
-      yield ++k / this.desired.length;
+      yield ++k / list.length;
     }
-    this.update(x, y, z, 0);
+    this.update(x, y, z);
+  }
+
+  /**
+   * Requests every patch needed around a point from the backend (the worker) and yields its
+   * progress until all have arrived: the loading screen stays responsive.
+   */
+  *prebuildAsync(x: number, y: number, z: number): Generator<number> {
+    const root = this.node(0, 0, 0);
+    this.ensureNow(root);
+    this.desired.length = 0;
+    this.collect(root, x, z, Math.max(0, y - this.terrain.height(x, z)));
+    const list = [...this.desired];
+    for (const nd of list) this.ask(nd);
+    for (;;) {
+      this.backend.pump(12);
+      const ready = list.filter((nd) => nd.mesh).length;
+      yield ready / list.length;
+      if (ready === list.length) break;
+    }
+    this.update(x, y, z);
+  }
+
+  private ask(nd: QuadNode): void {
+    if (nd.mesh || nd.requested) return;
+    nd.requested = true;
+    this.backend.request(this.request(nd), (r) => {
+      nd.requested = false;
+      if (nd.mesh || !this.nodes.has(nd.key)) {
+        this.backend.recycle(r);
+        return;
+      }
+      this.attach(nd, r);
+    });
   }
 
   private ensureNow(nd: QuadNode): void {
     if (nd.mesh) return;
-    const b = this.startBuild(nd);
-    while (!this.step(b, Infinity)) {
-      /* build fully */
-    }
+    const b = new PatchBuild(this.terrain, this.palette, { ...this.request(nd), gen: 0 });
+    b.step(Infinity);
+    this.attach(nd, b.result!);
   }
 
-  /** Per frame: chooses the patches to show and advances the build queue. */
+  /** Per frame: chooses the patches to show and asks for missing ones, closest first. */
   update(
     cx: number,
     cy: number,
@@ -156,19 +243,20 @@ export class TerrainMesh {
   ): void {
     this.time += 1;
     const root = this.node(0, 0, 0);
+    if (!root.mesh) this.ensureNow(root);
     this.desired.length = 0;
     this.collect(root, cx, cz, Math.max(0, cy - this.terrain.height(cx, cz)));
     const shown = this.shown;
     shown.clear();
-    this.queue.length = 0;
+    const missing: QuadNode[] = [];
     for (const leaf of this.desired) {
       if (leaf.mesh) {
         shown.add(leaf);
         continue;
       }
-      this.queue.push(leaf);
+      missing.push(leaf);
       // Finer patches already built cover the leaf completely?
-      const kids = leaf.level < MAX_DEPTH ? this.children(leaf) : [];
+      const kids = leaf.level < this.maxDepth ? this.children(leaf) : [];
       if (kids.length && kids.every((k) => k.mesh)) {
         kids.forEach((k) => shown.add(k));
         continue;
@@ -189,219 +277,65 @@ export class TerrainMesh {
         a = this.parent(a);
       }
     }
+    let tris = 0;
     for (const nd of this.nodes.values()) {
       if (!nd.mesh) continue;
       const vis = shown.has(nd);
       nd.mesh.visible = vis;
-      if (vis) nd.lastShown = this.time;
-    }
-    // Build queue: closest first.
-    if (budgetMs > 0) {
-      const start = performance.now();
-      while (performance.now() - start < budgetMs) {
-        if (!this.build) {
-          let best: QuadNode | null = null;
-          let bd = Infinity;
-          for (const nd of this.queue) {
-            if (nd.mesh) continue;
-            const d = this.distance(nd, cx, cz, 0) + nd.size * 0.2;
-            if (d < bd) {
-              bd = d;
-              best = nd;
-            }
-          }
-          if (!best) break;
-          this.build = this.startBuild(best);
-        }
-        if (this.step(this.build, start + budgetMs)) this.build = null;
+      if (vis) {
+        nd.lastShown = this.time;
+        tris += nd.tris;
       }
     }
+    this.visibleTriangles = tris;
+    // Triangle budget: shrink the rings when over, relax them back when well under.
+    const budget = this.opts.triangleBudget;
+    if (tris > budget) this.lodScale = Math.max(0.35, this.lodScale * 0.98);
+    else if (tris < budget * 0.8) this.lodScale = Math.min(1, this.lodScale * 1.005);
+    // Ask for the closest missing patches (a few in flight at a time).
+    missing.sort(
+      (a, b) =>
+        this.distance(a, cx, cz, 0) + a.size * 0.2 - (this.distance(b, cx, cz, 0) + b.size * 0.2),
+    );
+    for (const nd of missing) {
+      if (this.backend.pending >= 6) break;
+      this.ask(nd);
+    }
+    this.backend.pump(budgetMs);
     this.evict();
   }
 
   private evict(): void {
-    if (this.nodes.size < 320) return;
+    if (this.nodes.size < 400) return;
     for (const nd of this.nodes.values()) {
-      if (nd.level === 0 || this.shown.has(nd)) continue;
+      if (nd.level === 0 || this.shown.has(nd) || nd.requested) continue;
       if (nd.mesh && this.time - nd.lastShown > 600) this.free(nd);
-      if (!nd.mesh && this.build?.node !== nd) this.nodes.delete(nd.key);
+      if (!nd.mesh) this.nodes.delete(nd.key);
     }
   }
 
-  private startBuild(node: QuadNode): Build {
-    const n = this.n;
-    const s = (n + 1) * (n + 1);
-    return {
-      node,
-      n,
-      row: 0,
-      H: new Float32Array(s),
-      R: new Float32Array(s),
-      W: new Float32Array(s),
-    };
-  }
-
-  /** Samples heights row by row; returns true when the patch mesh has been created. */
-  private step(b: Build, deadline: number): boolean {
-    const { node, n } = b;
-    const cell = node.size / n;
-    const stride = n + 1;
-    const t = this.terrain;
-    while (b.row <= n) {
-      const z = node.z0 + b.row * cell;
-      for (let i = 0; i <= n; i++) {
-        const k = b.row * stride + i;
-        b.H[k] = t.height(node.x0 + i * cell, z);
-        const q = t.lastQuery;
-        b.R[k] = q.found ? q.distance : 1e4;
-        b.W[k] = q.found ? q.halfWidth : 0;
-      }
-      b.row++;
-      if (performance.now() > deadline) return false;
-    }
-    node.mesh = this.createMesh(b);
-    node.mesh.visible = false;
-    this.group.add(node.mesh);
-    return true;
-  }
-
-  private createMesh(b: Build): Mesh {
-    const { node, n, H, R, W } = b;
-    const cell = node.size / n;
-    const stride = n + 1;
-    const x0 = node.x0;
-    const z0 = node.z0;
-    const tris = n * n * 2 + n * 8;
-    const pos = new Float32Array(tris * 9);
-    const col = new Uint8Array(tris * 9);
-    const nor = new Int8Array(tris * 9);
-    let k = 0;
-    let minY = Infinity;
-    let maxY = -Infinity;
-    const terrain = this.terrain;
-    const pal = this.palette;
-    const lake = this.lakeLevel;
-    const tri = (
-      ax: number,
-      ay: number,
-      az: number,
-      bx: number,
-      by: number,
-      bz: number,
-      cx: number,
-      cy: number,
-      cz: number,
-      rd: number,
-      hw: number,
-      skirt: boolean,
-    ): void => {
-      const ux = bx - ax;
-      const uy = by - ay;
-      const uz = bz - az;
-      const vx = cx - ax;
-      const vy = cy - ay;
-      const vz = cz - az;
-      const nx = uy * vz - uz * vy;
-      const ny = uz * vx - ux * vz;
-      const nz = ux * vy - uy * vx;
-      const ln = Math.hypot(nx, ny, nz) || 1;
-      const fx = (ax + bx + cx) / 3;
-      const fy = (ay + by + cy) / 3;
-      const fz = (az + bz + cz) / 3;
-      const nyn = skirt ? 0.9 : ny / ln;
-      const biome = fy < lake - 0.5 ? 'sand' : terrain.classify(fx, fz, fy, nyn, rd, hw).key;
-      // Two tones per biome: hash choice, steep faces lean towards the dark tone.
-      const hsh = hash2(Math.floor(fx * 0.37), Math.floor(fz * 0.37), 11);
-      const tone = hsh < (nyn < 0.86 ? 0.7 : 0.35) ? 1 : 0;
-      const c = pal[biome][tone];
-      const r = Math.round(Math.min(1, c.r) * 255);
-      const g = Math.round(Math.min(1, c.g) * 255);
-      const bl = Math.round(Math.min(1, c.b) * 255);
-      const p = k * 9;
-      pos[p] = ax;
-      pos[p + 1] = ay;
-      pos[p + 2] = az;
-      pos[p + 3] = bx;
-      pos[p + 4] = by;
-      pos[p + 5] = bz;
-      pos[p + 6] = cx;
-      pos[p + 7] = cy;
-      pos[p + 8] = cz;
-      const qx = Math.round((nx / ln) * 127);
-      const qy = Math.round((ny / ln) * 127);
-      const qz = Math.round((nz / ln) * 127);
-      for (let v = 0; v < 3; v++) {
-        col[p + v * 3] = r;
-        col[p + v * 3 + 1] = g;
-        col[p + v * 3 + 2] = bl;
-        nor[p + v * 3] = qx;
-        nor[p + v * 3 + 1] = qy;
-        nor[p + v * 3 + 2] = qz;
-      }
-      k++;
-    };
-    for (let j = 0; j < n; j++) {
-      for (let i = 0; i < n; i++) {
-        const xa = x0 + i * cell;
-        const za = z0 + j * cell;
-        const xb = xa + cell;
-        const zb = za + cell;
-        const i00 = j * stride + i;
-        const i10 = i00 + 1;
-        const i01 = i00 + stride;
-        const i11 = i01 + 1;
-        const h00 = H[i00];
-        const h10 = H[i10];
-        const h01 = H[i01];
-        const h11 = H[i11];
-        minY = Math.min(minY, h00, h10, h01, h11);
-        maxY = Math.max(maxY, h00, h10, h01, h11);
-        const rd = (R[i00] + R[i10] + R[i01] + R[i11]) * 0.25;
-        const hw = Math.max(W[i00], W[i10], W[i01], W[i11]);
-        if ((i + j) % 2 === 0) {
-          tri(xa, h00, za, xa, h01, zb, xb, h10, za, rd, hw, false);
-          tri(xb, h10, za, xa, h01, zb, xb, h11, zb, rd, hw, false);
-        } else {
-          tri(xa, h00, za, xa, h01, zb, xb, h11, zb, rd, hw, false);
-          tri(xa, h00, za, xb, h11, zb, xb, h10, za, rd, hw, false);
-        }
-      }
-    }
-    // Skirts (outward facing) hide cracks between patches of different size.
-    const depth = cell * 1.5 + 2;
-    const skirt = (
-      ax: number,
-      az: number,
-      ha: number,
-      bx: number,
-      bz: number,
-      hb: number,
-    ): void => {
-      tri(ax, ha, az, bx, hb, bz, ax, ha - depth, az, 1e4, 0, true);
-      tri(bx, hb, bz, bx, hb - depth, bz, ax, ha - depth, az, 1e4, 0, true);
-    };
-    const size = node.size;
-    for (let i = 0; i < n; i++) {
-      const xa = x0 + i * cell;
-      const xb = xa + cell;
-      skirt(xa, z0, H[i], xb, z0, H[i + 1]);
-      skirt(xb, z0 + size, H[n * stride + i + 1], xa, z0 + size, H[n * stride + i]);
-      const za = z0 + i * cell;
-      const zb = za + cell;
-      skirt(x0, zb, H[(i + 1) * stride], x0, za, H[i * stride]);
-      skirt(x0 + size, za, H[i * stride + n], x0 + size, zb, H[(i + 1) * stride + n]);
-    }
-    this.builtTriangles += k;
+  private attach(nd: QuadNode, r: PatchArrays): void {
     const geo = new BufferGeometry();
-    geo.setAttribute('position', new BufferAttribute(pos.subarray(0, k * 9), 3));
-    geo.setAttribute('color', new BufferAttribute(col.subarray(0, k * 9), 3, true));
-    geo.setAttribute('normal', new BufferAttribute(nor.subarray(0, k * 9), 3, true));
-    const c = new Vector3(x0 + size / 2, (minY + maxY) / 2, z0 + size / 2);
-    geo.boundingSphere = new Sphere(c, Math.hypot(size / 2, size / 2, (maxY - minY) / 2 + depth));
+    geo.setAttribute('position', new BufferAttribute(r.position, 3));
+    geo.setAttribute('color', new BufferAttribute(r.color, 3, true));
+    geo.setAttribute('normal', new BufferAttribute(r.normal, 3, true));
+    geo.setDrawRange(0, r.count);
+    const inv = 1 / r.unit;
+    const half = (this.n * UNITS_PER_CELL) / 2;
+    const c = new Vector3(half, ((r.minY + r.maxY) / 2 - r.originY) * inv, half);
+    geo.boundingSphere = new Sphere(c, Math.hypot(half, half, ((r.maxY - r.minY) / 2) * inv));
     const mesh = new Mesh(geo, this.material);
+    mesh.position.set(nd.x0, r.originY, nd.z0);
+    mesh.scale.setScalar(r.unit);
+    mesh.updateMatrix();
     mesh.matrixAutoUpdate = false;
-    mesh.receiveShadow = size < 400;
-    return mesh;
+    mesh.receiveShadow = nd.size < 400;
+    mesh.visible = false;
+    nd.mesh = mesh;
+    nd.arrays = r;
+    nd.tris = r.count / 3;
+    this.builtTriangles += nd.tris;
+    this.group.add(mesh);
   }
 
   private free(nd: QuadNode): void {
@@ -409,6 +343,8 @@ export class TerrainMesh {
     nd.mesh.geometry.dispose();
     nd.mesh.removeFromParent();
     nd.mesh = null;
+    if (nd.arrays) this.backend.recycle(nd.arrays);
+    nd.arrays = null;
   }
 
   /** Number of patches currently drawn (stats). */
@@ -416,8 +352,19 @@ export class TerrainMesh {
     return this.shown.size;
   }
 
+  /** Longest horizontal triangle edge (m) of the finest patches (tests). */
+  get maxLod0Edge(): number {
+    return this.finestCell * Math.SQRT2;
+  }
+
   dispose(): void {
-    for (const nd of this.nodes.values()) this.free(nd);
+    this.backend.cancelAll();
+    for (const nd of this.nodes.values()) {
+      if (!nd.mesh) continue;
+      nd.mesh.geometry.dispose();
+      nd.mesh.removeFromParent();
+      nd.mesh = null;
+    }
     this.nodes.clear();
     this.material.dispose();
     this.group.removeFromParent();

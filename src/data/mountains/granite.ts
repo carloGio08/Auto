@@ -1,65 +1,44 @@
 import type { MountainDef } from '../types';
+import { alpine } from './alpine';
+import { variantOf } from './variants';
 
-/** Granite Massif: higher, rockier and snowier, with more cliffs and steeper trails. */
+const shape = variantOf(alpine, {
+  seed: 4242,
+  mirror: true,
+  jitter: 140,
+  relief: 1.12,
+  rugged: 1.3,
+});
+
+/**
+ * Granite Massif: the mirror image of Monte Drop's layout, with higher relief, rockier crests,
+ * two extra cirques and a long scree face, more snow and fewer trees.
+ */
 export const granite: MountainDef = {
+  ...shape,
   id: 'granite',
   nameKey: 'mountain.granite.name',
   descriptionKey: 'mountain.granite.desc',
-  seed: 4242,
-  halfSize: 4000,
-  summit: { x: -300, z: -1300, height: 1950, plateauRadius: 120 },
-  baseHeight: 50,
-  radii: { north: 3500, south: 3850, east: 3600, west: 3900 },
-  spurs: { count: 5, amplitude: 100, twist: -0.8 },
-  noise: {
-    warp: 300,
-    warpScale: 2300,
-    low: { amplitude: 65, scale: 1600 },
-    mid: { amplitude: 20, scale: 480 },
-  },
-  maxSlope: 1.15,
-  cliffs: [
-    { x: 900, z: -900, angle: 0.9, length: 600, height: 40, width: 9 },
-    { x: -1900, z: -300, angle: 1.6, length: 500, height: 36, width: 9 },
-    { x: 1500, z: 900, angle: 0.1, length: 450, height: 30, width: 8 },
-    { x: -900, z: 1300, angle: -0.6, length: 300, height: 24, width: 7 },
-  ],
-  rimHeight: 1050,
-  lake: { x: 300, z: 2800, radius: 480, level: 46 },
-  rivers: [{ spring: [-1200, 400], width: 7, depth: 3 }],
-  biomes: { snowLine: 1350, rockLine: 1100, treeLine: 950, denseForestLine: 480, valleyLine: 180 },
-  trails: [
+  summit: { ...shape.summit, height: 1740 },
+  terracing: { amount: 0.7, scale: 1200 },
+  erosion: { ...shape.erosion, talus: 0.72 },
+  noise: { ...shape.noise, detail: { amplitude: 0.4, rugged: 2, scale: 50 } },
+  landforms: [
+    ...shape.landforms,
+    { kind: 'cirque', at: [1500, -1150], radius: 280, height: 45, wall: 0.8, rugged: 1 },
+    { kind: 'cirque', at: [-1700, -900], radius: 260, height: 40, wall: 0.8, rugged: 1 },
     {
-      id: 'main',
-      kind: 'main',
-      waypoints: [
-        [-300, -1190],
-        [-1000, -500],
-        [400, 150],
-        [-700, 950],
-        [250, 1550],
-        [300, 2200],
+      kind: 'slope',
+      path: [
+        [600, 300],
+        [1300, 700],
       ],
-      width: [6.5, 9],
-      targetGrade: 0.18,
-      maxGrade: 0.27,
-    },
-    {
-      id: 'westCouloir',
-      kind: 'shortcut',
-      waypoints: [
-        [-950, -420],
-        [-650, 900],
-      ],
-      startOn: 'main',
-      endOn: 'main',
-      width: [5, 6],
-      targetGrade: 0.28,
-      maxGrade: 0.4,
+      radius: 70,
+      height: 40,
+      rugged: 1,
     },
   ],
-  base: { x: 300, z: 2200, radius: 120 },
-  start: { x: -300, z: -1190 },
+  biomes: { snowLine: 1300, rockLine: 1100, treeLine: 960, denseForestLine: 500, valleyLine: 180 },
   props: { trees: 0.8, rocks: 1.4, bushes: 0.7 },
   hazards: [
     { kind: 'rockslide', at: 0.12 },
@@ -69,7 +48,7 @@ export const granite: MountainDef = {
     { kind: 'boulder', at: 0.62 },
     { kind: 'mudPool', at: 0.8 },
   ],
-  collectibles: { coins: 170, crystals: 12 },
+  collectibles: { coins: 190, crystals: 12 },
   defaultTime: 'sunset',
   defaultWeather: 'clear',
   medals: { gold: 70000, silver: 38000, bronze: 15000 },

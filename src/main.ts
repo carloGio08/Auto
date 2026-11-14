@@ -17,6 +17,7 @@ import { GamepadSource } from './input/gamepad';
 import { TiltSource } from './input/tilt';
 import { AudioEngine } from './audio/audioEngine';
 import { UIManager } from './ui/uiManager';
+import { TerrainService } from './terrain/terrainService';
 import { BackdropHost } from './states/backdropHost';
 import { BootState } from './states/bootState';
 import { MainMenuState } from './states/mainMenuState';
@@ -110,6 +111,7 @@ function start(): void {
     states,
     loop,
     device,
+    terrain: new TerrainService(),
     applySettings(): void {
       const s = save.data.settings;
       if (s.quality !== renderer.setting) renderer.applySetting(s.quality);

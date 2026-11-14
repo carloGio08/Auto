@@ -137,9 +137,22 @@ export const config = {
   },
 
   world: {
-    /** Quadtree terrain: split a patch when the camera is closer than size × lodSplit. */
-    lodSplit: 1.35,
-    /** Max ms per frame spent building terrain patches. */
+    /**
+     * Terrain LOD rings beyond LOD0 (whose face size and radius come from the quality
+     * preset): target face size (m) up to each radius (m). Actual faces are the closest
+     * power-of-two multiple of the LOD0 size, at most `lodTolerance` × the target.
+     */
+    lod: {
+      lod1Cell: 2.5,
+      lod1Radius: 600,
+      lod2Cell: 6,
+      lod2Radius: 1500,
+      lod3Cell: 16,
+      lod3Radius: 3500,
+      lod4Cell: 48,
+    },
+    lodTolerance: 1.45,
+    /** Max ms per frame spent building terrain patches on the main thread (no worker). */
     chunkBuildBudgetMs: 4,
     /** Props are generated and instanced per cell of this size (m). */
     propCellSize: 320,
@@ -157,8 +170,10 @@ export const config = {
   graphics: {
     presets: {
       low: {
-        /** Terrain patch resolution (cells per side): finest cells ≈ 156 m / N. */
-        terrainCells: 32,
+        /** Terrain LOD0: face size (m), ring radius (m) and triangle budget. */
+        terrainCell: 2.5,
+        lod0Radius: 160,
+        triangleBudget: 600_000,
         pixelRatioCap: 1,
         shadows: false,
         shadowMapSize: 512,
@@ -170,8 +185,10 @@ export const config = {
         clouds: 6,
       },
       medium: {
-        /** Terrain patch resolution (cells per side): finest cells ≈ 156 m / N. */
-        terrainCells: 48,
+        /** Terrain LOD0: face size (m), ring radius (m) and triangle budget. */
+        terrainCell: 1.5,
+        lod0Radius: 180,
+        triangleBudget: 1_000_000,
         pixelRatioCap: 1.5,
         shadows: true,
         shadowMapSize: 1024,
@@ -183,8 +200,10 @@ export const config = {
         clouds: 10,
       },
       high: {
-        /** Terrain patch resolution (cells per side): finest cells ≈ 156 m / N. */
-        terrainCells: 64,
+        /** Terrain LOD0: face size (m), ring radius (m) and triangle budget. */
+        terrainCell: 1,
+        lod0Radius: 200,
+        triangleBudget: 1_500_000,
         pixelRatioCap: 2,
         shadows: true,
         shadowMapSize: 2048,

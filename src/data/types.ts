@@ -209,15 +209,45 @@ export interface TrailDef {
   maxGrade: number;
 }
 
-export interface CliffDef {
-  /** Centre, direction (radians from +Z towards +X) and length of the wall (m). */
-  x: number;
-  z: number;
-  angle: number;
-  length: number;
-  /** Height of the step (m) and horizontal width over which it happens. */
+/** Kinds of landform the mountain is assembled from (see src/terrain/landforms.ts). */
+export type LandformKind =
+  'ridge' | 'valley' | 'cirque' | 'plateau' | 'meadow' | 'saddle' | 'slope' | 'hills' | 'basin';
+
+/**
+ * One landform: a shape blended into the massif with smooth min/max (never a hard seam).
+ * Point landforms use `at`, linear ones use `path`. Applied in array order.
+ */
+export interface LandformDef {
+  kind: LandformKind;
+  /** Centre (plateau, meadow, cirque, saddle, hills, basin). */
+  at?: [number, number];
+  /** Polyline (ridge, valley, slope), from the high end to the low end for valleys. */
+  path?: [number, number][];
+  /** Radius, or half width for linear landforms (m). */
+  radius: number;
+  /**
+   * ridge/hills: amplitude; valley/cirque/saddle/basin: depth below the surroundings;
+   * plateau/meadow: offset from the natural altitude at the centre; slope: step height (m).
+   */
   height: number;
-  width: number;
+  /** Width of the smooth blend (m). */
+  blend?: number;
+  /** 0..1 detail amplitude and rockiness (crests, cirque walls) – 0 for smooth meadows. */
+  rugged?: number;
+  /** valley/cirque/basin: wall steepness (rise/run). */
+  wall?: number;
+}
+
+/** Simplified erosion passes run on the generated heightmap. */
+export interface ErosionDef {
+  /** Thermal erosion: iterations and talus slope (rise/run) above which material slides. */
+  thermalIterations: number;
+  talus: number;
+  /** Stream-power incision: passes and strength (0 disables). */
+  hydraulicPasses: number;
+  hydraulicStrength: number;
+  /** Smoothing of valley floors where flow accumulates (0..1). */
+  floorSmoothing: number;
 }
 
 export interface RiverDef {
@@ -251,18 +281,29 @@ export interface MountainDef {
   baseHeight: number;
   /** Extent of the massif from the summit in each direction (m). */
   radii: { north: number; south: number; east: number; west: number };
-  /** Ridges radiating from the summit. */
-  spurs: { count: number; amplitude: number; twist: number };
+  /**
+   * Radial profile of the massif: [normalised distance from the summit (0..1), height
+   * fraction (1 = summit, 0 = valley floor)] keyframes, monotone cubic interpolation. Flat
+   * stretches become terraces, steep ones faces.
+   */
+  profile: [number, number][];
+  /**
+   * How much of the massif follows the stepped profile rather than an even slope, mixed by
+   * a large-scale noise (`scale` m) so terraces come and go around the mountain (0..1).
+   */
+  terracing: { amount: number; scale: number };
   noise: {
-    /** Domain warping strength (m) and scale (m). */
+    /** Domain warping strength (m) and scale (m): organic outlines for terraces and faces. */
     warp: number;
     warpScale: number;
-    low: { amplitude: number; scale: number };
-    mid: { amplitude: number; scale: number };
+    /** Broad undulations baked in the heightmap. */
+    broad: { amplitude: number; scale: number };
+    /** Analytic low-amplitude detail added on top of the heightmap (rugged zones get more). */
+    detail: { amplitude: number; rugged: number; scale: number };
   };
-  /** Slope limit for normal terrain (rise/run); only cliffs exceed it. */
-  maxSlope: number;
-  cliffs: CliffDef[];
+  /** Landforms blended into the massif, in order. */
+  landforms: LandformDef[];
+  erosion: ErosionDef;
   /** Natural boundary: ridges rising towards the map edge (m). */
   rimHeight: number;
   lake: { x: number; z: number; radius: number; level: number };

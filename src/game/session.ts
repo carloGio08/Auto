@@ -185,13 +185,17 @@ export class RunSession {
 
   /** Builds course, world and session incrementally (for the loading screen). */
   static *create(ctx: GameContext, cfg: RunConfig): Generator<BuildStep, RunSession> {
-    yield { stage: 'loading.terrain', progress: 0 };
-    const course = new Course(cfg.mountain);
+    // Heightmap, erosion and trail routing run in the terrain worker.
+    const job = ctx.terrain.prepare(cfg.mountain);
+    while (!job.done) yield { stage: 'loading.terrain', progress: job.progress * 0.3, wait: true };
+    const data = job.data ?? ctx.terrain.getSync(cfg.mountain);
+    const course = new Course(cfg.mountain, data);
     const world = new World({
       course,
       time: timesOfDay[cfg.time],
       weather: weathers[cfg.weather],
       preset: ctx.renderer.preset,
+      terrain: ctx.terrain,
     });
     for (const step of world.build()) yield step;
     yield { stage: 'loading.vehicle', progress: 0.95 };

@@ -14,6 +14,7 @@ import type { Renderer } from './renderer';
 import type { SaveManager } from './save';
 import type { StateMachine } from './stateMachine';
 import type { DeviceInfo } from './device';
+import type { TerrainService } from '../terrain/terrainService';
 
 export type StateId =
   'boot' | 'mainMenu' | 'garage' | 'trackSelect' | 'loading' | 'playing' | 'paused' | 'results';
@@ -44,6 +45,8 @@ export interface GameContext {
   readonly states: StateMachine<StateId>;
   readonly loop: GameLoop;
   readonly device: DeviceInfo;
+  /** Terrain generation worker and patch builder (app lifetime, caches recent mountains). */
+  readonly terrain: TerrainService;
   /** Applies settings from the save file to every service. */
   applySettings(): void;
 }

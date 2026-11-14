@@ -58,6 +58,8 @@ export class LoadingState implements GameState<StateId> {
         return;
       }
       this.screen.set(r.value.progress, r.value.stage);
+      // Waiting on the terrain worker: give the frame back.
+      if (r.value.wait) return;
     }
   }
 

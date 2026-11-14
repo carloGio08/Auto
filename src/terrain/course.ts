@@ -5,6 +5,7 @@ import { Mountain } from './mountain';
 import { createRoadPoint, Road, ROAD_BRIDGE, ROAD_HAIRPIN, type RoadPoint } from './road';
 import { Terrain } from './terrain';
 import { TrailRouter, type DenseLine } from './trailRouter';
+import { generateTerrain, type TerrainData } from './generator';
 
 export interface CollectiblePlacement {
   kind: 'coin' | 'crystal';
@@ -35,6 +36,50 @@ export interface SignPlacement extends FurniturePlacement {
   arrow: number;
 }
 
+/** Routed trail centre line in transferable form. */
+export interface TypedLine {
+  x: Float64Array;
+  z: Float64Array;
+  h: Float64Array;
+}
+
+/** Output of the expensive part of course generation (heightmap and routing). */
+export interface CourseData {
+  terrain: TerrainData;
+  lines: TypedLine[];
+}
+
+const fromTypedLine = (l: TypedLine): DenseLine => ({
+  x: Array.from(l.x),
+  z: Array.from(l.z),
+  h: Array.from(l.h),
+});
+
+/** Routes every trail of a mountain over its natural terrain, in definition order. */
+export function routeTrails(def: MountainDef, mountain: Mountain): DenseLine[] {
+  const router = new TrailRouter(mountain);
+  const lines = new Map<string, DenseLine>();
+  for (const t of def.trails) lines.set(t.id, router.routeTrail(t, lines));
+  return def.trails.map((t) => lines.get(t.id)!);
+}
+
+/**
+ * Runs the expensive generation steps (landforms, erosion, streams, trail routing) and
+ * returns plain typed arrays: this is what the terrain worker computes off the main thread.
+ */
+export function buildCourseData(def: MountainDef, progress?: (p: number) => void): CourseData {
+  const terrain = generateTerrain(def, (p) => progress?.(p * 0.85));
+  const mountain = new Mountain(def, terrain);
+  mountain.buildRivers();
+  const lines = routeTrails(def, mountain).map((l) => ({
+    x: Float64Array.from(l.x),
+    z: Float64Array.from(l.z),
+    h: Float64Array.from(l.h),
+  }));
+  progress?.(1);
+  return { terrain, lines };
+}
+
 /**
  * Everything derived from a mountain definition: natural terrain, rivers, routed trails,
  * carved terrain and the placement of furniture and collectibles. Pure data (no three.js
@@ -55,17 +100,18 @@ export class Course {
   readonly signs: SignPlacement[] = [];
   readonly fences: FencePlacement[] = [];
 
-  constructor(readonly def: MountainDef) {
-    this.mountain = new Mountain(def);
+  /**
+   * @param data pre-generated heightmap and routed trails (from the terrain worker); when
+   *   missing everything is generated synchronously (tests, fallback).
+   */
+  constructor(
+    readonly def: MountainDef,
+    data?: CourseData,
+  ) {
+    this.mountain = new Mountain(def, data?.terrain);
     this.mountain.buildRivers();
-    const router = new TrailRouter(this.mountain);
-    const lines = new Map<string, DenseLine>();
-    for (const t of def.trails) lines.set(t.id, router.routeTrail(t, lines));
-    this.road = new Road(
-      def.trails,
-      def.trails.map((t) => lines.get(t.id)!),
-      this.mountain,
-    );
+    const lines = data ? data.lines.map(fromTypedLine) : routeTrails(def, this.mountain);
+    this.road = new Road(def.trails, lines, this.mountain);
     this.terrain = new Terrain(this.mountain, this.road);
     const L = this.road.length;
     const p = this.road.pointAt(this.startS, createRoadPoint());

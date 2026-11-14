@@ -1,5 +1,7 @@
 import { Simplex2 } from '../math/noise';
 import { clamp, smoothstep } from '../math/util';
+import { generateTerrain, type TerrainData } from './generator';
+import { Heightfield } from './heightfield';
 import type { MountainDef } from '../data/types';
 import { createPolylineHit, PolylineIndex } from './polyline';
 
@@ -14,114 +16,47 @@ export interface River {
 }
 
 const BANK_SLOPE = 0.9;
-const ROUND = 0.2;
 
 /**
- * Linear ramp 0→1 with quadratic rounded ends: the steepest slope of the massif is only
- * 1/(1-ROUND) times the average, which keeps the whole face drivable.
- */
-function roundedRamp(t: number): number {
-  const a = ROUND;
-  const k = 2 * a * (1 - a);
-  if (t < a) return (t * t) / k;
-  if (t > 1 - a) return 1 - ((1 - t) * (1 - t)) / k;
-  return (t - a / 2) / (1 - a);
-}
-
-/**
- * The natural (un-carved) mountain, a pure deterministic function of (x, z) and the seed:
- * warped massif profile with plateau summit, soft spurs radiating from the top, low and mid
- * frequency noise, natural rim walls at the map border, a few explicit cliffs, the lake
- * basin and river channels. No high-frequency noise: the surface stays smooth and drivable.
+ * The natural (un-carved) mountain: the generated heightmap (landforms + erosion, see
+ * generator.ts) sampled with a smooth cubic B-spline, plus low-amplitude analytic detail
+ * that is stronger on rugged crests and faces and almost nil on meadows and terraces. The
+ * lake basin and the stream channels are carved on top. Pure and deterministic.
  */
 export class Mountain {
   readonly def: MountainDef;
-  private readonly noise: Simplex2;
-  private readonly warpNoise: Simplex2;
-  private readonly spurPhase: number;
-  private readonly tPlateau: number;
+  readonly field: Heightfield;
+  /** Generated data (shared with workers). */
+  readonly data: TerrainData;
+  private readonly detail: Simplex2;
+  private readonly detailAmp: number;
+  private readonly detailRugged: number;
+  private readonly detailInv: number;
   rivers: River[] = [];
   private riverIndex: PolylineIndex | null = null;
   private riverOf = new Int16Array(0);
   private riverOffset: number[] = [];
   private readonly hit = createPolylineHit();
-  private readonly cliffs: {
-    cx: number;
-    cz: number;
-    ux: number;
-    uz: number;
-    half: number;
-    height: number;
-    width: number;
-  }[];
 
-  constructor(def: MountainDef) {
+  constructor(def: MountainDef, data?: TerrainData) {
     this.def = def;
-    this.noise = new Simplex2(def.seed);
-    this.warpNoise = new Simplex2(def.seed ^ 0x5bd1e995);
-    this.spurPhase = ((def.seed % 997) / 997) * Math.PI * 2;
-    const minR = Math.min(def.radii.north, def.radii.south, def.radii.east, def.radii.west);
-    this.tPlateau = def.summit.plateauRadius / minR;
-    this.cliffs = def.cliffs.map((c) => ({
-      cx: c.x,
-      cz: c.z,
-      ux: Math.sin(c.angle),
-      uz: Math.cos(c.angle),
-      half: c.length / 2,
-      height: c.height,
-      width: c.width,
-    }));
+    this.data = data ?? generateTerrain(def);
+    this.field = new Heightfield(this.data.field);
+    this.detail = new Simplex2(def.seed ^ 0x6d2b79f5);
+    this.detailAmp = def.noise.detail.amplitude;
+    this.detailRugged = def.noise.detail.rugged;
+    this.detailInv = 1 / def.noise.detail.scale;
   }
 
   get summitHeight(): number {
     return this.def.summit.height;
   }
 
-  /** Natural height without river channels and lake basin (used to route trails). */
+  /** Natural height without stream channels and lake basin (used to route trails). */
   heightNoWater(x: number, z: number): number {
-    const d = this.def;
-    const n = d.noise;
-    // Domain warping keeps the massif from looking like a perfect cone.
-    const ws = 1 / n.warpScale;
-    const wx = x + n.warp * this.warpNoise.fbm(x * ws, z * ws, 2);
-    const wz = z + n.warp * this.warpNoise.fbm(x * ws + 31.4, z * ws - 17.3, 2);
-    const dx = wx - d.summit.x;
-    const dz = wz - d.summit.z;
-    const rx = dx >= 0 ? d.radii.east : d.radii.west;
-    const rz = dz >= 0 ? d.radii.south : d.radii.north;
-    const t = Math.sqrt((dx / rx) * (dx / rx) + (dz / rz) * (dz / rz));
-    const t2 = clamp((t - this.tPlateau) / (1 - this.tPlateau), 0, 1);
-    let h = d.baseHeight + (d.summit.height - d.baseHeight) * (1 - roundedRamp(t2));
-    // Soft spurs (smooth crests, no spikes), fading at the summit and the foot.
-    if (t > 0.02 && t < 1) {
-      const theta = Math.atan2(dx, dz);
-      const s = Math.cos(d.spurs.count * theta + d.spurs.twist * t * 6 + this.spurPhase);
-      const ridge = ((s + 1) * 0.5) ** 2;
-      const env = Math.sin(Math.PI * t) * smoothstep(0.02, 0.15, t);
-      h += d.spurs.amplitude * (ridge - 0.33) * env;
-    }
-    // Low / mid frequency undulations, calmer on the summit plateau.
-    const calm = 0.35 + 0.65 * smoothstep(this.tPlateau, this.tPlateau + 0.12, t);
-    h += n.low.amplitude * this.noise.fbm(x / n.low.scale, z / n.low.scale, 3) * calm;
-    h += n.mid.amplitude * this.noise.fbm(x / n.mid.scale + 11.7, z / n.mid.scale - 4.2, 2) * calm;
-    // Natural boundary: ridges rising towards the map border.
-    const edge = Math.max(Math.abs(x), Math.abs(z));
-    if (edge > d.halfSize * 0.8) {
-      const rim = smoothstep(d.halfSize * 0.82, d.halfSize * 1.15, edge);
-      h += d.rimHeight * rim * (0.75 + 0.25 * this.noise.fbm(x / 900 + 5.5, z / 900, 2));
-    }
-    // A few recognisable rock walls.
-    for (const c of this.cliffs) {
-      const rx2 = x - c.cx;
-      const rz2 = z - c.cz;
-      const u = rx2 * c.ux + rz2 * c.uz;
-      if (Math.abs(u) > c.half) continue;
-      const v = rx2 * c.uz - rz2 * c.ux;
-      if (Math.abs(v) > c.width * 3) continue;
-      const win = 1 - smoothstep(c.half * 0.6, c.half, Math.abs(u));
-      h += c.height * (smoothstep(-c.width / 2, c.width / 2, v) - 0.5) * win;
-    }
-    return h;
+    const amp = this.detailAmp + this.detailRugged * this.field.rough(x, z);
+    const k = this.detailInv;
+    return this.field.sample(x, z) + amp * this.detail.fbm(x * k, z * k, 2);
   }
 
   /** Lake bed: the valley dips below the lake level inside the lake radius. */
@@ -185,51 +120,17 @@ export class Mountain {
   }
 
   /**
-   * Computes the river paths by steepest descent on a coarse grid from each spring to the
-   * lake, then builds a spatial index. Must run before trails are routed.
+   * Builds the rivers from the streams traced on the flow graph (spring → lake), with a
+   * monotone bank altitude, and their spatial index. Must run before trails are routed.
    */
   buildRivers(): void {
     const d = this.def;
-    const step = 20;
     const rivers: River[] = [];
-    for (const def of d.rivers) {
-      const xs: number[] = [];
-      const zs: number[] = [];
-      let x = def.spring[0];
-      let z = def.spring[1];
-      let prevH = Infinity;
-      for (let it = 0; it < 500; it++) {
-        // Stop in a pond when the descent starts going back and forth.
-        const n0 = xs.length;
-        if (n0 >= 2 && Math.hypot(xs[n0 - 2] - x, zs[n0 - 2] - z) < step * 0.5) break;
-        xs.push(x);
-        zs.push(z);
-        const h = this.heightNoWater(x, z);
-        if (h <= d.lake.level + 1 || Math.hypot(x - d.lake.x, z - d.lake.z) < d.lake.radius * 0.7)
-          break;
-        // Steepest descent among 16 directions, biased towards the lake to cross flats.
-        let best = Infinity;
-        let bx = x;
-        let bz = z;
-        const toLakeX = d.lake.x - x;
-        const toLakeZ = d.lake.z - z;
-        const tl = Math.hypot(toLakeX, toLakeZ) || 1;
-        for (let k = 0; k < 16; k++) {
-          const a = (k / 16) * Math.PI * 2;
-          const nx = x + Math.sin(a) * step;
-          const nz = z + Math.cos(a) * step;
-          const bias = -((Math.sin(a) * toLakeX + Math.cos(a) * toLakeZ) / tl) * 1.2;
-          const v = this.heightNoWater(nx, nz) + bias;
-          if (v < best) {
-            best = v;
-            bx = nx;
-            bz = nz;
-          }
-        }
-        x = bx;
-        z = bz;
-        prevH = Math.min(prevH, h);
-      }
+    for (let k = 0; k < this.data.streams.length && k < d.rivers.length; k++) {
+      const def = d.rivers[k];
+      const sp = this.data.streams[k];
+      const xs = Array.from(sp.x);
+      const zs = Array.from(sp.z);
       if (xs.length < 4) continue;
       // Bank altitude: smoothed natural height, forced non-increasing (water flows down).
       const n = xs.length;
