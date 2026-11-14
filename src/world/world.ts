@@ -8,6 +8,7 @@ import {
   Scene,
   Vector3,
 } from 'three';
+import { RutDecals } from './rutDecals';
 import { atmosphereUniforms, installAtmosphere, setAtmosphere } from './atmosphere';
 import { config, type QualityPreset } from '../config';
 import {
@@ -61,6 +62,7 @@ export class World {
   readonly palette: ResolvedPalette;
   preset: QualityPreset;
   terrainMesh!: TerrainMesh;
+  ruts!: RutDecals;
   props!: Props;
   structures!: Structures;
   sky!: Sky;
@@ -181,6 +183,8 @@ export class World {
       backend,
     );
     this.scene.add(this.terrainMesh.group);
+    this.ruts = new RutDecals(course.terrain, this.palette);
+    this.scene.add(this.ruts.mesh);
     this.requestFarField(backend);
     const async = !!this.terrainService && this.async;
     const gen = async
@@ -270,6 +274,7 @@ export class World {
     this.applyAtmosphereUniforms();
     atmosphereUniforms.uAtmoCamera.value.copy(camera);
     this.terrainMesh.update(camera.x, camera.y, camera.z, buildBudgetMs);
+    this.ruts.update(camera.x, camera.z);
     this.props.update(camera.x, camera.z, focus.x, focus.z);
     this.sky.update(dt, camera);
     this.lighting.follow(focus, camera);
@@ -285,6 +290,7 @@ export class World {
       this.farField = null;
     }
     this.terrainMesh?.dispose();
+    this.ruts?.dispose();
     this.props?.dispose();
     this.structures?.dispose();
     this.sky?.dispose();

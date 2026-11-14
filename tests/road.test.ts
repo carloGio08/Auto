@@ -90,7 +90,7 @@ describe.each(defs.map((d) => [d.id, d] as const))('trail network: %s', (_id, de
     }
   });
 
-  it('varies the trail: width 4–7 m, surfaces, lay-bys', () => {
+  it('varies the trail: width 6–8 m, surfaces, lay-bys', () => {
     const main = road.main;
     let minW = Infinity;
     let maxW = 0;
@@ -100,7 +100,7 @@ describe.each(defs.map((d) => [d.id, d] as const))('trail network: %s', (_id, de
     for (let i = main.start + 1; i < main.start + main.count; i++) {
       if (road.flags[i] & (ROAD_HAIRPIN | ROAD_LAYBY | ROAD_BRIDGE)) continue;
       minW = Math.min(minW, road.halfWidth[i] * 2);
-      // Bends widen a little: the 4–7 m range is for the straights.
+      // Bends widen a little: the 6–8 m range is for the straights.
       let bend = false;
       for (let k = Math.max(main.start, i - 10); k < Math.min(main.start + main.count, i + 10); k++)
         if (Math.abs(road.curvature[k]) > 1 / 70) bend = true;
@@ -109,8 +109,8 @@ describe.each(defs.map((d) => [d.id, d] as const))('trail network: %s', (_id, de
       run = road.surf[i] === road.surf[i - 1] ? run + road.spacing : 0;
       longest = Math.max(longest, run);
     }
-    expect(minW).toBeGreaterThan(3.9);
-    expect(maxW).toBeLessThan(7.6);
+    expect(minW).toBeGreaterThan(5.5);
+    expect(maxW).toBeLessThan(8.6);
     expect(kinds.size).toBe(3);
     // The surface never stays the same for kilometres.
     expect(longest).toBeLessThan(900);

@@ -164,8 +164,8 @@ export class Terrain {
     if (q.flags & (ROAD_BRIDGE | ROAD_FORD)) return 0;
     let d = 0;
     const a = Math.abs(lateral);
-    // Two wheel ruts ±0.85 m from the centre line.
-    const u = (a - 0.85) / 0.38;
+    // Two wheel ruts ±offset m from the centre line.
+    const u = (a - config.world.ruts.offset) / 0.38;
     if (u > -1 && u < 1) d += q.rut * (1 - u * u) * (1 - u * u);
     // Grass hump in the middle of old two-tracks.
     if (q.surf === SURF_GRASSY && a < 0.6) d -= 0.05 * (1 - (a / 0.6) ** 2);
@@ -290,7 +290,7 @@ export class Terrain {
     if (h < this.puddleLine && this.puddle(trail, s, lateral, surf) > 0.2) return 'mud';
     const a = Math.abs(lateral);
     if (surf === SURF_GRASSY && a < 0.42) return 'grass';
-    if (surf !== SURF_GRAVEL && road.rut[g] > 0.045 && Math.abs(a - 0.85) < 0.2) return 'rut';
+    if (road.rut[g] > 0 && Math.abs(a - config.world.ruts.offset) < 0.24) return 'rut';
     return surf === SURF_GRAVEL ? 'gravel' : 'dirt';
   }
 

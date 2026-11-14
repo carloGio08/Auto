@@ -152,6 +152,21 @@ export class TerrainColorer {
           c[2] = b0 + (c[2] - b0) * inside;
         }
       }
+      // Soft yellow-green fringe where the road meets the meadow (trampled, sunlit grass).
+      const u = (Math.abs(latB) - edge - 0.7) / 1.3;
+      if (u > -1 && u < 1 && !t.trailSnow(v.x, v.z, v.h)) {
+        const k = 0.42 * (1 - u * u) * (1 - u * u) * w[Mat.Grass];
+        if (k > 0.004) {
+          const r0 = c[0];
+          const g0 = c[1];
+          const b0 = c[2];
+          c.fill(0);
+          this.add(this.palette.dryGrass, 0.75 + 0.2 * P, 1);
+          c[0] = r0 + (c[0] - r0) * k;
+          c[1] = g0 + (c[1] - g0) * k;
+          c[2] = b0 + (c[2] - b0) * k;
+        }
+      }
     }
     // Baked ambient occlusion: hollows, the foot of slopes and the trail edges are darker.
     const ao = this.occlusion(v.x, v.z, roadEdge);
@@ -192,10 +207,11 @@ export class TerrainColorer {
       0.5 + 0.22 * Math.sin(v.s / 23 + v.trail * 1.7) + 0.14 * Math.sin(v.s / 7.3) + 0.12 * P;
     switch (kind) {
       case 'dirt':
-        this.add(pal.earth, along + 0.1, 1);
+        // Slightly lighter crown between the two ruts.
+        this.add(pal.earth, along + 0.1 + (Math.abs(v.lateral) < 0.5 ? 0.18 : 0), 1);
         break;
       case 'rut':
-        this.add(pal.earth, along - 0.35, 1);
+        this.add(pal.earth, along - 0.4, 1);
         break;
       case 'gravel':
         this.add(pal.scree, along + 0.1, 0.7);

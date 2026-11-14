@@ -184,7 +184,8 @@ export class TireTracks {
       snow: { center: p.snowShade[0], edge: p.snow[1], alpha: 0.85, edgeAlpha: 0.7, life: 120 },
       ice: { center: p.snowShade[1], edge: p.snowShade[2], alpha: 0.35, edgeAlpha: 0.5, life: 100 },
       mud: { center: p.mud[0], edge: p.mud[1], alpha: 0.85, edgeAlpha: 0.6, life: 90 },
-      trail: { center: p.earth[1], edge: p.earth[2], alpha: 0.5, edgeAlpha: 0.45, life: 60 },
+      // Darker and sharper than the baked ruts they run in; fade over time.
+      trail: { center: p.mud[0], edge: p.earth[0], alpha: 0.75, edgeAlpha: 0.55, life: 60 },
       sand: { center: p.earth[2], edge: p.sand[0], alpha: 0.55, edgeAlpha: 0.5, life: 70 },
       grass: { center: p.grass[0], edge: p.undergrowth[1], alpha: 0.55, edgeAlpha: 0.5, life: 80 },
       forest: {

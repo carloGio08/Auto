@@ -1,3 +1,4 @@
+import { config } from '../config';
 import { clamp, lerp, smoothstep } from '../math/util';
 import type { SurfaceId, TrailDef } from '../data/types';
 import type { Mountain } from './mountain';
@@ -481,16 +482,17 @@ export class Road {
       const v = Math.sin(s / 173 + ph) + 0.6 * Math.sin(s / 71 + ph * 1.9) + branchy;
       this.surf[g] = v > 0.75 ? SURF_GRASSY : v < -0.65 ? SURF_GRAVEL : SURF_DIRT;
       const r = 0.5 + 0.5 * Math.sin(s / 53 + ph * 0.7);
-      this.rut[g] =
-        this.surf[g] === SURF_GRAVEL || this.flags[g] & (ROAD_BRIDGE | ROAD_FORD)
-          ? 0
-          : 0.025 + 0.05 * r;
+      // Ruts along the whole trail (3–5 cm), none on bridges and fords.
+      const [d0, d1] = config.world.ruts.depth;
+      this.rut[g] = this.flags[g] & (ROAD_BRIDGE | ROAD_FORD) ? 0 : d0 + (d1 - d0) * r;
     }
     // Smooth the rut depth across stretch changes.
     for (let i = 1; i < count; i++) {
       const g = start + i;
       this.rut[g] = this.rut[g - 1] + (this.rut[g] - this.rut[g - 1]) * 0.15;
     }
+    for (let i = 0; i < count; i++)
+      if (this.flags[start + i] & (ROAD_BRIDGE | ROAD_FORD)) this.rut[start + i] = 0;
     // Lay-bys: every ~400–800 m on a straight, gentle stretch, widened on the downhill side
     // (a viewpoint over the valley).
     let next = 300 + ((k * 137) % 250);

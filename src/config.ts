@@ -168,6 +168,19 @@ export const config = {
      */
     fogVisibility: 650,
     fogStart: 300,
+    /**
+     * Baked wheel ruts along every trail: centre ±offset m from the spline, depth range (m,
+     * tiny: no effect on handling), and the crisp ribbons drawn near the camera (radius,
+     * rebuild step and lift in m, opacity).
+     */
+    ruts: {
+      offset: 0.85,
+      depth: [0.03, 0.05] as number[],
+      radius: 230,
+      rebuildStep: 24,
+      lift: 0.05,
+      opacity: 0.7,
+    },
     /** Saturation multiplier applied to the whole palette (1 = as declared). */
     vividness: 1.15,
     /** Max ms per frame spent building terrain patches on the main thread (no worker). */
