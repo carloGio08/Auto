@@ -199,7 +199,7 @@ export const config = {
         /** Terrain LOD0: face size (m), ring radius (m) and triangle budget. */
         terrainCell: 1.25,
         lod0Radius: 180,
-        triangleBudget: 1_100_000,
+        triangleBudget: 1_300_000,
         patchCells: 64,
         pixelRatioCap: 1.5,
         shadows: true,
