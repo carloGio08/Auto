@@ -9,6 +9,7 @@ import {
   Vector3,
 } from 'three';
 import { RutDecals } from './rutDecals';
+import { GroundCover } from './groundCover';
 import { atmosphereUniforms, installAtmosphere, setAtmosphere } from './atmosphere';
 import { config, type QualityPreset } from '../config';
 import {
@@ -64,6 +65,7 @@ export class World {
   terrainMesh!: TerrainMesh;
   ruts!: RutDecals;
   props!: Props;
+  cover!: GroundCover;
   structures!: Structures;
   sky!: Sky;
   lighting!: Lighting;
@@ -205,6 +207,8 @@ export class World {
     );
     this.props = new Props(course, this.colliders, this.preset, this.palette, backend, sun);
     this.scene.add(this.props.group);
+    this.cover = new GroundCover(course, this.preset, this.palette, backend);
+    this.scene.add(this.cover.group);
     if (async)
       for (const p of this.props.prebuildAsync(st.x, st.z))
         yield { stage: 'loading.props', progress: 0.75 + p * 0.12, wait: true };
@@ -246,6 +250,7 @@ export class World {
       /* drain */
     }
     this.props.prebuild(x, z);
+    this.cover.prebuild(x, z);
   }
 
   /** Whether build() waits for the worker (false: everything on the main thread). */
@@ -266,6 +271,7 @@ export class World {
     this.applyFog();
     this.lighting.setShadows(preset.shadows, preset.shadowMapSize);
     this.props.setQuality(preset);
+    this.cover.setQuality(preset);
     // Terrain detail is kept until the next descent: rebuilding every patch mid-run (e.g. on
     // an automatic downgrade) would show coarse ground under the jeep for a while.
   }
@@ -281,6 +287,7 @@ export class World {
     this.terrainMesh.update(camera.x, camera.y, camera.z, buildBudgetMs);
     this.ruts.update(camera.x, camera.z);
     this.props.update(camera.x, camera.z, focus.x, focus.z);
+    this.cover.update(camera.x, camera.z, this.elapsed);
     this.sky.update(dt, camera);
     this.lighting.follow(focus, camera);
     this.water.update(dt);
@@ -297,6 +304,7 @@ export class World {
     this.terrainMesh?.dispose();
     this.ruts?.dispose();
     this.props?.dispose();
+    this.cover?.dispose();
     this.structures?.dispose();
     this.sky?.dispose();
     this.water?.dispose();

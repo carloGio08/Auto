@@ -78,28 +78,145 @@ export const treeSpecies: TreeSpeciesDef[] = [
 /** Smallest tree height (m), whatever the altitude: smaller woody plants are bushes. */
 export const MIN_TREE_HEIGHT = 6;
 
-/** Undergrowth kinds (low-poly, instanced near the jeep only). */
-export type UndergrowthKind = 'bush' | 'grass' | 'fern' | 'flowerY' | 'flowerP' | 'log' | 'stump';
+/** Ground-cover kinds (low-poly, instanced and streamed per tile near the camera). */
+export type UndergrowthKind =
+  | 'grass'
+  | 'flowerY'
+  | 'flowerR'
+  | 'flowerP'
+  | 'flowerW'
+  | 'bush'
+  | 'fern'
+  | 'pebble'
+  | 'log'
+  | 'stump';
 
 export interface UndergrowthDef {
   kind: UndergrowthKind;
   /** Base size (m) and random range factor. */
   size: [number, number];
-  /** Where (biome materials weights it follows; see propPlacement). */
-  habitat: 'forest' | 'meadow' | 'grass' | 'edge';
-  /** Instances per 100 m² at full habitat. */
+  /**
+   * Where it grows: 'forest' floor, 'meadow' (flower patches), 'grass', forest 'edge',
+   * 'road' (pebbles on and beside the trails).
+   */
+  habitat: 'forest' | 'meadow' | 'grass' | 'edge' | 'road';
+  /** Instances per 100 m² at full habitat (before the preset density). */
   density: number;
+  /** Instance cap group (preset limits: grassLimit, flowerLimit, coverLimit). */
+  cap: 'grass' | 'flowers' | 'cover';
+  /** Sways in the wind (vertex shader; off on the Low preset). */
+  wind: boolean;
+  /** Casts a shadow. */
+  shadow: boolean;
+  /** Visible up to this fraction of the cover distance (small things fade sooner). */
+  reach: number;
 }
 
 export const undergrowth: UndergrowthDef[] = [
-  { kind: 'bush', size: [0.8, 1.6], habitat: 'edge', density: 0.6 },
-  { kind: 'grass', size: [0.35, 0.7], habitat: 'grass', density: 3.2 },
-  { kind: 'fern', size: [0.5, 0.9], habitat: 'forest', density: 2.2 },
-  { kind: 'flowerY', size: [0.25, 0.4], habitat: 'meadow', density: 2.4 },
-  { kind: 'flowerP', size: [0.25, 0.4], habitat: 'meadow', density: 1.6 },
-  { kind: 'log', size: [3, 6], habitat: 'forest', density: 0.06 },
-  { kind: 'stump', size: [0.5, 0.9], habitat: 'forest', density: 0.12 },
+  {
+    kind: 'flowerY',
+    size: [0.4, 0.65],
+    habitat: 'meadow',
+    density: 110,
+    cap: 'flowers',
+    wind: true,
+    shadow: true,
+    reach: 0.85,
+  },
+  {
+    kind: 'flowerR',
+    size: [0.4, 0.65],
+    habitat: 'meadow',
+    density: 110,
+    cap: 'flowers',
+    wind: true,
+    shadow: true,
+    reach: 0.85,
+  },
+  {
+    kind: 'flowerP',
+    size: [0.4, 0.65],
+    habitat: 'meadow',
+    density: 110,
+    cap: 'flowers',
+    wind: true,
+    shadow: true,
+    reach: 0.85,
+  },
+  {
+    kind: 'flowerW',
+    size: [0.4, 0.65],
+    habitat: 'meadow',
+    density: 110,
+    cap: 'flowers',
+    wind: true,
+    shadow: true,
+    reach: 0.85,
+  },
+  {
+    kind: 'grass',
+    size: [0.55, 1.05],
+    habitat: 'grass',
+    density: 90,
+    cap: 'grass',
+    wind: true,
+    shadow: false,
+    reach: 1,
+  },
+  {
+    kind: 'bush',
+    size: [0.8, 1.5],
+    habitat: 'edge',
+    density: 1.2,
+    cap: 'cover',
+    wind: false,
+    shadow: true,
+    reach: 1,
+  },
+  {
+    kind: 'fern',
+    size: [0.5, 0.9],
+    habitat: 'forest',
+    density: 6,
+    cap: 'cover',
+    wind: true,
+    shadow: false,
+    reach: 0.8,
+  },
+  {
+    kind: 'pebble',
+    size: [0.1, 0.28],
+    habitat: 'road',
+    density: 16,
+    cap: 'cover',
+    wind: false,
+    shadow: false,
+    reach: 0.55,
+  },
+  {
+    kind: 'log',
+    size: [3, 6],
+    habitat: 'forest',
+    density: 0.08,
+    cap: 'cover',
+    wind: false,
+    shadow: true,
+    reach: 1,
+  },
+  {
+    kind: 'stump',
+    size: [0.5, 0.9],
+    habitat: 'forest',
+    density: 0.16,
+    cap: 'cover',
+    wind: false,
+    shadow: true,
+    reach: 1,
+  },
 ];
+
+/** Flower patches: noise scale (m) and threshold (higher = fewer, tighter patches). */
+export const flowerPatches = { scale: 6, threshold: 0.5, colourCell: 14 };
 
 /**
  * Ecology rules: minimum distance between trees (Poisson disk, m), how strongly forests

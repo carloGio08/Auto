@@ -3,13 +3,7 @@ import { Simplex2 } from '../math/noise';
 import { smoothstep } from '../math/util';
 import type { Course } from '../terrain/course';
 import { Mat } from '../terrain/biome';
-import {
-  ecology,
-  MIN_TREE_HEIGHT,
-  treeSpecies,
-  undergrowth,
-  type UndergrowthKind,
-} from '../data/vegetation';
+import { ecology, MIN_TREE_HEIGHT, treeSpecies } from '../data/vegetation';
 
 /** Rock prop types (instanced per cell). */
 export const ROCK_TYPES = [
@@ -19,12 +13,14 @@ export const ROCK_TYPES = [
   'rockSlab',
   'rockSpire',
   'rockRound',
+  'boulder0',
+  'boulder1',
 ] as const;
 export type RockType = (typeof ROCK_TYPES)[number];
 
 /** Why a rock is where it is (tests, debug overlay). */
-export type RockReason = 'outcrop' | 'talus' | 'streambed' | 'trailside' | 'erratic';
-const REASONS: RockReason[] = ['outcrop', 'talus', 'streambed', 'trailside', 'erratic'];
+export type RockReason = 'outcrop' | 'talus' | 'streambed' | 'trailside' | 'erratic' | 'boulders';
+const REASONS: RockReason[] = ['outcrop', 'talus', 'streambed', 'trailside', 'erratic', 'boulders'];
 
 /** Tree ages; they are also the destructible tiers (data/trees.ts). */
 export const TREE_AGES = ['young', 'medium', 'old'] as const;
@@ -32,10 +28,7 @@ export const TREE_AGES = ['young', 'medium', 'old'] as const;
 /** Floats per record in the cell arrays. */
 export const TREE_STRIDE = 8; // species, age, x, y, z, height, width, rot
 export const ROCK_STRIDE = 7; // type, x, y, z, scale, rot, collides
-export const UNDER_STRIDE = 6; // kind, x, y, z, scale, rot
 export const BLOB_STRIDE = 7; // x, y, z, radius, height, tone, trees
-
-export const UNDERGROWTH_KINDS: UndergrowthKind[] = undergrowth.map((u) => u.kind);
 
 /**
  * Props of one square cell, as transferable typed arrays (built in the terrain worker, or on
@@ -49,7 +42,6 @@ export interface CellData {
   trees: Float32Array;
   rocks: Float32Array;
   rockReasons: Uint8Array;
-  under: Float32Array;
   /** Canopy masses for the far LOD, from the same forest density. */
   blobs: Float32Array;
 }
@@ -86,6 +78,60 @@ function speciesWeights(alt01: number, wet: number, out: Float32Array): number {
 }
 const sw = new Float32Array(treeSpecies.length);
 
+/** Floats per ecology sample (see ecologyAt). */
+export const ECO_STRIDE = 10;
+
+/** Whether a point is inside the playable map (with a small margin). */
+export const insideMap = (course: Course, x: number, z: number): boolean =>
+  Math.max(Math.abs(x), Math.abs(z)) <= course.def.halfSize * 1.05;
+
+/**
+ * Ecology of one point, into `out` (ECO_STRIDE floats): 0 tree density (forest from the
+ * biome model raised to the clumping exponent, modulated by the low-frequency cluster
+ * noise, thinning to the tree line, lone meadow trees), 1 ground height, 2 altitude 0..1
+ * (valley line → tree line), 3 wetness, 4 slope, 5 distance to the worn band of the nearest
+ * trail, habitats 6 forest floor, 7 flowers, 8 grass, 9 water (1) or dry land (0).
+ */
+export function ecologyAt(course: Course, x: number, z: number, out: Float32Array): void {
+  const terrain = course.terrain;
+  const bio = terrain.biomes;
+  const def = course.def;
+  const b = def.biomes;
+  const cluster = clusterNoise(def.seed);
+  const h = terrain.height(x, z);
+  const q = terrain.lastQuery;
+  const roadEdge = q.found ? Math.abs(q.lateral - q.offset) - q.halfWidth : 1e4;
+  const hx = terrain.height(x + 2, z) - terrain.height(x - 2, z);
+  const hz = terrain.height(x, z + 2) - terrain.height(x, z - 2);
+  const slope = Math.hypot(hx, hz) / 4;
+  const ny = 1 / Math.sqrt(1 + slope * slope);
+  bio.weights({ x, z, h, ny, nz: -hz / 4 / Math.sqrt(1 + slope * slope), roadEdge }, weights);
+  const a = h + bio.wobble(x, z);
+  const alt01 = (a - b.valleyLine) / (b.treeLine - b.valleyLine);
+  const dry = h < def.lake.level + 1.2 || terrain.waterLevel(x, z) > h - 0.3;
+  let dens = dry || slope > ecology.maxSlope ? 0 : bio.forest;
+  dens = Math.pow(dens, ecology.clumping);
+  const cl = cluster.fbm(x / ecology.clusterScale, z / ecology.clusterScale, 2);
+  dens *= smoothstep(-0.35, 0.25, cl) * (0.75 + 0.5 * Math.max(0, cl));
+  dens *= 1 - (1 - ecology.treeLineDensity) * smoothstep(0.75, 1.05, alt01);
+  // A few lone trees in open meadows.
+  if (!dry && slope < ecology.maxSlope * 0.8 && alt01 < 0.95)
+    dens = Math.max(dens, ecology.loneTrees * (weights[Mat.Grass] + weights[Mat.Flowers]));
+  // Scattered larches just above the tree line.
+  if (alt01 > 1 && alt01 < 1.2 && !dry && slope < ecology.maxSlope)
+    dens = Math.max(dens, 0.12 * (1 - smoothstep(1.05, 1.2, alt01)) * smoothstep(-0.2, 0.3, cl));
+  out[0] = Math.min(1, dens);
+  out[1] = h;
+  out[2] = alt01;
+  out[3] = bio.moisture;
+  out[4] = slope;
+  out[5] = roadEdge;
+  out[6] = weights[Mat.Forest] + weights[Mat.Undergrowth] + weights[Mat.Moss];
+  out[7] = weights[Mat.Flowers];
+  out[8] = weights[Mat.Grass] + weights[Mat.DryGrass] + weights[Mat.RockGrass] * 0.5;
+  out[9] = dry ? 1 : 0;
+}
+
 /**
  * Deterministic placement of one cell (pure: no three.js).
  *
@@ -98,8 +144,9 @@ const sw = new Float32Array(treeSpecies.length);
  *   accepted by the density. Species by altitude band and wetness, age (young near the
  *   trails and at the forest edge, old deep inside), realistic heights (6–25 m).
  * - Canopy masses (far LOD) from the same density, one per 32 m bucket.
- * - Undergrowth (bushes, grass tufts, ferns, flowers, fallen logs, stumps) by habitat.
- * - Rocks only where they make sense (outcrops, talus, stream beds, a few by the trails).
+ * - Rocks only where they make sense (outcrops, talus, stream beds, a few by the trails),
+ *   and groups of big faceted boulders beside the trails and on slopes, never on the
+ *   driving line. (Ground cover is placed per smaller tile: coverPlacement.ts.)
  * Never on a trail band, in water, or on slopes beyond ~40°.
  */
 export function placeCell(
@@ -113,59 +160,22 @@ export function placeCell(
   const terrain = course.terrain;
   const bio = terrain.biomes;
   const def = course.def;
-  const b = def.biomes;
   const x0 = cx * size;
   const z0 = cz * size;
-  const lake = def.lake.level;
-  const cluster = clusterNoise(def.seed);
   const step = full ? GRID : FAR_GRID;
   const gn = Math.round(size / step) + 1;
   // Per grid point: tree density, ground height, altitude 0..1, wetness, slope, road edge,
   // habitats (forest floor, meadow, grass, edge).
-  const D = new Float32Array(gn * gn * 10);
-  const inMap = (x: number, z: number): boolean =>
-    Math.max(Math.abs(x), Math.abs(z)) <= def.halfSize * 1.05;
+  const D = new Float32Array(gn * gn * ECO_STRIDE);
+  const inMap = (x: number, z: number): boolean => insideMap(course, x, z);
+  const tmp = new Float32Array(ECO_STRIDE);
   for (let j = 0; j < gn; j++)
     for (let i = 0; i < gn; i++) {
       const x = x0 + i * step;
       const z = z0 + j * step;
-      const o = (j * gn + i) * 10;
       if (!inMap(x, z)) continue;
-      const h = terrain.height(x, z);
-      const q = terrain.lastQuery;
-      const roadEdge = q.found ? Math.abs(q.lateral - q.offset) - q.halfWidth : 1e4;
-      const hx = terrain.height(x + 2, z) - terrain.height(x - 2, z);
-      const hz = terrain.height(x, z + 2) - terrain.height(x, z - 2);
-      const slope = Math.hypot(hx, hz) / 4;
-      const ny = 1 / Math.sqrt(1 + slope * slope);
-      bio.weights({ x, z, h, ny, nz: -hz / 4 / Math.sqrt(1 + slope * slope), roadEdge }, weights);
-      const a = h + bio.wobble(x, z);
-      const alt01 = (a - b.valleyLine) / (b.treeLine - b.valleyLine);
-      const dry = h < lake + 1.2 || terrain.waterLevel(x, z) > h - 0.3;
-      let dens = dry || slope > ecology.maxSlope ? 0 : bio.forest;
-      dens = Math.pow(dens, ecology.clumping);
-      const cl = cluster.fbm(x / ecology.clusterScale, z / ecology.clusterScale, 2);
-      dens *= smoothstep(-0.35, 0.25, cl) * (0.75 + 0.5 * Math.max(0, cl));
-      dens *= 1 - (1 - ecology.treeLineDensity) * smoothstep(0.75, 1.05, alt01);
-      // A few lone trees in open meadows.
-      if (!dry && slope < ecology.maxSlope * 0.8 && alt01 < 0.95)
-        dens = Math.max(dens, ecology.loneTrees * (weights[Mat.Grass] + weights[Mat.Flowers]));
-      // Scattered larches just above the tree line.
-      if (alt01 > 1 && alt01 < 1.2 && !dry && slope < ecology.maxSlope)
-        dens = Math.max(
-          dens,
-          0.12 * (1 - smoothstep(1.05, 1.2, alt01)) * smoothstep(-0.2, 0.3, cl),
-        );
-      D[o] = Math.min(1, dens);
-      D[o + 1] = h;
-      D[o + 2] = alt01;
-      D[o + 3] = bio.moisture;
-      D[o + 4] = slope;
-      D[o + 5] = roadEdge;
-      D[o + 6] = weights[Mat.Forest] + weights[Mat.Undergrowth] + weights[Mat.Moss];
-      D[o + 7] = weights[Mat.Flowers];
-      D[o + 8] = weights[Mat.Grass] + weights[Mat.DryGrass] + weights[Mat.RockGrass] * 0.5;
-      D[o + 9] = dry ? 1 : 0;
+      ecologyAt(course, x, z, tmp);
+      D.set(tmp, (j * gn + i) * ECO_STRIDE);
     }
   const at = (x: number, z: number, k: number): number => {
     const fx = Math.max(0, Math.min(gn - 1.001, (x - x0) / step));
@@ -233,7 +243,6 @@ export function placeCell(
       trees: new Float32Array(0),
       rocks: new Float32Array(0),
       rockReasons: new Uint8Array(0),
-      under: new Float32Array(0),
       blobs: Float32Array.from(blobs),
     };
 
@@ -314,44 +323,6 @@ export function placeCell(
       );
     }
 
-  // --- Undergrowth ------------------------------------------------------------------------
-  const under: number[] = [];
-  const rng = new Rng((cx * 73856093) ^ (cz * 19349663) ^ def.seed ^ 0x5eed);
-  const us = 2.5;
-  for (let gz = 0; gz < size; gz += us)
-    for (let gx = 0; gx < size; gx += us) {
-      const x = x0 + gx + rng.next() * us;
-      const z = z0 + gz + rng.next() * us;
-      const roll = rng.next();
-      const s = rng.next();
-      const rot = rng.next() * Math.PI * 2;
-      if (blocked(x, z, 1.5) || at(x, z, 4) > 0.7) continue;
-      const forest = at(x, z, 6);
-      const meadow = at(x, z, 7);
-      const grass = at(x, z, 8);
-      const treeD = at(x, z, 0);
-      const edge = treeD * (1 - treeD) * 4;
-      let acc = 0;
-      for (let k = 0; k < undergrowth.length; k++) {
-        const u = undergrowth[k];
-        const hab =
-          u.habitat === 'forest'
-            ? forest * (0.3 + treeD)
-            : u.habitat === 'meadow'
-              ? meadow
-              : u.habitat === 'grass'
-                ? grass * (1 - treeD)
-                : edge * 0.6 + forest * 0.2;
-        // Candidates per 100 m²: (100 / us²).
-        acc += (u.density * hab * def.props.bushes * density * us * us) / 100;
-        if (roll < acc) {
-          const sz = u.size[0] + (u.size[1] - u.size[0]) * s;
-          under.push(k, x, terrain.height(x, z) - 0.03, z, sz, rot);
-          break;
-        }
-      }
-    }
-
   // --- Rocks: outcrops, talus, stream beds, trailside stones, rare erratics -------------
   const rocks: number[] = [];
   const reasons: number[] = [];
@@ -416,6 +387,39 @@ export function placeCell(
       reasons.push(REASONS.indexOf(reason));
     }
 
+  // --- Boulder groups: 2–4 big faceted boulders beside a trail or on a slope ------------
+  const bs = 40;
+  const br = new Rng((cx * 15485863) ^ (cz * 32452843) ^ def.seed ^ 0xb01d);
+  for (let gz = 0; gz < size; gz += bs)
+    for (let gx = 0; gx < size; gx += bs) {
+      const x = x0 + gx + br.range(4, bs - 4);
+      const z = z0 + gz + br.range(4, bs - 4);
+      const roll = br.next();
+      const n = 2 + Math.floor(br.next() * 3);
+      const seedG = br.next() * 1000;
+      if (blocked(x, z, 3)) continue;
+      const edge = at(x, z, 5);
+      const slope = at(x, z, 4);
+      const nearTrail = edge > 3 && edge < 14 ? 0.11 : 0;
+      const onSlope = slope > 0.25 && slope < 0.75 ? 0.05 : 0;
+      if (roll >= (nearTrail + onSlope) * def.props.rocks * Math.max(0.5, density)) continue;
+      const gr = new Rng(Math.floor(seedG * 7919) ^ def.seed);
+      for (let k = 0; k < n; k++) {
+        const a = gr.range(0, Math.PI * 2);
+        const d = k === 0 ? 0 : gr.range(1.6, 4.2);
+        const px = x + Math.cos(a) * d;
+        const pz = z + Math.sin(a) * d;
+        const sz = (k === 0 ? 1.4 : 0.7) + gr.next() * (k === 0 ? 1.0 : 0.8);
+        // Never on (or reaching into) the driving line, never in water.
+        if (blocked(px, pz, 1.2 * sz + 1.5)) continue;
+        const h = terrain.height(px, pz);
+        if (terrain.waterLevel(px, pz) > h - 0.3) continue;
+        const type = gr.next() < 0.5 ? 'boulder0' : 'boulder1';
+        rocks.push(ROCK_TYPES.indexOf(type), px, h - 0.2 * sz, pz, sz, gr.range(0, 6.28), 1);
+        reasons.push(REASONS.indexOf('boulders'));
+      }
+    }
+
   return {
     cx,
     cz,
@@ -423,7 +427,6 @@ export function placeCell(
     trees: Float32Array.from(trees),
     rocks: Float32Array.from(rocks),
     rockReasons: Uint8Array.from(reasons),
-    under: Float32Array.from(under),
     blobs: Float32Array.from(blobs),
   };
 }

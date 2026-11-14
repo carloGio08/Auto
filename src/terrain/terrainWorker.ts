@@ -9,6 +9,7 @@ import { ArrayPool, buildPatch, type PatchArrays, type PatchRequest } from './pa
 import type { MountainDef } from '../data/types';
 import type { PatchPalette } from './splat';
 import { placeCell, type CellData } from '../world/propPlacement';
+import { placeCover } from '../world/coverPlacement';
 import { buildFarField, type FarFieldArrays, type FarFieldRequest } from './farField';
 
 export type WorkerRequest =
@@ -17,6 +18,15 @@ export type WorkerRequest =
   | { type: 'patch'; req: PatchRequest }
   | { type: 'recycle'; buffers: ArrayBuffer[] }
   | { type: 'farfield'; gen: number; req: FarFieldRequest }
+  | {
+      type: 'cover';
+      id: number;
+      gen: number;
+      tx: number;
+      tz: number;
+      size: number;
+      density: number;
+    }
   | {
       type: 'cell';
       id: number;
@@ -34,6 +44,7 @@ export type WorkerResponse =
   | { type: 'error'; id: number; message: string }
   | { type: 'patchError'; key: number; gen: number; message: string }
   | { type: 'cell'; id: number; gen: number; data: CellData }
+  | { type: 'cover'; id: number; gen: number; data: Float32Array }
   | { type: 'farfield'; gen: number; data: FarFieldArrays }
   | { type: 'patch'; key: number; gen: number; result: PatchArrays };
 
@@ -75,9 +86,15 @@ scope.onmessage = (e: MessageEvent<WorkerRequest>): void => {
           data.trees.buffer,
           data.rocks.buffer,
           data.rockReasons.buffer,
-          data.under.buffer,
           data.blobs.buffer,
         ] as ArrayBuffer[],
+      );
+    } else if (msg.type === 'cover') {
+      if (!active || msg.gen !== active.gen) return;
+      const data = placeCover(active.course, msg.tx, msg.tz, msg.size, msg.density);
+      scope.postMessage(
+        { type: 'cover', id: msg.id, gen: msg.gen, data } as WorkerResponse,
+        [data.buffer] as ArrayBuffer[],
       );
     } else if (msg.type === 'recycle') {
       const [p, c, n] = msg.buffers;

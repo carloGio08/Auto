@@ -27,6 +27,8 @@ export const defaultPalette: Palette = {
   dryGrass: ['#9e9a5a', '#b0a964', '#c2b872', '#d1c584'],
   grass: ['#4f8030', '#619336', '#74a63c', '#89b844', '#9ec84f'],
   flowers: ['#86ab52', '#a4bd5e', '#d8c86c', '#d6a9c8'],
+  // Flower heads of the ground cover: yellow, red, purple, white.
+  blossom: ['#f2c230', '#d9443a', '#9a5fc9', '#f3efe6'],
   undergrowth: ['#3f5f2f', '#4c6d35', '#5b7c3d'],
   forest: ['#2a4a2a', '#345a31', '#3f6a38', '#4b7a40'],
   moss: ['#5d7a3a', '#6f8c43', '#82a050'],

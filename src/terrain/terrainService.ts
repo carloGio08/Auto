@@ -3,6 +3,7 @@ import { buildCourseData, type Course, type CourseData } from './course';
 import { ArrayPool, PatchBuild, type PatchArrays, type PatchRequest } from './patchBuilder';
 import type { PatchPalette } from './splat';
 import { placeCell, type CellData } from '../world/propPlacement';
+import { placeCover } from '../world/coverPlacement';
 import { buildFarField, type FarFieldArrays, type FarFieldRequest } from './farField';
 import type { WorkerRequest, WorkerResponse } from './terrainWorker';
 
@@ -38,6 +39,14 @@ export interface PatchBackend {
     density: number,
     full: boolean,
     done: (d: CellData) => void,
+  ): void;
+  /** Ground cover of a tile (grass, flowers, bushes, pebbles...): COVER_STRIDE records. */
+  requestCover(
+    tx: number,
+    tz: number,
+    size: number,
+    density: number,
+    done: (d: Float32Array) => void,
   ): void;
 }
 
@@ -81,6 +90,16 @@ class LocalBackend implements PatchBackend {
     done: (d: CellData) => void,
   ): void {
     this.cellQueue.push(() => done(placeCell(this.course, cx, cz, size, density, full)));
+  }
+
+  requestCover(
+    tx: number,
+    tz: number,
+    size: number,
+    density: number,
+    done: (d: Float32Array) => void,
+  ): void {
+    this.cellQueue.push(() => done(placeCover(this.course, tx, tz, size, density)));
   }
 
   cancelAll(): void {
@@ -132,6 +151,7 @@ class WorkerBackend implements PatchBackend {
   }
 
   private readonly cellWaiting = new Map<number, (d: CellData) => void>();
+  private readonly coverWaiting = new Map<number, (d: Float32Array) => void>();
   private cellSeq = 1;
   private farDone: ((a: FarFieldArrays) => void) | null = null;
 
@@ -165,6 +185,29 @@ class WorkerBackend implements PatchBackend {
     const id = this.cellSeq++;
     this.cellWaiting.set(id, done);
     this.service.post({ type: 'cell', id, gen: this.gen, cx, cz, size, density, full });
+  }
+
+  requestCover(
+    tx: number,
+    tz: number,
+    size: number,
+    density: number,
+    done: (d: Float32Array) => void,
+  ): void {
+    if (this.failed) {
+      this.local.requestCover(tx, tz, size, density, done);
+      return;
+    }
+    const id = this.cellSeq++;
+    this.coverWaiting.set(id, done);
+    this.service.post({ type: 'cover', id, gen: this.gen, tx, tz, size, density });
+  }
+
+  receiveCover(id: number, d: Float32Array): void {
+    const cb = this.coverWaiting.get(id);
+    if (!cb) return;
+    this.coverWaiting.delete(id);
+    cb(d);
   }
 
   receiveCell(id: number, d: CellData): void {
@@ -222,6 +265,7 @@ class WorkerBackend implements PatchBackend {
     this.waiting.clear();
     this.requests.clear();
     this.cellWaiting.clear();
+    this.coverWaiting.clear();
     this.local.cancelAll();
   }
 
@@ -276,6 +320,10 @@ export class TerrainService {
     }
     if (msg.type === 'cell') {
       if (this.active && msg.gen === this.active.gen) this.active.receiveCell(msg.id, msg.data);
+      return;
+    }
+    if (msg.type === 'cover') {
+      if (this.active && msg.gen === this.active.gen) this.active.receiveCover(msg.id, msg.data);
       return;
     }
     const job = this.byId.get(msg.id);

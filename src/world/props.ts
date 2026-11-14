@@ -12,7 +12,7 @@ import {
 } from 'three';
 import { config, type QualityPreset } from '../config';
 import type { ResolvedPalette } from '../data/palette';
-import { treeSpecies, undergrowth } from '../data/vegetation';
+import { treeSpecies } from '../data/vegetation';
 import type { Course } from '../terrain/course';
 import type { PatchBackend } from '../terrain/terrainService';
 import type { Collider, CollisionWorld } from './colliders';
@@ -24,7 +24,6 @@ import {
   ROCK_TYPES,
   TREE_AGES,
   TREE_STRIDE,
-  UNDER_STRIDE,
   type CellData,
 } from './propPlacement';
 
@@ -68,7 +67,6 @@ export interface PropCell {
   nearCount: number;
   nearReach: number;
   rocks: InstancedMesh[] | null;
-  under: InstancedMesh[] | null;
   colliders: Collider[] | null;
 }
 
@@ -157,17 +155,14 @@ export class Props {
   private readonly speciesGeo: BufferGeometry[] = [];
   private readonly lowGeo: BufferGeometry[] = [];
   private readonly rockGeo: BufferGeometry[];
-  private readonly underGeo: BufferGeometry[];
   private readonly stumpGeo: BufferGeometry;
   private readonly canopyGeo: BufferGeometry;
   private readonly nearU = uniforms();
   private readonly midU = uniforms();
   private readonly farU = uniforms();
-  private readonly underU = uniforms();
   private readonly nearMat: MeshLambertMaterial;
   private readonly midMat: MeshLambertMaterial;
   private readonly farMat: MeshLambertMaterial;
-  private readonly underMat: MeshLambertMaterial;
   private readonly rockMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
   private readonly cells = new Map<number, PropCell>();
   /** Ids of trees broken during this run (become stumps). */
@@ -219,9 +214,10 @@ export class Props {
           ? g.rockSpire()
           : t === 'rockRound'
             ? g.rockRound()
-            : g.rock(ROCK_TYPES.indexOf(t)),
+            : t === 'boulder0' || t === 'boulder1'
+              ? g.boulder(t === 'boulder0' ? 0 : 1)
+              : g.rock(ROCK_TYPES.indexOf(t)),
     );
-    this.underGeo = undergrowth.map((u) => g.undergrowth(u.kind));
     this.stumpGeo = g.stump();
     this.canopyGeo = g.canopy();
     this.canopyLow = palette.foliage[1].clone();
@@ -229,7 +225,6 @@ export class Props {
     this.nearMat = fadeMaterial(this.nearU);
     this.midMat = fadeMaterial(this.midU);
     this.farMat = fadeMaterial(this.farU);
-    this.underMat = fadeMaterial(this.underU, true);
     this.shadows = preset.shadows;
     this.snowLine = course.def.biomes.snowLine;
     const limit = preset.treeLimit;
@@ -257,13 +252,12 @@ export class Props {
   }
 
   /** Distances (m): detailed trees, middle range, canopy masses, undergrowth, colliders. */
-  private get ranges(): { near: number; mid: number; far: number; under: number; col: number } {
+  private get ranges(): { near: number; mid: number; far: number; col: number } {
     const p = this.preset;
     return {
       near: p.treeNear * this.nearScale,
       mid: Math.max(p.treeNear * this.nearScale + 80, p.propDistance * this.midScale),
       far: p.canopyDistance,
-      under: p.undergrowthDistance,
       col: config.world.colliderRadius,
     };
   }
@@ -304,7 +298,6 @@ export class Props {
       nearCount: 0,
       nearReach: 0,
       rocks: null,
-      under: null,
       colliders: null,
     };
     this.cells.set(cell.key, cell);
@@ -444,7 +437,7 @@ export class Props {
     cell.nearCount = 0;
   }
 
-  // --- Rocks, undergrowth, colliders ----------------------------------------------------
+  // --- Rocks, colliders ----------------------------------------------------
 
   private buildRocks(cell: PropCell): void {
     if (cell.rocks || !cell.data?.full) return;
@@ -463,26 +456,6 @@ export class Props {
       });
       this.finish(im, true);
       cell.rocks!.push(im);
-    });
-  }
-
-  private buildUnder(cell: PropCell): void {
-    if (cell.under || !cell.data?.full) return;
-    const u = cell.data.under;
-    cell.under = [];
-    const byKind: number[][] = undergrowth.map(() => []);
-    for (let k = 0; k < u.length; k += UNDER_STRIDE) byKind[u[k]].push(k);
-    byKind.forEach((list, kind) => {
-      if (!list.length) return;
-      const im = new InstancedMesh(this.underGeo[kind], this.underMat, list.length);
-      list.forEach((k, slot) => {
-        const s = u[k + 4];
-        q.setFromAxisAngle(yAxis, u[k + 5]);
-        m.compose(pv.set(u[k + 1], u[k + 2], u[k + 3]), q, sv.setScalar(s));
-        im.setMatrixAt(slot, m);
-      });
-      this.finish(im, false);
-      cell.under!.push(im);
     });
   }
 
@@ -630,13 +603,11 @@ export class Props {
     const r = this.ranges;
     const diag = s * 0.71;
     // Fade bands follow the camera.
-    for (const u of [this.nearU, this.midU, this.farU, this.underU])
-      u.uFadeCam.value.set(camX, 0, camZ);
+    for (const u of [this.nearU, this.midU, this.farU]) u.uFadeCam.value.set(camX, 0, camZ);
     this.nearU.uFadeOut.value = [r.near, r.near + 30];
     this.midU.uFadeIn.value = [r.near, r.near + 30];
     this.midU.uFadeOut.value = [r.mid, r.mid + 60];
     this.farU.uFadeIn.value = [r.mid, r.mid + 60];
-    this.underU.uFadeOut.value = [r.under * 0.75, r.under];
     const span = Math.ceil(r.far / s) + 1;
     const ccx = Math.floor(camX / s);
     const ccz = Math.floor(camZ / s);
@@ -660,8 +631,6 @@ export class Props {
       else if (d > r.near + 80 + diag) this.dropNear(cell);
       if (d < r.mid + 60 + diag) this.buildRocks(cell);
       else cell.rocks = this.dropList(cell.rocks);
-      if (d < r.under + diag) this.buildUnder(cell);
-      else if (d > r.under + 40 + diag) cell.under = this.dropList(cell.under);
       const fd = Math.hypot(cell.centerX - focusX, cell.centerZ - focusZ);
       if (fd < r.col + diag) this.addColliders(cell);
       else if (fd > r.col + 60 + diag) this.dropColliders(cell);
@@ -694,7 +663,6 @@ export class Props {
   private unloadCell(cell: PropCell): void {
     this.dropNear(cell);
     cell.rocks = this.dropList(cell.rocks);
-    cell.under = this.dropList(cell.under);
     this.dropColliders(cell);
     this.cells.delete(cell.key);
     this.globalDirty = true;
@@ -797,13 +765,11 @@ export class Props {
       ...this.speciesGeo,
       ...this.lowGeo,
       ...this.rockGeo,
-      ...this.underGeo,
       this.stumpGeo,
       this.canopyGeo,
     ])
       g.dispose();
-    for (const mat of [this.nearMat, this.midMat, this.farMat, this.underMat, this.rockMat])
-      mat.dispose();
+    for (const mat of [this.nearMat, this.midMat, this.farMat, this.rockMat]) mat.dispose();
     this.group.removeFromParent();
   }
 }

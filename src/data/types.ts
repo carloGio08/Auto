@@ -179,6 +179,7 @@ export type PaletteKey =
   | 'dryGrass'
   | 'grass'
   | 'flowers'
+  | 'blossom'
   | 'undergrowth'
   | 'forest'
   | 'moss'

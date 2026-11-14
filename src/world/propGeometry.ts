@@ -223,13 +223,16 @@ export class PropGeometry {
       case 'bush':
         return this.bush(0);
       case 'grass': {
+        // Tuft of five low-poly blades, two greens, splayed outwards.
         const parts: BufferGeometry[] = [];
-        for (let i = 0; i < 4; i++) {
-          const blade = new ConeGeometry(0.08, 1, 3, 1);
-          blade.rotateZ(rng.range(-0.35, 0.35));
-          blade.rotateY((i / 4) * Math.PI * 2);
-          blade.translate(rng.range(-0.15, 0.15), 0.45, rng.range(-0.15, 0.15));
-          parts.push(paint(blade, i % 2 ? this.pal.grass[1] : this.pal.dryGrass[1]));
+        for (let i = 0; i < 5; i++) {
+          const blade = new ConeGeometry(0.07, 1, 3, 1);
+          blade.translate(0, 0.5, 0);
+          blade.rotateZ(rng.range(0.15, 0.45));
+          blade.rotateY((i / 5) * Math.PI * 2 + rng.range(-0.3, 0.3));
+          blade.scale(1, rng.range(0.7, 1.1), 1);
+          const c = i % 2 ? this.pal.grass[4] : this.pal.grass[2];
+          parts.push(paint(blade, c, this.pal.grass[3], 0.3, i));
         }
         return merge(parts);
       }
@@ -247,13 +250,39 @@ export class PropGeometry {
         return merge(parts);
       }
       case 'flowerY':
-      case 'flowerP': {
-        const stem = new CylinderGeometry(0.03, 0.03, 0.8, 3);
-        stem.translate(0, 0.4, 0);
-        const head = new OctahedronGeometry(0.16, 0);
-        head.translate(0, 0.85, 0);
-        const c = kind === 'flowerY' ? this.pal.flowers[2] : this.pal.flowers[3];
-        return merge([paint(stem, this.pal.grass[1]), paint(head, c)]);
+      case 'flowerR':
+      case 'flowerP':
+      case 'flowerW': {
+        // Small clump: three stems with faceted heads and two leaves.
+        const colour = this.pal.blossom[['flowerY', 'flowerR', 'flowerP', 'flowerW'].indexOf(kind)];
+        const parts: BufferGeometry[] = [];
+        for (let i = 0; i < 3; i++) {
+          const a = (i / 3) * Math.PI * 2 + rng.range(-0.4, 0.4);
+          const r = i === 0 ? 0 : 0.18;
+          const hgt = rng.range(0.6, 0.95);
+          const stem = new CylinderGeometry(0.025, 0.03, hgt, 3);
+          stem.translate(Math.cos(a) * r, hgt / 2, Math.sin(a) * r);
+          parts.push(paint(stem, this.pal.grass[1]));
+          const head = new OctahedronGeometry(0.21, 0);
+          head.scale(1, 0.55, 1);
+          head.translate(Math.cos(a) * r, hgt, Math.sin(a) * r);
+          parts.push(paint(head, colour));
+        }
+        for (let i = 0; i < 2; i++) {
+          const leaf = new OctahedronGeometry(0.3, 0);
+          leaf.scale(0.25, 0.05, 1);
+          leaf.translate(0, 0.08, 0.22);
+          leaf.rotateY(i * Math.PI + 0.6);
+          parts.push(paint(leaf, this.pal.grass[2]));
+        }
+        return merge(parts);
+      }
+      case 'pebble': {
+        const g = new DodecahedronGeometry(0.5, 0);
+        wobble(g, 0.08, 1300);
+        g.scale(1.2, 0.5, 0.9);
+        g.translate(0, 0.12, 0);
+        return merge([paint(g, this.pal.scree[1], this.pal.rockDark[2], 0.45, 5)]);
       }
       case 'log': {
         const t = new CylinderGeometry(0.06, 0.07, 1, 6);
@@ -305,6 +334,36 @@ export class PropGeometry {
     g.translate(0, 0.32, 0);
     const tones = [this.pal.rockLight[2], this.pal.rockDark[2], this.pal.scree[2]];
     return merge([paint(g, tones[variant % 3], tones[(variant + 1) % 3], 0.3, variant)]);
+  }
+
+  /**
+   * Big flat-faceted boulder (groups beside the trails and on slopes): a squashed,
+   * irregular dodecahedron with a flattened top, warm grey in three tones, the top faces
+   * lighter. Base slightly below the origin.
+   */
+  boulder(variant: number): BufferGeometry {
+    const g = new DodecahedronGeometry(1, 0);
+    wobble(g, 0.2, 960 + variant * 7);
+    const pos = g.getAttribute('position');
+    for (let i = 0; i < pos.count; i++) {
+      const y = pos.getY(i);
+      if (y > 0.35) pos.setY(i, 0.35 + (y - 0.35) * 0.25);
+    }
+    g.scale(1.25 + variant * 0.2, 0.8, 1.0);
+    g.translate(0, 0.3, 0);
+    const tones = [this.pal.rockLight[1], this.pal.rockLight[2], this.pal.rockDark[3]];
+    const top = this.pal.rockLight[3];
+    const out = paint(g, tones[variant % 3], tones[(variant + 1) % 3], 0.4, variant + 11);
+    // Lighter top faces.
+    const p = out.getAttribute('position');
+    const c = out.getAttribute('color');
+    for (let i = 0; i < p.count; i += 3) {
+      fa.set(p.getX(i + 1) - p.getX(i), p.getY(i + 1) - p.getY(i), p.getZ(i + 1) - p.getZ(i));
+      fb.set(p.getX(i + 2) - p.getX(i), p.getY(i + 2) - p.getY(i), p.getZ(i + 2) - p.getZ(i));
+      fn.crossVectors(fa, fb).normalize();
+      if (fn.y > 0.75) for (let v = 0; v < 3; v++) c.setXYZ(i + v, top.r, top.g, top.b);
+    }
+    return merge([out]);
   }
 
   /** Flat, layered slab (crest outcrops): two stacked tilted plates. */

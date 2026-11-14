@@ -185,6 +185,8 @@ export const config = {
     vividness: 1.15,
     /** Max ms per frame spent building terrain patches on the main thread (no worker). */
     chunkBuildBudgetMs: 4,
+    /** Ground cover (grass, flowers, pebbles...) is generated per tile of this size (m). */
+    coverTileSize: 64,
     /** Props are generated and instanced per cell of this size (m). */
     propCellSize: 320,
     /** Tree and rock colliders exist only within this distance of the jeep (m). */
@@ -218,6 +220,11 @@ export const config = {
         treeNear: 90,
         canopyDistance: 1500,
         undergrowthDistance: 60,
+        /** Ground cover caps (instances) and grass/flower wind. */
+        grassLimit: 4000,
+        flowerLimit: 800,
+        coverLimit: 1000,
+        wind: false,
         treeLimit: 1500,
         canopyLimit: 3000,
         /** Far-field ring: grid spacing (m) and half extent (m). */
@@ -244,6 +251,11 @@ export const config = {
         treeNear: 130,
         canopyDistance: 2400,
         undergrowthDistance: 100,
+        /** Ground cover caps (instances) and grass/flower wind. */
+        grassLimit: 12000,
+        flowerLimit: 3000,
+        coverLimit: 2500,
+        wind: true,
         treeLimit: 3500,
         canopyLimit: 6000,
         /** Far-field ring: grid spacing (m) and half extent (m). */
@@ -270,6 +282,11 @@ export const config = {
         treeNear: 180,
         canopyDistance: 3200,
         undergrowthDistance: 140,
+        /** Ground cover caps (instances) and grass/flower wind. */
+        grassLimit: 30000,
+        flowerLimit: 8000,
+        coverLimit: 5000,
+        wind: true,
         treeLimit: 8000,
         canopyLimit: 9000,
         /** Far-field ring: grid spacing (m) and half extent (m). */

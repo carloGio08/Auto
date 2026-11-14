@@ -17,7 +17,7 @@ describe('palette', () => {
       for (const c of ramp) expect(c).toMatch(/^#[0-9a-f]{6}$/);
     }
     expect(paletteSize(defaultPalette)).toBeGreaterThanOrEqual(40);
-    expect(paletteSize(defaultPalette)).toBeLessThanOrEqual(72);
+    expect(paletteSize(defaultPalette)).toBeLessThanOrEqual(80);
   });
 
   it('has an entry for every material and surface colour used', () => {
