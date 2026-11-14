@@ -2,7 +2,8 @@ import { Vector3 } from 'three';
 import { Simplex2 } from '../math/noise';
 import { smoothstep } from '../math/util';
 import { config } from '../config';
-import type { PaletteKey, SurfaceId } from '../data/types';
+import type { SurfaceId } from '../data/types';
+import { BiomeModel, Mat, MATERIAL_SURFACE, type Material } from './biome';
 import type { Mountain } from './mountain';
 import { hash2 } from '../math/rng';
 import {
@@ -46,25 +47,9 @@ export const createGroundSample = (): GroundSample => ({
 
 /** Biome classification shared by the terrain colours and the physics surfaces. */
 export interface BiomeResult {
-  key: PaletteKey;
+  key: Material;
   surface: SurfaceId;
 }
-
-const SURFACE_OF: Record<PaletteKey, SurfaceId> = {
-  snow: 'snow',
-  rock: 'rock',
-  scree: 'scree',
-  alpine: 'grass',
-  meadow: 'grass',
-  forest: 'forest',
-  denseForest: 'forest',
-  trail: 'trail',
-  sand: 'sand',
-  water: 'sand',
-  wood: 'wood',
-  foliage: 'forest',
-  paint: 'rock',
-};
 
 /** Kind of ground on the worn band of a trail (colours and physics). */
 export type TrailGround = 'dirt' | 'gravel' | 'grass' | 'rut' | 'mud' | 'snow' | 'ford';
@@ -99,7 +84,10 @@ export class Terrain {
   private readonly shoulder = config.world.roadShoulder;
   private readonly crown = config.world.roadCrown;
   private readonly snowNoise: Simplex2;
-  private readonly biome: BiomeResult = { key: 'meadow', surface: 'grass' };
+  private readonly biome: BiomeResult = { key: 'grass', surface: 'grass' };
+  /** Ecology shared by colours, surfaces and vegetation. */
+  readonly biomes: BiomeModel;
+  private readonly w = new Float32Array(Mat.Count);
   private readonly seed: number;
   /** No puddles above this altitude (snow, frozen ground). */
   private readonly puddleLine: number;
@@ -109,6 +97,7 @@ export class Terrain {
     readonly road: Road,
   ) {
     this.snowNoise = new Simplex2(mountain.def.seed ^ 0x51f0);
+    this.biomes = new BiomeModel(mountain);
     this.seed = mountain.def.seed & 0xffff;
     this.puddleLine = mountain.def.biomes.snowLine - 150;
   }
@@ -261,8 +250,8 @@ export class Terrain {
         z,
         out.height,
         out.normal.y,
-        q.found ? q.distance : Infinity,
-        q.found ? q.halfWidth : 0,
+        out.normal.z,
+        q.found ? Math.abs(q.lateral - q.offset) - q.halfWidth : Infinity,
       );
     return out;
   }
@@ -279,6 +268,7 @@ export class Terrain {
     x: number,
     z: number,
     h: number,
+    ignoreEdge = false,
   ): TrailGround | null {
     if (trail < 0) return null;
     const road = this.road;
@@ -287,11 +277,8 @@ export class Terrain {
     const g = tr.start + Math.max(0, Math.min(tr.count - 1, Math.round(s / road.spacing)));
     const hw = road.halfWidth[g];
     const latB = lateral - road.offset[g];
-    const edge =
-      hw * 0.94 +
-      0.22 * Math.sin(s / 3.7 + (latB > 0 ? 2.1 : 0)) +
-      0.12 * Math.sin(s / 1.9 + x * 0.3);
-    if (Math.abs(latB) > edge) return null;
+    const edge = this.bandEdge(hw, s, latB, x);
+    if (!ignoreEdge && Math.abs(latB) > edge) return null;
     const f = road.flags[g];
     if (f & ROAD_BRIDGE) return null;
     if (f & ROAD_FORD) return 'ford';
@@ -313,70 +300,43 @@ export class Terrain {
     return false;
   }
 
-  /** Physics surface at a point (patches > trail > biome). */
-  surfaceAt(
-    x: number,
-    z: number,
-    h: number,
-    normalY: number,
-    roadDistance: number,
-    halfWidth: number,
-  ): SurfaceId {
+  /** Irregular edge of the worn band (m from its centre): wanders ±25 cm. */
+  bandEdge(hw: number, s: number, latB: number, x: number): number {
+    return (
+      hw * 0.94 +
+      0.22 * Math.sin(s / 3.7 + (latB > 0 ? 2.1 : 0)) +
+      0.12 * Math.sin(s / 1.9 + x * 0.3)
+    );
+  }
+
+  /** Physics surface at a point (patches > biome). */
+  surfaceAt(x: number, z: number, h: number, ny: number, nz: number, roadEdge: number): SurfaceId {
     for (const p of this.patches) {
       const dx = x - p.x;
       const dz = z - p.z;
       if (dx * dx + dz * dz < p.radius * p.radius) return p.surface;
     }
-    return this.classify(x, z, h, normalY, roadDistance, halfWidth).surface;
-  }
-
-  /** Low-frequency wobble so biome bands are organic but still crisp. */
-  private wobble(x: number, z: number): number {
-    return 28 * Math.sin(x / 240 + z / 610) + 22 * Math.cos(z / 190 - x / 830);
+    return this.classify(x, z, h, ny, nz, roadEdge).surface;
   }
 
   /** Snow covering part of the trail high up (patches, not a gradient). */
   trailSnow(x: number, z: number, h: number): boolean {
     const b = this.mountain.def.biomes;
-    const amount = smoothstep(b.snowLine - 120, b.snowLine + 60, h + this.wobble(x, z));
+    const amount = smoothstep(b.snowLine - 120, b.snowLine + 60, h + this.biomes.wobble(x, z));
     if (amount <= 0) return false;
     // At most ~45 % of the trail is covered so it stays readable in the snow.
     return this.snowNoise.noise(x / 22, z / 22) * 0.5 + 0.5 < amount * 0.45;
   }
 
   /**
-   * Biome of a point: palette entry and surface. Bands by altitude and slope, the trail in
-   * the middle (packed dirt), snow, rock or grass at its edges depending on the altitude.
+   * Dominant material of a point and its physics surface, from the same weights that colour
+   * the terrain (what you see is what you drive on).
    */
-  classify(
-    x: number,
-    z: number,
-    h: number,
-    ny: number,
-    roadDistance: number,
-    halfWidth: number,
-  ): BiomeResult {
+  classify(x: number, z: number, h: number, ny: number, nz: number, roadEdge: number): BiomeResult {
     const r = this.biome;
-    const b = this.mountain.def.biomes;
-    const hw = h + this.wobble(x, z);
-    let key: PaletteKey;
-    if (h < this.mountain.def.lake.level + 2.5) key = 'sand';
-    else if (ny < 0.7) key = 'rock';
-    else if (hw > b.snowLine && ny > 0.66) key = 'snow';
-    else if (hw > b.rockLine) key = ny < 0.86 ? 'rock' : ny < 0.93 ? 'scree' : 'alpine';
-    else if (hw > b.treeLine) key = ny < 0.8 ? 'scree' : 'alpine';
-    else if (hw > b.denseForestLine) key = ny < 0.76 ? 'rock' : 'forest';
-    else if (hw > b.valleyLine) key = 'denseForest';
-    else key = 'meadow';
-    // Trail edges: a narrow band of packed ground before the biome takes over.
-    if (
-      roadDistance < halfWidth * 1.15 &&
-      (key === 'meadow' || key === 'forest' || key === 'denseForest' || key === 'alpine')
-    ) {
-      key = 'trail';
-    }
-    r.key = key;
-    r.surface = SURFACE_OF[key];
+    this.biomes.weights({ x, z, h, ny, nz, roadEdge }, this.w);
+    r.key = BiomeModel.dominant(this.w);
+    r.surface = MATERIAL_SURFACE[r.key];
     return r;
   }
 

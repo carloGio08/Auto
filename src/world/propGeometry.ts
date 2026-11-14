@@ -80,7 +80,7 @@ export class PropGeometry {
 
   /** Pine of stacked cones. Origin at the trunk base, ~1 m reference trunk radius 0.2. */
   pine(tier: TreeTier, variant: number, snow = false): BufferGeometry {
-    const greens = [this.pal.foliage[0], this.pal.forest[1], this.pal.denseForest[0]];
+    const greens = [this.pal.foliage[2], this.pal.foliage[1], this.pal.foliage[0]];
     const tiers = tier === 'young' ? 1 : tier === 'medium' ? 2 : 3;
     const height = tier === 'young' ? 3.2 : tier === 'medium' ? 6.5 : 10.5;
     const parts: BufferGeometry[] = [
@@ -99,7 +99,7 @@ export class PropGeometry {
       if (snow) {
         const cap = new ConeGeometry(r * 0.55, h * 0.36, 6, 1);
         cap.translate(0, height * 0.22 + f * height * 0.5 + h * 0.84, 0);
-        parts.push(paint(cap, this.pal.snow[0]));
+        parts.push(paint(cap, this.pal.snow[4]));
       }
     }
     return merge(parts);
@@ -109,7 +109,7 @@ export class PropGeometry {
   roundTree(variant: number): BufferGeometry {
     const parts: BufferGeometry[] = [this.trunk(2.6, 0.26)];
     const rng = new Rng(300 + variant);
-    const greens = [this.pal.meadow[1], this.pal.foliage[0], this.pal.forest[0]];
+    const greens = [this.pal.grass[1], this.pal.foliage[2], this.pal.foliage[3]];
     for (let i = 0; i < 3; i++) {
       const o = new OctahedronGeometry(1.3 - i * 0.25, 0);
       o.scale(1, 1.2, 1);
@@ -125,7 +125,7 @@ export class PropGeometry {
   farTree(): BufferGeometry {
     const c = new ConeGeometry(2.2, 8, 5, 1);
     c.translate(0, 4.5, 0);
-    return merge([paint(c, this.pal.forest[1])]);
+    return merge([paint(c, this.pal.foliage[1])]);
   }
 
   /** Broken trunk section for debris: vertical, centred on the origin, 2.4 m long. */
@@ -134,8 +134,8 @@ export class PropGeometry {
     const end = new CylinderGeometry(0.235, 0.235, 0.04, 6);
     end.translate(0, 1.2, 0);
     return merge([
-      paint(t, this.pal.wood[1], this.pal.wood[0], 0.3, 7),
-      paint(end, this.pal.trail[0]),
+      paint(t, this.pal.wood[1], this.pal.wood[2], 0.3, 7),
+      paint(end, this.pal.earth[4]),
     ]);
   }
 
@@ -144,7 +144,7 @@ export class PropGeometry {
     t.translate(0, 0.27, 0);
     const top = new CylinderGeometry(0.3, 0.3, 0.04, 6);
     top.translate(0, 0.56, 0);
-    return merge([paint(t, this.pal.wood[1]), paint(top, this.pal.trail[0])]);
+    return merge([paint(t, this.pal.wood[1]), paint(top, this.pal.earth[4])]);
   }
 
   bush(variant: number): BufferGeometry {
@@ -154,7 +154,7 @@ export class PropGeometry {
       const o = new OctahedronGeometry(0.6 + rng.next() * 0.35, 0);
       o.scale(1, 0.7, 1);
       o.translate(rng.range(-0.5, 0.5), 0.35, rng.range(-0.5, 0.5));
-      parts.push(paint(o, this.pal.meadow[1], this.pal.forest[0], 0.4, i + variant));
+      parts.push(paint(o, this.pal.grass[1], this.pal.foliage[1], 0.4, i + variant));
     }
     return merge(parts);
   }
@@ -165,7 +165,7 @@ export class PropGeometry {
     wobble(g, 0.22, 900 + variant);
     g.scale(1.2, 0.7 + (variant % 3) * 0.12, 1);
     g.translate(0, 0.32, 0);
-    const tones = [this.pal.rock[0], this.pal.rock[1], this.pal.scree[1]];
+    const tones = [this.pal.rockLight[2], this.pal.rockDark[2], this.pal.scree[2]];
     return merge([paint(g, tones[variant % 3], tones[(variant + 1) % 3], 0.3, variant)]);
   }
 
@@ -180,10 +180,10 @@ export class PropGeometry {
     const red2 = new BoxGeometry(0.15, 0.1, 0.15);
     red2.translate(0, 0.97, 0);
     return merge([
-      paint(post, this.pal.wood[0]),
-      paint(white, this.pal.paint[0]),
-      paint(red1, this.pal.paint[1]),
-      paint(red2, this.pal.paint[1]),
+      paint(post, this.pal.wood[2]),
+      paint(white, this.pal.paint[1]),
+      paint(red1, this.pal.paint[0]),
+      paint(red2, this.pal.paint[0]),
     ]);
   }
 
@@ -197,7 +197,12 @@ export class PropGeometry {
       s.scale(1, 0.5, 1);
       s.translate(i % 2 ? 0.05 : -0.05, y + r * 0.45, 0);
       y += r * 0.85;
-      parts.push(paint(s, i === 3 ? this.pal.paint[1] : this.pal.rock[i % 2]));
+      parts.push(
+        paint(
+          s,
+          i === 3 ? this.pal.paint[0] : i % 2 ? this.pal.rockDark[3] : this.pal.rockLight[1],
+        ),
+      );
     }
     return merge(parts);
   }
@@ -217,9 +222,9 @@ export class PropGeometry {
     stripe.translate(0, 1.95, 0.32);
     return merge([
       paint(pole, this.pal.wood[1]),
-      paint(board, this.pal.paint[0]),
-      paint(tip, this.pal.paint[0]),
-      paint(stripe, this.pal.paint[1]),
+      paint(board, this.pal.paint[1]),
+      paint(tip, this.pal.paint[1]),
+      paint(stripe, this.pal.paint[0]),
     ]);
   }
 
@@ -230,14 +235,14 @@ export class PropGeometry {
     const rails = [0.45, 0.9].map((y) => {
       const r = new BoxGeometry(4, 0.1, 0.08);
       r.translate(2, y, 0);
-      return paint(r, this.pal.wood[0]);
+      return paint(r, this.pal.wood[2]);
     });
     return merge([paint(post, this.pal.wood[1]), ...rails]);
   }
 
   /** Bridge plank (1 × 1 m footprint, scaled per instance). */
   plank(): BufferGeometry {
-    return merge([paint(new BoxGeometry(1, 0.25, 1), this.pal.wood[0], this.pal.wood[1], 0.5)]);
+    return merge([paint(new BoxGeometry(1, 0.25, 1), this.pal.wood[2], this.pal.wood[1], 0.5)]);
   }
 
   beam(): BufferGeometry {
@@ -259,9 +264,9 @@ export class PropGeometry {
     const door = new BoxGeometry(1, 1.8, 0.1);
     door.translate(0, 1.9, d * 0.49);
     return merge([
-      paint(base, this.pal.rock[1]),
-      paint(walls, this.pal.wood[0]),
-      paint(roof, this.pal.wood[1], this.pal.trail[1], 0.3),
+      paint(base, this.pal.rockDark[2]),
+      paint(walls, this.pal.wood[2]),
+      paint(roof, this.pal.wood[1], this.pal.earth[2], 0.3),
       paint(door, this.pal.wood[1]),
     ]);
   }

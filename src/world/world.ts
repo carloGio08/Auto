@@ -145,7 +145,7 @@ export class World {
     if (this.weather.snowfall > 0) {
       this.snow = new Snowfall(
         Math.round(this.preset.particles * 0.5 * this.weather.snowfall),
-        this.palette.snow[0],
+        this.palette.snow[4],
       );
       this.scene.add(this.snow.mesh);
     }

@@ -50,21 +50,21 @@ export class Effects {
     this.setQuality(preset);
     const light = (c: Color, k: number): Color => c.clone().lerp(new Color(1, 1, 1), k);
     this.colors = {
-      dust: [light(pal.trail[0], 0.18), light(pal.trail[1], 0.3)],
-      snow: [pal.snow[0], pal.snow[1]],
-      gravel: [pal.scree[0], pal.rock[1]],
-      mud: [pal.wood[1], pal.trail[1]],
+      dust: [light(pal.earth[4], 0.18), light(pal.earth[3], 0.3)],
+      snow: [pal.snow[4], pal.snow[2]],
+      gravel: [pal.scree[3], pal.rockDark[2]],
+      mud: [pal.mud[2], pal.earth[1]],
     };
     const dark = (c: Color, k: number): Color => c.clone().multiplyScalar(k);
     this.skidColors = {
-      dust: dark(pal.trail[1], 0.62),
-      snow: dark(pal.snow[1], 0.82),
-      gravel: dark(pal.scree[1], 0.7),
-      mud: dark(pal.wood[1], 0.7),
+      dust: dark(pal.earth[3], 0.62),
+      snow: dark(pal.snow[2], 0.82),
+      gravel: dark(pal.scree[2], 0.7),
+      mud: dark(pal.mud[2], 0.7),
     };
-    this.water = pal.water[0];
-    this.wood = [pal.wood[0], pal.wood[1]];
-    this.leaves = [pal.foliage[0], pal.forest[1], pal.meadow[1]];
+    this.water = pal.water[2];
+    this.wood = [pal.wood[2], pal.wood[1]];
+    this.leaves = [pal.foliage[2], pal.foliage[1], pal.grass[2]];
     this.skidmarks = config.features.skidmarks ? new Skidmarks() : null;
     if (this.skidmarks) world.scene.add(this.skidmarks.mesh);
     this.speedLines = config.features.speedLines ? new SpeedLines() : null;

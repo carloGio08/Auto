@@ -2,28 +2,46 @@ import { Color } from 'three';
 import type { PaletteKey, TimeOfDayId, WeatherId } from './types';
 
 /**
- * The world palette: 13 entries × 2 tones (light, dark) = 26 flat colours (the last one is
- * the red/white paint of trail waymarks). Everything in the
- * world (terrain, props, jeep accessories, particles) picks its colours from here, so a new
- * look is just a new palette. Faces choose a tone with the seed – there is no noise texture.
+ * The world palette: one ramp of tones per material, ordered dark → light. Terrain colours
+ * are smooth blends of these ramps (see terrain/splat.ts), props and particles pick tones
+ * from them, so a new look is just a new palette: 61 terrain colours and 9 for props.
  */
-export type Palette = Record<PaletteKey, [string, string]>;
+export type Palette = Record<PaletteKey, string[]>;
 
 export const defaultPalette: Palette = {
-  snow: ['#f2f5f7', '#d5dfe8'],
-  rock: ['#8d8a87', '#6c6966'],
-  scree: ['#b2aa9e', '#958d82'],
-  alpine: ['#a9bb6a', '#8fa257'],
-  meadow: ['#86b45a', '#6e9c48'],
-  forest: ['#5c8a45', '#4b7638'],
-  denseForest: ['#3f6c37', '#33592d'],
-  trail: ['#c49a6c', '#a98156'],
-  sand: ['#e3cf9b', '#cdb683'],
-  water: ['#4aa3c7', '#3a87ab'],
-  wood: ['#9a6a42', '#734d2f'],
-  foliage: ['#4f8b46', '#3a6e3a'],
-  paint: ['#efe9df', '#d4473a'],
+  // Snow: sunlit, shaded (blue-grey) and the snow → rock transition.
+  snow: ['#cdd8e3', '#dde5ed', '#e9eff4', '#f3f6f9', '#fbfcfd'],
+  snowShade: ['#8e9db0', '#a5b4c5', '#bccad8'],
+  snowRock: ['#7e8996', '#97a2ae'],
+  // Rock: light (high crests, convex) and dark (faces, hollows), scree, rock → grass.
+  rockLight: ['#8a8580', '#9b958f', '#aca69f', '#bdb7ae'],
+  rockDark: ['#4f4c4b', '#5d5958', '#6b6765', '#7a7572'],
+  scree: ['#8f877c', '#a1988b', '#b2a99b', '#c4bcad'],
+  rockGrass: ['#7d8460', '#929a6c'],
+  // Ground: earth (trails, bare soil), mud, sand.
+  earth: ['#6e5038', '#84613f', '#9a744c', '#b0885c', '#c49c6e'],
+  mud: ['#4a3a2c', '#5a4532', '#6b533c'],
+  sand: ['#c8b383', '#d8c493', '#e6d4a6'],
+  // Vegetation: dry alpine grass, grass, flowering meadow, undergrowth, forest floor, moss.
+  dryGrass: ['#9e9a5a', '#b0a964', '#c2b872', '#d1c584'],
+  grass: ['#4f7f3a', '#5e8f42', '#6e9f4b', '#7fae55', '#91bc62'],
+  flowers: ['#86ab52', '#a4bd5e', '#d8c86c', '#d6a9c8'],
+  undergrowth: ['#3f5f2f', '#4c6d35', '#5b7c3d'],
+  forest: ['#2f4a29', '#3a5730', '#466438', '#537241'],
+  moss: ['#5d7a3a', '#6f8c43', '#82a050'],
+  water: ['#2f6f91', '#3a87ab', '#4aa3c7'],
+  // Props.
+  wood: ['#5e3f26', '#734d2f', '#9a6a42'],
+  foliage: ['#2f5a30', '#3a6e3a', '#4f8b46', '#66a052'],
+  paint: ['#d4473a', '#efe9df'],
 };
+
+/** Darkest and lightest tones of a ramp. */
+export const dark = <T>(ramp: T[]): T => ramp[0];
+export const light = <T>(ramp: T[]): T => ramp[ramp.length - 1];
+/** Tone at t (0 = darkest, 1 = lightest), nearest entry. */
+export const tone = <T>(ramp: T[], t: number): T =>
+  ramp[Math.max(0, Math.min(ramp.length - 1, Math.round(t * (ramp.length - 1))))];
 
 /**
  * A theme recolours the palette for a time of day / weather: a tint blended in, a brightness
@@ -50,7 +68,7 @@ export const weatherThemes: Record<WeatherId, PaletteTheme> = {
 };
 
 /** Resolved palette: three.js colours ready for vertex colours and materials. */
-export type ResolvedPalette = Record<PaletteKey, [Color, Color]>;
+export type ResolvedPalette = Record<PaletteKey, Color[]>;
 
 const grey = new Color();
 function applyTheme(c: Color, t: PaletteTheme): Color {
@@ -69,7 +87,11 @@ export function resolvePalette(palette: Palette, ...themes: PaletteTheme[]): Res
       const c = new Color(hex);
       for (const t of themes) applyTheme(c, t);
       return c;
-    }) as [Color, Color];
+    });
   }
   return out;
 }
+
+/** Number of colours declared in a palette. */
+export const paletteSize = (p: Palette): number =>
+  Object.values(p).reduce((n, ramp) => n + ramp.length, 0);

@@ -61,8 +61,8 @@ export class HazardsSystem extends BaseSystem {
     const geo = new PropGeometry(world.palette);
     this.boulderGeo = this.keep(geo.rock(1));
     this.smallRockGeo = this.keep(geo.rock(2));
-    this.mudMat.color.copy(world.palette.trail[1]).multiplyScalar(0.6);
-    this.iceMat.color.copy(world.palette.snow[1]);
+    this.mudMat.color.copy(world.palette.mud[1]);
+    this.iceMat.color.copy(world.palette.snowShade[2]);
     const p = createRoadPoint();
     for (const h of course.def.hazards) {
       const s = h.at * course.road.length;

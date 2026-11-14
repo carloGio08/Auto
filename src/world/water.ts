@@ -20,7 +20,7 @@ export class Water {
 
   constructor(course: Course, palette: ResolvedPalette) {
     this.group.name = 'water';
-    const color = palette.water[0];
+    const color = palette.water[2];
     this.material = new MeshLambertMaterial({
       color,
       transparent: true,

@@ -164,17 +164,24 @@ export interface WeatherDef {
   overcast: number;
 }
 
-/** Keys of the world palette (src/data/palette.ts). */
+/** Keys of the world palette (src/data/palette.ts): one ramp of tones per material. */
 export type PaletteKey =
   | 'snow'
-  | 'rock'
+  | 'snowShade'
+  | 'snowRock'
+  | 'rockLight'
+  | 'rockDark'
   | 'scree'
-  | 'alpine'
-  | 'meadow'
-  | 'forest'
-  | 'denseForest'
-  | 'trail'
+  | 'rockGrass'
+  | 'earth'
+  | 'mud'
   | 'sand'
+  | 'dryGrass'
+  | 'grass'
+  | 'flowers'
+  | 'undergrowth'
+  | 'forest'
+  | 'moss'
   | 'water'
   | 'wood'
   | 'foliage'
