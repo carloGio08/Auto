@@ -4,6 +4,46 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [2.4.0] - 2026-11-14
+
+Richness update: no bland zones. Diagnosis in `docs/bland-zones-diagnosis.md`, sweep in
+`docs/world-richness.md`.
+
+### Added
+
+- Biomes as data (`src/data/biomes.ts`): complete prop sets, outcrop rates, minimum / maximum
+  densities, minimum kinds and meso-relief amplitudes per biome; classification per ecology
+  sample.
+- Richness score per ~32 m cell (variety, density, ground-colour variation, relief) and a filler
+  pass from the cell's own biome, inside the cover generation job; maximum cap per biome;
+  global caps by distance priority.
+- Ground cover: dense grass clumps, flower patches in five colours (yellow, white, pink, purple,
+  blue), round / spiky / mat shrubs in groups, stones, young pines near the tree line.
+- Rock outcrop clusters (3–7 pale blue-grey faceted rocks with lighter tops) along contour
+  lines, ribs and crests.
+- Meso relief on slopes: terracettes, gullies, ribs and bumps (smooth, amplitudes per biome).
+- Debug probe overlay (`?debug&probe`, F6), `?debug&goto=x,z,heading`, worst-case spots
+  `?shot=richness&spot=N` and `scripts/richness-screenshots.mjs` (before / after in
+  `docs/screenshots/richness/`).
+- Tests: world richness over five worlds (≤ 1 % of cells under the threshold), relief on slopes,
+  meso-relief curvature bound, outcrop clustering.
+
+### Changed
+
+- Steep meadows are meadows: rock only on cliffs, in patches and on crests; scree only in
+  concave or rugged aprons; patches and contour bands of dry grass, olive grass and bare soil.
+- Rock and scree ramps neutral grey; dry grass olive / ochre.
+- Day light: sun 2.4, hemisphere 0.98 with a lighter ground bounce.
+- Fog starts at 450 m and fades over 900 m (mid-distance stays readable).
+- Trails are routed on the macro height (unchanged by the meso relief).
+- The rock test checks clustering instead of a low count; terrain slope-mix and spike tests
+  measure the macro surface (the meso relief has its own curvature bound).
+
+### Fixed
+
+- Dark blurry blotches: forest-floor colour in glades without trees, rock colour on trail cuts
+  and fills, near-black embankments facing away from the sun.
+
 ## [2.3.0] - 2026-11-14
 
 Look update: a crisp, vibrant stylised picture close to the reference target (benchmark view

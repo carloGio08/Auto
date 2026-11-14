@@ -158,13 +158,37 @@ wetness, clearings) shaped by the knobs of `ecology` in `src/data/vegetation.ts`
 `trailClearance`. To add a rule, change `out[0]` there (e.g. fewer trees on scree: multiply by
 `1 - weights[Mat.Scree]`), a habitat (`out[6..8]`) or a species weight in `speciesWeights()`.
 
+## How to add a biome, or set its minimum densities and richness
+
+Biomes live in `src/data/biomes.ts`. A `BiomeDef` has:
+
+- `props`: its complete ground-cover set (`{ kind, density }`, instances per 100 m² at full
+  density). Only these kinds grow there, and only these are used by the filler pass. Give every
+  biome at least three kinds (grass clumps, a flower mix with `flowers(d)`, one or two shrub
+  shapes, stones...).
+- `outcrops`: rock outcrop clusters per hectare (3–7 rocks along the contour lines).
+- `richness`: `minDensity` / `maxDensity` (instances per 100 m², scaled by the preset density)
+  and `minTypes` (kinds required in every ~32 m cell). The filler adds props up to the minimum;
+  above the maximum the least important instances are dropped.
+- `relief`: meso-relief amplitudes (m) for terracettes, gullies, ribs and bumps.
+- `guaranteed`: whether the world-richness test counts it (meadows and everything below the
+  tree line).
+
+Add the id to `BiomeId` and a rule in `classifyBiome()` (`src/world/propPlacement.ts`) that picks
+it from the material weights, tree density, altitude and slope. The score weights, the pass
+threshold and the colour / relief targets are `richnessRules` in the same data file.
+Check with the probe (`?debug&probe`, F6) on the ground, then `npx vitest run
+tests/richness.test.ts` (and `RICHNESS_FULL=1 RICHNESS_REPORT=1` to regenerate
+`docs/world-richness.md`).
+
 ## How to add a ground-cover type
 
 1. Add the kind to `UndergrowthKind` and an `UndergrowthDef` to `undergrowth` in
-   `src/data/vegetation.ts`: `size`, `habitat` (`forest`, `meadow`, `grass`, `edge`, `road`),
-   `density` per 100 m², cap group (`grass`, `flowers`, `cover` → the preset limits
-   `grassLimit`, `flowerLimit`, `coverLimit`), `wind`, `shadow`, `reach` (fraction of the
-   cover distance where it is still drawn).
+   `src/data/vegetation.ts`: `size`, `layout` (`patch` like flowers, `group` like shrubs,
+   `scatter`), cap group (`grass`, `flowers`, `cover` → the preset limits `grassLimit`,
+   `flowerLimit`, `coverLimit`), `wind`, `shadow`, `reach` (fraction of the cover distance
+   where it is still drawn). Then list it, with a density, in the `props` of the biomes where
+   it grows (`src/data/biomes.ts`).
 2. Build its unit-size geometry in `PropGeometry.undergrowth()` with palette tones only.
 3. If it needs a special rule (like flower patches or pebbles on the trail), add it in
    `placeCover()` (`src/world/coverPlacement.ts`; pure, runs in the terrain worker).

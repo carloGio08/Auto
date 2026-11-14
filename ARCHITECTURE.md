@@ -277,9 +277,36 @@ Course: start, base zone, waymarks, cairns, signs, fences, coins and crystals. P
      8000 / 3000 / 800); each instance has its own reach (30–100 % of the cover distance), so
      the density is strongest near the camera and fades smoothly with no pop-in; light wind
      sway in the vertex shader (off on Low); the shadow depth material shares the shrink;
-  5. **rocks**: outcrops, talus, stream beds, trailside stones, and **boulder groups** (2–4
-     big flat-faceted warm-grey boulders with lighter tops) beside the trails and on slopes,
-     never reaching the driving line.
+  5. **rocks**: outcrops, talus, stream beds, trailside stones, and **outcrop clusters**
+     (3–7 pale blue-grey flat-faceted rocks with lighter tops, sizes falling off from the
+     middle) laid along the contour lines, at a rate per biome boosted on convex ribs and
+     crests, never reaching the driving line.
+- **Biomes and the richness guarantee** (`data/biomes.ts`, `world/richness.ts`,
+  `world/coverPlacement.ts`): `ecologyAt()` classifies every sample (`classifyBiome`:
+  snowfield, rock band, scree, shore, forest, tree line, forest edge, steep / alpine / valley
+  meadow). Each biome is data: its complete prop set (grass clumps, flower patches in five
+  colours, round / spiky / mat shrubs, stones, saplings, ferns, logs...), outcrop rate,
+  minimum and maximum ground-cover density, minimum kinds and meso-relief amplitudes. Ground
+  cover draws only from the biome's own set. Then, inside the same worker job, every ~32 m
+  cell of the tile gets a **richness score** = 0.3 variety (kinds / required kinds) + 0.3
+  density (instances / biome minimum) + 0.2 ground-colour variation (std of the actual vertex
+  colours on a 4 × 4 grid within 7–40 / 255) + 0.2 relief (residual std of a plane fitted to
+  9 × 9 heights on 15–40° slopes outside the declared flats, target 0.12 m). The **filler
+  pass** adds props from the same biome at free spots off the trail — missing kinds first —
+  until the minimum kinds and density are met, and drops the least important instances above
+  the biome maximum; the per-cell records travel with the tile (debug probe, tests). The
+  global caps then apply by distance priority (nearest tiles first).
+- **Material model for slopes** (`terrain/biome.ts`): rock only on cliffs (> ~35°), in ~50 m
+  patches on steep ground and on rugged crests, never on trail cuts and fills; scree only in
+  concave or rugged aprons above the forest; dry grass, olive rocky grass and bare soil in
+  mid-scale patches and in bands that follow the contour lines; forest floor only where the
+  tree clusters are. Rock and scree ramps are neutral greys, dry grass olive / ochre.
+- **Meso relief** (`generator.ts` mask, `Mountain.mesoRelief`): the generator bakes a mask of
+  the 12–48° slopes outside the declared flats; `height()` adds terracettes (sinusoidal steps
+  following the contour lines, amplitude capped by the slope), gullies and ribs (Gaussian
+  lines on a warped noise field) and bumps, with amplitudes from the biome data (forest →
+  open steep meadow by altitude). Smooth everywhere (Laplacian at 1 m < 1.2), and trails are
+  routed and profiled on the macro height (`heightMacro`), so the trail network is unchanged.
 - **Structures** (`world/structures.ts`): waymarks, cairns, signs, fences, footbridges, the
   village houses and the summit overlook, each a single instanced draw call.
 
@@ -437,6 +464,12 @@ accessories and, while `config.dev.testCoins` is set, tops profiles up to the te
 
 ## 14. Testing
 
+Debug: the probe (`?debug&probe`, F6) shows biome, slope, ecology masks, colour ramp weights,
+AO, cover instances and the richness of the cell under the jeep; `?debug&goto=x,z,heading`
+jumps there. Worst-case spots: `?shot=richness&spot=N` (`config.benchmark.spots`) and
+`scripts/richness-screenshots.mjs <label>` (High and Medium, 1280×720 and 844×390) into
+`docs/screenshots/richness/`.
+
 Visual benchmark: `?shot=benchmark[&quality=high|medium|low]` parks the jeep at a fixed
 point of the main trail (seed, day, clear, default chase camera, physics frozen);
 `scripts/benchmark-screenshots.mjs` renders it at 1280×720 and 844×390 in every preset into
@@ -461,6 +494,10 @@ Vitest:
   palette, smooth between neighbouring vertices and faces, AO within its range;
 - tyre tracks: capacity, ring order, pooling, dirty ranges, ground-following vertices, none in
   water;
+- richness (`tests/richness.test.ts`): five worlds, richness of the cells on a 1-in-9 tile
+  lattice and along every trail (every cell with `RICHNESS_FULL=1`), at most 1 % of the meadow
+  and below-tree-line cells under the threshold; no smooth planes on 15–40° slopes (30 m
+  windows); report in `docs/world-richness.md`;
 - road and ruts: width 6–8 m, ruts along the whole trail with a 3–5 cm depression peaking on
   the rut lines, crisp ribbons following the spline (lateral error < 8 cm) on the ground;
 - ground cover: trail kept clear (pebbles only), boulders never on the driving line, dense

@@ -37,6 +37,18 @@ its blue at the default pitch; flowers are smaller and fewer than the painted on
 benchmark screenshots come from a headless software renderer, so frame rates were not
 measured on real phones.
 
+### Richness update: worst-case spots before / after
+
+| Before                                                                                             | After                                                                                            |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| ![Steep meadow 1200 m before](docs/screenshots/richness/before-steep-meadow-1200-high-desktop.png) | ![Steep meadow 1200 m after](docs/screenshots/richness/after-steep-meadow-1200-high-desktop.png) |
+| ![Dry slope before](docs/screenshots/richness/before-dry-slope-1340-high-desktop.png)              | ![Dry slope after](docs/screenshots/richness/after-dry-slope-1340-high-desktop.png)              |
+| ![Tree line before](docs/screenshots/richness/before-tree-line-1040-high-desktop.png)              | ![Tree line after](docs/screenshots/richness/after-tree-line-1040-high-desktop.png)              |
+| ![Steep slope before](docs/screenshots/richness/before-steep-slope-590-medium-mobile.png)          | ![Steep slope after](docs/screenshots/richness/after-steep-slope-590-medium-mobile.png)          |
+
+Diagnosis: [docs/bland-zones-diagnosis.md](docs/bland-zones-diagnosis.md); richness sweep over
+five worlds: [docs/world-richness.md](docs/world-richness.md).
+
 ### Before / after (landscape update, same seed, position and camera)
 
 | Before                                                               | After                                                              |
@@ -48,6 +60,11 @@ measured on real phones.
 
 ## Features
 
+- **No bland zones**: every biome (meadows, steep slopes, tree line, scree, forest) has a
+  complete prop set and a guaranteed minimum richness per ~32 m cell (prop variety, density,
+  ground-colour variation, relief), checked over five worlds; rock outcrop clusters along the
+  contours, shrubs, grass clumps, five-colour flower patches, terracettes and gullies on
+  slopes.
 - **Crisp, vibrant look**: MSAA, full pixel ratio (up to 2), no blur; a warm 40° sun with
   clear cast shadows from the jeep, trees, boulders and flowers (plus a contact shadow under
   the jeep), a cool sky fill, ACES with a touch more saturation and contrast.
@@ -130,7 +147,10 @@ npm run e2e       # Playwright smoke test + screenshots (needs `npm run preview`
 
 Debug helpers: `?autopilot` (the built-in driver follows the main trail), `?e2e` (skips the
 fly-over and exposes `window.__md`), **F3** (FPS / draw-call overlay), **F4** in dev builds or
-with `?debug` (map of slopes, trails, fords, landforms and the jeep).
+with `?debug` (map of slopes, trails, fords, landforms and the jeep), **F6** / `?probe` with
+`?debug` (biome, slope, ecology masks, colour ramps, AO, props and richness under the jeep),
+`?debug&goto=x,z,heading` (jump there), `?shot=richness&spot=N` (worst-case spots,
+`node scripts/richness-screenshots.mjs <label>`).
 `node scripts/compare-screenshots.mjs <label>` captures fixed viewpoints (needs the preview
 server) for before/after comparisons.
 `?shot=benchmark[&quality=high|medium|low]` opens the fixed benchmark view;
