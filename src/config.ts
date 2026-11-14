@@ -236,6 +236,18 @@ export const config = {
     gearRatios: [0.0, 0.22, 0.38, 0.55, 0.74, 1.0] as const,
   },
 
+  /**
+   * Development helpers. BEFORE RELEASE set `testCoins` to 0 and `unlockAll` to false (see
+   * README, "Before release").
+   */
+  dev: {
+    /** Coins given to new profiles and to existing saves (migration), and the settings
+     * button "Test: reset coins". 0 disables all of it. */
+    testCoins: 100000 as number,
+    /** Lets achievement-locked jeeps be bought for testing. */
+    unlockAll: true as boolean,
+  },
+
   /** Feature flags: toggle whole features without touching code. */
   features: {
     dynamicResolution: true,

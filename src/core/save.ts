@@ -1,10 +1,12 @@
 import type { AchievementStats, TimeOfDayId, UpgradeId, WeatherId } from '../data/types';
+import { config } from '../config';
+import type { AccessoryId } from '../data/accessories';
 import { CAMERA_MODES, defaultSettings, type Settings } from './settings';
 
 export const SAVE_KEY = 'mountain-drop:save';
 /** Storage prefix of the replay ghosts used up to schema v3 (purged on load). */
 const LEGACY_GHOST_PREFIX = 'mountain-drop:ghost:';
-export const CURRENT_SCHEMA = 4;
+export const CURRENT_SCHEMA = 5;
 export const STARTER_CAR = 'trailblazer';
 
 /** v3 car ids → v4 jeeps. */
@@ -29,6 +31,11 @@ export interface SaveData {
   selectedCar: string;
   ownedCars: string[];
   carColors: Record<string, string>;
+  /** Extra paints bought, per jeep. */
+  paints: Record<string, string[]>;
+  /** Accessories bought (factory ones are always owned) and switched on, per jeep. */
+  accessories: Record<string, AccessoryId[]>;
+  accessoriesOn: Record<string, AccessoryId[]>;
   upgrades: Record<string, Partial<Record<UpgradeId, number>>>;
   /** Keyed by `${mountainId}:${modeId}`. */
   records: Record<string, TrackRecord>;
@@ -58,13 +65,19 @@ export function defaultStats(): AchievementStats {
   };
 }
 
+/** Coins of a fresh profile: the test amount while `config.dev.testCoins` is set. */
+export const startingCoins = (): number => Math.max(0, config.dev.testCoins);
+
 export function defaultSave(): SaveData {
   return {
     schemaVersion: CURRENT_SCHEMA,
-    coins: 0,
+    coins: startingCoins(),
     selectedCar: STARTER_CAR,
     ownedCars: [STARTER_CAR],
     carColors: {},
+    paints: {},
+    accessories: {},
+    accessoriesOn: {},
     upgrades: {},
     records: {},
     achievements: [],
@@ -149,6 +162,16 @@ export const migrations: Record<number, (old: AnySave) => AnySave> = {
       lastMountain: 'alpine',
     };
   },
+  // v4 → v5 (terrain update): paints and accessories become purchasable; while the test
+  // flag is on, existing profiles are topped up to the test coins.
+  4: (old) => ({
+    ...old,
+    schemaVersion: 5,
+    coins: Math.max(typeof old.coins === 'number' ? old.coins : 0, startingCoins()),
+    paints: {},
+    accessories: {},
+    accessoriesOn: {},
+  }),
 };
 
 /** Applies migrations in order and fills any missing field with defaults. */
@@ -269,6 +292,17 @@ export class SaveManager {
 
   upgradeLevel(carId: string, upgrade: UpgradeId): number {
     return this.data.upgrades[carId]?.[upgrade] ?? 0;
+  }
+
+  /** Whether paint `index` of a jeep's colours can be used (free ones or bought). */
+  ownsPaint(carId: string, color: string, index: number, freePaints: number): boolean {
+    return index < freePaints || (this.data.paints[carId] ?? []).includes(color);
+  }
+
+  /** Test helper (only offered while `config.dev.testCoins` is set). */
+  resetTestCoins(): void {
+    this.data.coins = startingCoins();
+    this.save();
   }
 
   /** Removes the replay ghosts stored by schema v3 and earlier. */

@@ -5,6 +5,7 @@ import { damp } from '../math/util';
 import { Course } from '../terrain/course';
 import { CarModel } from '../vehicle/model';
 import { World } from '../world/world';
+import { configuredJeep } from './progression';
 
 /**
  * Live 3D background for the menus: the selected jeep parked at the edge of the summit
@@ -65,7 +66,7 @@ export class MenuBackdrop {
 
   private makeCar(): CarModel {
     const save = this.ctx.save.data;
-    const def = this.ctx.registries.cars.get(save.selectedCar);
+    const def = configuredJeep(save, this.ctx.registries.cars.get(save.selectedCar));
     const car = new CarModel(def, save.carColors[def.id] ?? def.look.colors[0]);
     car.setRestPose();
     const ph = def.physics;

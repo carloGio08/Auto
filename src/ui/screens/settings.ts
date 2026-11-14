@@ -10,6 +10,7 @@ import { LANGUAGES } from '../../core/i18n';
 import { DEFAULT_KEY_BINDINGS, REBINDABLE, type ActionId } from '../../input/actions';
 import { TiltSource } from '../../input/tilt';
 import type { I18nKey } from '../../i18n/en';
+import { config } from '../../config';
 import { h } from '../dom';
 import { button, header, slider, stepper, toggle } from '../components';
 import type { Screen } from '../uiManager';
@@ -245,6 +246,19 @@ export function createSettings(
     section(
       'settings.general',
       stepper(t('settings.language'), languages, s.language, (v) => ((s.language = v), apply())),
+      // Development only: shown while config.dev.testCoins is set (see README).
+      ...(config.dev.testCoins > 0
+        ? [
+            button(
+              t('settings.testCoins', { coins: config.dev.testCoins }),
+              () => {
+                ctx.save.resetTestCoins();
+                ctx.ui.toast(t('settings.testCoins.done', { coins: config.dev.testCoins }), 'good');
+              },
+              { cls: 'small test-coins', icon: 'coin' },
+            ),
+          ]
+        : []),
       resetBtn,
     ),
   );

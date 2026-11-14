@@ -752,6 +752,28 @@ body.kbd-nav .track-card:focus {
   border-color: #fff;
   box-shadow: 0 0 0 3px var(--accent);
 }
+.swatch {
+  position: relative;
+  padding: 0;
+}
+.swatch.locked {
+  filter: saturate(0.6) brightness(0.8);
+}
+.swatch-price {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 17px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+}
+.swatch-price svg {
+  width: 12px;
+  height: 12px;
+}
 .upgrades {
   display: flex;
   flex-direction: column;

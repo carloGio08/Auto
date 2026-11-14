@@ -12,6 +12,7 @@ import { createRoadPoint, createRoadQuery } from '../terrain/road';
 import { createGroundSample } from '../terrain/terrain';
 import { World, type BuildStep } from '../world/world';
 import { applyUpgrades, Vehicle } from '../vehicle/vehicle';
+import { configuredJeep } from './progression';
 import { CameraRig } from '../vehicle/cameraRig';
 import type { Autopilot } from '../vehicle/autopilot';
 import { createSystem } from '../systems';
@@ -144,7 +145,8 @@ export class RunSession {
     this.course = course;
     this.world = world;
     const save = ctx.save.data;
-    const car = ctx.registries.cars.get(cfg.carId);
+    // The jeep as configured in the garage (accessories); paint and upgrades below.
+    const car = configuredJeep(save, ctx.registries.cars.get(cfg.carId));
     const physics = applyUpgrades(car, ctx.registries.upgrades.all(), save.upgrades[car.id] ?? {});
     const color = save.carColors[car.id] ?? car.look.colors[0];
     this.vehicle = new Vehicle(car, physics, color, this.events);

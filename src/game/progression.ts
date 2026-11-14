@@ -1,7 +1,8 @@
 import { config } from '../config';
 import type { GameContext } from '../core/context';
-import type { MedalId } from '../core/save';
-import type { AchievementDef } from '../data/types';
+import type { MedalId, SaveData } from '../core/save';
+import { customizedLook, factoryAccessories, type AccessoryId } from '../data/accessories';
+import type { AchievementDef, CarDef } from '../data/types';
 import { todayKey } from '../data/mountains';
 import type { RunSession, RunSummary } from './session';
 
@@ -83,4 +84,25 @@ export function isMountainUnlocked(ctx: GameContext, mountainId: string): boolea
   if (!mountain.unlockAfter) return true;
   const rec = ctx.save.data.records[`${mountain.unlockAfter}:freeDescent`];
   return !!rec && rec.runs > 0 && rec.bestScore > 0;
+}
+
+/**
+ * A jeep as the player configured it: accessories switched on in the garage (factory
+ * accessories until the player changes them). Paint is chosen separately (carColors).
+ */
+export function configuredJeep(save: SaveData, def: CarDef): CarDef {
+  const on = save.accessoriesOn[def.id];
+  return on ? { ...def, look: customizedLook(def.look, on) } : def;
+}
+
+/** Accessories a jeep owns: factory ones plus those bought. */
+export function ownedAccessories(save: SaveData, def: CarDef): AccessoryId[] {
+  return Array.from(
+    new Set([...factoryAccessories(def.look), ...(save.accessories[def.id] ?? [])]),
+  );
+}
+
+/** Accessories currently shown on a jeep. */
+export function accessoriesOn(save: SaveData, def: CarDef): AccessoryId[] {
+  return save.accessoriesOn[def.id] ?? factoryAccessories(def.look);
 }

@@ -1,6 +1,9 @@
 import type { GameContext } from '../../core/context';
 import type { CarDef, UpgradeId } from '../../data/types';
 import { MAX_UPGRADE_LEVEL } from '../../data/upgrades';
+import { accessories, FREE_PAINTS, PAINT_PRICE } from '../../data/accessories';
+import { config } from '../../config';
+import { accessoriesOn, configuredJeep, ownedAccessories } from '../../game/progression';
 import { h } from '../dom';
 import { button, header, iconButton, statBar } from '../components';
 import { icon } from '../icons';
@@ -31,7 +34,9 @@ export function createGarage(ctx: GameContext, cb: GarageCallbacks): Screen {
     const owned = save.ownedCars.includes(car.id);
     const selected = save.selectedCar === car.id;
     const lockedBy =
-      car.requiresAchievement && !save.achievements.includes(car.requiresAchievement)
+      car.requiresAchievement &&
+      !config.dev.unlockAll &&
+      !save.achievements.includes(car.requiresAchievement)
         ? ctx.registries.achievements.get(car.requiresAchievement)
         : null;
     coins.replaceChildren(h('span', { class: 'ico', html: icon('coin') }), String(save.coins));
@@ -80,24 +85,93 @@ export function createGarage(ctx: GameContext, cb: GarageCallbacks): Screen {
       );
     }
 
+    const pay = (price: number): boolean => {
+      if (save.coins < price) {
+        ctx.ui.toast(t('garage.notEnough'), 'bad');
+        ctx.audio.sfx?.uiError();
+        return false;
+      }
+      save.coins -= price;
+      ctx.audio.sfx?.purchase();
+      return true;
+    };
+    const refresh = (): void => {
+      ctx.save.save();
+      cb.preview(configuredJeep(save, car), save.carColors[car.id] ?? car.look.colors[0]);
+      render();
+    };
+
+    // Paints: the first ones are free, the others are bought once per jeep.
     const swatches = h(
       'div',
       { class: 'swatches' },
-      ...car.look.colors.map((c) =>
-        h('button', {
-          class: `swatch ${c === color ? 'active' : ''}`,
-          style: `background:${c}`,
-          'aria-label': c,
-          type: 'button',
-          onclick: () => {
-            save.carColors[car.id] = c;
-            ctx.save.save();
-            cb.recolor(c);
-            render();
+      ...car.look.colors.map((c, i) => {
+        const ownedPaint = ctx.save.ownsPaint(car.id, c, i, FREE_PAINTS);
+        return h(
+          'button',
+          {
+            class: `swatch ${c === color ? 'active' : ''} ${ownedPaint ? '' : 'locked'}`,
+            style: `background:${c}`,
+            'aria-label': ownedPaint ? c : `${c} · ${PAINT_PRICE}`,
+            title: ownedPaint ? '' : `${t('common.buy')} · ${PAINT_PRICE}`,
+            type: 'button',
+            onclick: () => {
+              if (!ownedPaint) {
+                if (!owned || !pay(PAINT_PRICE)) return;
+                (save.paints[car.id] ??= []).push(c);
+                ctx.ui.toast(t('garage.paintBought'), 'good');
+              }
+              save.carColors[car.id] = c;
+              ctx.save.save();
+              cb.recolor(c);
+              render();
+            },
           },
-        }),
-      ),
+          ownedPaint ? '' : h('span', { class: 'swatch-price', html: icon('coin') }),
+        );
+      }),
     );
+
+    // Accessories: factory ones are owned; others bought once, then switched on and off.
+    const ownedAcc = ownedAccessories(save, car);
+    const onAcc = accessoriesOn(save, car);
+    const accessoryRows = accessories.map((a) => {
+      const has = ownedAcc.includes(a.id);
+      const on = onAcc.includes(a.id);
+      const needs = a.requires && !onAcc.includes(a.requires);
+      const btn = has
+        ? button(
+            on ? t('common.on') : t('common.off'),
+            () => {
+              const next = on ? onAcc.filter((x) => x !== a.id) : [...onAcc, a.id];
+              // Cargo sits on the roof rack: removing the rack removes the cargo.
+              save.accessoriesOn[car.id] =
+                a.id === 'roofRack' && on ? next.filter((x) => x !== 'cargo') : next;
+              refresh();
+            },
+            { cls: `small ${on ? 'primary' : 'ghost'}`, disabled: !owned || (!on && !!needs) },
+          )
+        : button(
+            String(a.price),
+            () => {
+              if (!pay(a.price)) return;
+              (save.accessories[car.id] ??= []).push(a.id);
+              save.accessoriesOn[car.id] = [...onAcc, a.id];
+              if (a.requires && !onAcc.includes(a.requires))
+                save.accessoriesOn[car.id].push(a.requires);
+              if (a.requires && !ownedAcc.includes(a.requires))
+                (save.accessories[car.id] ??= []).push(a.requires);
+              ctx.ui.toast(t('garage.bought', { name: tk(a.nameKey) }), 'good');
+              refresh();
+            },
+            {
+              cls: 'small',
+              disabled: !owned || !!(a.requires && !ownedAcc.includes(a.requires)),
+              icon: 'coin',
+            },
+          );
+      return h('div', { class: 'upgrade accessory' }, h('div', {}, h('b', {}, tk(a.nameKey))), btn);
+    });
 
     const upgrades = ctx.registries.upgrades.all().map((u) => {
       const level = ctx.save.upgradeLevel(car.id, u.id as UpgradeId);
@@ -161,6 +235,8 @@ export function createGarage(ctx: GameContext, cb: GarageCallbacks): Screen {
       action,
       h('h4', {}, t('garage.color')),
       swatches,
+      h('h4', {}, t('garage.accessories')),
+      h('div', { class: 'upgrades' }, ...accessoryRows),
       h('h4', {}, t('garage.upgrades')),
       h('div', { class: 'upgrades' }, ...upgrades),
     );
@@ -168,11 +244,14 @@ export function createGarage(ctx: GameContext, cb: GarageCallbacks): Screen {
   const go = (d: number): void => {
     index = (index + d + cars.length) % cars.length;
     const car = cars[index];
-    cb.preview(car, save.carColors[car.id] ?? car.look.colors[0]);
+    cb.preview(configuredJeep(save, car), save.carColors[car.id] ?? car.look.colors[0]);
     render();
   };
   render();
-  cb.preview(cars[index], save.carColors[cars[index].id] ?? cars[index].look.colors[0]);
+  cb.preview(
+    configuredJeep(save, cars[index]),
+    save.carColors[cars[index].id] ?? cars[index].look.colors[0],
+  );
   const el = h(
     'div',
     { class: 'screen garage' },
