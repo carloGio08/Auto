@@ -4,7 +4,7 @@ This document is the technical plan of the game: how modules are organised, how 
 between them, and the maths behind the mountain, the trails, the jeep physics and the
 destructible trees.
 
-Mountain Drop is a free-roam descent: one huge low-poly mountain (8 × 8 km, ~1800 m of drop),
+Mountain Drop is a free-roam descent: one huge low-poly mountain (8 × 8 km, ~1600 m of drop),
 a 4x4 jeep at the snowy summit and the base village by the lake as the only goal. There is no
 timer and no checkpoint: the trail network is carved into the terrain and can be left anywhere.
 
@@ -65,81 +65,142 @@ steering). Visuals are `lerp(prev, curr, alpha)` / `slerp`, so 60, 90 and 144 Hz
 look smooth while the simulation stays deterministic. The hot paths (physics, particles,
 debris, camera) reuse pre-allocated scratch objects — no allocations per step.
 
-## 3. The mountain (`terrain/mountain.ts`)
+## 3. Generation pipeline: landforms → heightmap → erosion → trails → colours → props
 
-`MountainDef` (`data/mountains/*.ts`) describes the massif; `Mountain` turns it into an
-analytic, smooth `heightNoWater(x, z)`:
+```
+MountainDef (data)                                    terrain worker (terrainWorker.ts)
+  profile, landforms, erosion, rivers, trails  ──▶  generateTerrain():
+                                                       1. LandformField on a 24 m grid,
+                                                          Catmull-Rom upsampled to 12 m
+                                                       2. talus limiter + thermal erosion
+                                                       3. priority-flood flow routing,
+                                                          stream-power incision, floor
+                                                          smoothing, thermal again
+                                                       4. moisture (flow), rockiness,
+                                                          streams traced spring → lake
+                                                     routeTrails()  (A* on 24 m grid)
+                         CourseData (typed arrays) ◀─┘
+  main thread: Course(def, data) → Mountain, Road, Terrain, BiomeModel, placement
+  terrain worker keeps the same Course to build terrain patches on request
+```
 
-1. **Massif**: distance from the summit, normalised by per-direction radii (N/S/E/W blended
-   by angle) and a few soft spurs, fed through a _rounded ramp_ profile (linear with rounded
-   ends) from `summit.height` down to `baseHeight`, with a flat summit plateau.
-2. **Domain warp** (low-frequency noise offsets the sample point) and two fbm layers (`low`,
-   `mid`) for broad shapes. Amplitudes are small so the slope stays under `maxSlope`
-   — few cliffs; the explicit `cliffs` are short authored rock steps.
-3. **Rim walls** at the border make natural map edges; a **lake** bowl at the base.
-4. **Rivers** are traced by steepest descent from their springs and carved with a monotone
-   bank profile (`min(h, riverBed)`), fading in so the surface stays continuous.
+`TerrainService` (app lifetime, in `GameContext`) owns the worker, reports progress to the
+loading screen and caches the last results; tests and the fallback run the same code
+synchronously. Everything is deterministic from the definition and its seed.
 
-`height()` adds the water level logic; tests check finiteness, slope limits and continuity
-(2 mm probes) on every mountain.
+### Landforms (`terrain/landforms.ts`, data in `data/mountains/*.ts`)
+
+The massif is a warped elliptical distance from the summit (per-direction `radii`) through a
+monotone cubic **radial profile**; a large-scale noise mixes the stepped profile (terraces and
+faces) with an even rounded slope, so terraces come and go around the mountain. Broad noise
+adds undulations; ridges rise at the map border. Then each **landform** (ridge, valley,
+cirque, plateau, meadow, saddle, slope, hills, basin) is applied in order with smooth min/max
+(`smin(a, b, k)`): valleys carve a floor that descends evenly along their path (gorges where
+they cross terrace edges), cirques carve a bowl whose back wall is steep only on the uphill
+side, plateaus and meadows flatten towards the altitude measured at their centre with a ramp
+that widens with the height to absorb (no walls), saddles lower ridges. Each landform also
+writes a **rockiness** used for detail amplitude, colours and outcrops.
+
+### Heightmap and erosion (`terrain/generator.ts`, `terrain/erosion.ts`)
+
+- 12 m spacing over ±1.33 × halfSize (≈ 890², 3 MB of `Float32` plus two `Uint8` maps): fits
+  phones; the fine detail is analytic.
+- **Talus limiter**: two-pass chamfer sweeps cut every cell back to the repose slope
+  (rugged cells may stay steeper), then a few **thermal erosion** iterations round the edges
+  and build scree aprons.
+- **Hydraulic**: priority-flood (Barnes) visits cells from the outlets (lake, border) by
+  increasing filled height; each cell drains to the cell that reached it, so depressions stay
+  as natural hollows. Flow accumulation in reverse order, implicit **stream-power** incision
+  (Braun–Willett) outlet-first, a flow-weighted blur that flattens valley floors.
+- Moisture = log of the upstream area, blurred; streams follow the flow graph from their
+  springs to the lake and meander where the floor is flat.
+
+`Heightfield.sample()` is a uniform **cubic B-spline** (C², never overshooting: no spikes);
+`Mountain.heightNoWater()` adds low-amplitude fbm detail (≈ 0.35 m on meadows, ≈ 2 m on
+crags), `height()` carves the lake bed and the stream channels. Tests check the slope mix
+(≈ 25 % < 8°, 45 % 8–25°, 25 % 25–38°, < 5 % walls), continuity and bounded curvature on
+every mountain.
 
 ## 4. Trails carved into the terrain
 
 ### Routing (`terrain/trailRouter.ts`)
 
 Trails are data: `TrailDef { waypoints, kind: main | branch | shortcut, width: [min, max],
-targetGrade, maxGrade, startOn?, endOn? }`. Between waypoints a grade-limited **A\*** runs on a
-32 m grid (16-neighbourhood) with a cost that prefers `targetGrade`, forbids `maxGrade`,
-penalises turns and (for branches) running next to an existing trail. That naturally produces
-hairpins that follow the contour lines. The path is then simplified (RDP), smoothed
-(Chaikin ×3), relaxed to a minimum radius, smoothed again and resampled every metre.
-Branches snap their ends onto their parent trail (`startOn` / `endOn`).
+targetGrade, maxGrade, startOn?, endOn? }`. Between waypoints a **minimum-cost A\*** runs on
+a 24 m grid (16-neighbourhood): length × (1 + grade deviation²), ×40 above the limit, a turn
+cost growing with the square of the turn (hairpins only where needed), a side-slope factor
+(trails prefer terraces, saddles and valley floors over cutting across faces), a stream
+crossing cost, and penalties near the lake, the border and existing trails. Dead-end spikes
+at waypoints are snipped; the path is simplified (RDP), smoothed (Chaikin = quadratic
+B-spline), its bends relaxed to a 12 m radius twice, then resampled every metre with only a
+light final smoothing. Main trails: 14–16 km, ~10–11 % average, ≤ 20 % over 20 m.
 
 ### Road (`terrain/road.ts`)
 
-All trails share flat arrays (`x, z, y, tx, tz, curvature, halfWidth, bank, flags, trailOf`).
-The height profile follows the natural ground, low-passed and grade-clamped; width varies and
-widens in hairpins (`ROAD_HAIRPIN`), the cross-section is banked in bends, and where a trail
-crosses a river the deck is lifted on a wooden footbridge (`ROAD_BRIDGE`). Queries use a
-uniform grid; the projection interpolates vertex normals (one quadratic per segment) so
-ownership of space is continuous on the inside of bends. A second candidate (another trail, or
-the same trail more than 20 m away along it) is returned with a weight for blending.
+All trails share flat arrays (`x, z, y, tx, tz, curvature, halfWidth, offset, bank, rut,
+surf, flags, trailOf`). The profile follows the natural ground, low-passed and grade-clamped
+(again after junction anchoring, bridges and fords). Width wanders between the def's limits
+(4–7 m) and widens in hairpins; the worn band meanders (`offset`) and widens on the downhill
+side at **lay-bys / viewpoints** every 400–800 m of straight. Surfaces change in stretches:
+packed dirt, gravel, grassy two-track, with wheel ruts; puddles are hashed per 40 m cell.
+Streams: wooden **bridges** on the main trail (deck lifted above the water), shallow
+**fords** (0.35 m of water) with ramps scaled to the drop on branches. Queries use a uniform
+grid and a projection along interpolated normals; a second candidate is blended at
+switchbacks and junctions.
 
 ### Carving (`terrain/terrain.ts`)
 
-With lateral distance `d`, half width `w`, trail height `R` and an adaptive shoulder
-`s = clamp(1.25·|R − N|, 9, 30)` (embankments widen with the cut/fill height):
+With `d` the distance to the worn band (shifted by `offset`), half width `w`, trail height
+`R` (banking, crown, ruts, grassy hump and puddles) and an adaptive embankment
+`s = clamp(1.25·|R − N|, 9, 30)`:
 
 ```
-t  = smoothstep(w, w + s, d)
-Hr = (R1·k1 + R2·k2) / (k1 + k2),   k = 1 / (max(d − w, 0) + 0.3)²
-H  = mix(Hr + bank·lateral, N(x,z), t)
+shoulder  0.7 m flat beyond the edge
+ditch     0.32 m deep on the cut side (natural ground above the trail)
+t  = smoothstep(w + 0.7, w + 0.7 + s, d)          // rounded crest and toe
+H  = mix(R, N(x, z), t)
 ```
 
-There is no separate road mesh: the trail is part of the terrain and is coloured per vertex
-(dirt in the centre, grass/rock/snow on the edges, partial snow cover up high). The same
-`classify()` drives colours and physics surfaces (trail, grass, forest, snow, scree, rock,
-mud, sand, ice, wood decks), so what you see is what you drive on.
+The trail is part of the terrain mesh: no separate geometry. `trailGround()` tells dirt,
+ruts, gravel, grassy middle, mud, snow and ford apart for colours and physics, with an
+irregular band edge.
 
-### Placement (`terrain/course.ts`)
+### Placement (`terrain/course.ts`, `world/propPlacement.ts`)
 
-Pure data, no three.js: start on the summit plateau, the base zone, waymark posts with painted
-bands, cairns above the tree line, signs pointing to the base, fences on the outside of
-hairpins and along the village approach, coin lines and crystals off the trail.
+Pure data: start, base zone, waymarks, cairns, signs, fences, coins and crystals; rocks only
+as outcrops (crests, faces), talus (scree under faces), stream beds, a few trailside stones
+and rare erratics (~120 per km², 86 % fewer than before), never on a trail band; trees from
+the same forest density as the ground colour; young (breakable) ones near the trails.
 
 ## 5. Rendering the world
 
-- **Terrain** (`terrain/terrainMesh.ts`): a quadtree over 10 km with up to 6 levels; LOD0
-  cells are 2–3 m with flat shading. Patches are built row by row within a per-frame budget,
-  coarser ancestors stand in until finer ones are ready, skirts hide cracks, unused patches
-  are evicted. Geometry is non-indexed with normalised `Uint8` colours and `Int8` normals.
-- **Palette** (`data/palette.ts`): 13 keys × 2 tones (snow, rock, scree, alpine, meadow,
-  forest, dense forest, trail, sand, water, wood, foliage, paint). Time-of-day and weather
-  themes recolour it (`resolvePalette`). No textures anywhere: flat colours, few-step
-  lighting, gradient sky, low-poly clouds and a distant ring of peaks.
-- **Props** (`world/props.ts`): streamed per 320 m cell with a deterministic RNG; one
-  `InstancedMesh` per type per cell; cheap far cones beyond `treeDetailDistance`; colliders
-  added and removed with their cell. Trees are stacked cones/octahedra in three tiers.
+- **Terrain LOD** (`terrain/terrainMesh.ts`): a quadtree whose depth and cells per patch are
+  chosen so the finest faces are `terrainCell` (1 m high, 1.5 m medium, 2.5 m low). A node
+  splits while its face size exceeds the target for its distance: LOD0 within `lod0Radius`
+  (200/180/160 m), ~2.5 m to 600 m, ~6 m to 1.5 km, ~16 m to 3.5 km, ~48 m beyond (actual
+  faces are power-of-two multiples, ≤ 1.45 × the target). Visible triangles are kept under
+  the preset budget (1.5 M / 1 M / 0.6 M) by shrinking the rings (`lodScale`), LOD0 first in
+  practice. Coarser ancestors stand in until finer patches arrive; skirts lit like the
+  ground above hide cracks; fog hides the far LODs.
+- **Patch building** (`terrain/patchBuilder.ts`, pure): heights and trail data on an
+  (n + 3)² grid, colours per vertex, then non-indexed flat-shaded triangles split along the
+  diagonal that follows the surface. Attributes are compact: `Int16` positions in 1/128 of a
+  cell around the patch origin (the mesh is translated and scaled), normalised `Uint8`
+  colours and `Int8` normals (≈ 36 B per triangle). Built in the worker; buffers of evicted
+  patches are transferred back and pooled; the main thread only creates `BufferGeometry`.
+  Without a worker the same builder runs time-sliced (`chunkBuildBudgetMs`).
+- **Colours** (`data/palette.ts`, `terrain/biome.ts`, `terrain/splat.ts`): ramps of tones
+  per material. `BiomeModel.weights()` gives smooth weights for snow (wobbling snow line,
+  shaded on north faces and in hollows), snow-rock, light/dark rock (steep, rugged, convex
+  crests), scree (concave under faces), rock-grass, dry alpine grass, grass, flowering
+  meadows, undergrowth and forest floor (forest density), moss and mud (wet), sand (shore),
+  earth (trail fringe, cuts). Each material's tone is chosen continuously along its ramp by
+  large patches, curvature and wetness; faces average their corners with a tiny shade step.
+  The trail band blends in over 0.8 m. Time-of-day and weather themes recolour the palette.
+  The dominant material is also the physics surface (what you see is what you drive on).
+- **Props** (`world/props.ts`): streamed per 320 m cell, one `InstancedMesh` per type per
+  cell, cheap far cones beyond `treeDetailDistance`, colliders added and removed with their
+  cell. Rock shapes: faceted boulders, layered slabs, leaning crags, rounded stream boulders.
 - **Structures** (`world/structures.ts`): waymarks, cairns, signs, fences, footbridges, the
   village houses and the summit overlook, each a single instanced draw call.
 
@@ -227,7 +288,16 @@ prism, leaf, octagonal ring) with per-instance position, velocity, spin, scale a
 colour; particles pop in and shrink out (no transparency, no sorting). Kinds are data
 (`shardKinds.ts`): dust, snow, gravel, mud, sparks, water drops and rings, landing rings, wood,
 leaves, steam, nitro, pickups. Speed lines are instanced prisms, snowfall tumbling
-octahedra, tyre strips are tinted per surface. Emission scales with the quality preset.
+octahedra. Emission scales with the quality preset.
+
+**Tyre tracks** (`tireTracks.ts`): each wheel on the ground lays a strip (left, centre, right
+vertices) every 0.4 m whose heights are sampled from the terrain 3.5 cm above it. Segments
+live in a `TrackBuffer` ring (4000 on High, 1500 on Low): freed slots (expired or > 400 m
+away) are reused first, else the oldest is overwritten; only the dirty range is uploaded. The
+look per surface comes from the palette (snow grooves with lighter rims, dark mud, darker
+soil, crushed grass, light gravel scratches, almost nothing on rock, none in water), opacity
+and width from load, slip, braking and the handbrake, broken marks for spinning wheels; a
+shader fades them over 60–120 s. One draw call.
 
 ## 10. Game systems (plugins)
 
@@ -256,7 +326,9 @@ writes only `textContent`/`transform`.
 
 ## 12. Performance strategy
 
-- Quadtree terrain streaming with LOD and a build budget; fog hides the far plane.
+- Terrain: generation and patch building in a Web Worker, compact attributes, pooled
+  buffers, a triangle budget per preset (rings shrink, faces keep their size), frustum
+  culling per patch, fog over the far LODs.
 - Props as `InstancedMesh` per cell, near/far variants, cells streamed around the camera.
 - Shadows: one directional light following the jeep, map size from the preset.
 - Dynamic resolution within `[0.55, 1]` × capped pixel ratio; "Auto" quality steps the preset
@@ -267,14 +339,30 @@ writes only `textContent`/`transform`.
 
 `core/save.ts`: JSON in `localStorage` with `schemaVersion` and migrations. v4 (the jeep
 update) keeps coins, unlocks, upgrades, achievements, stats and settings, maps the old cars to
-the jeeps and drops time records, medals and the replay ghosts.
+the jeeps and drops time records, medals and the replay ghosts. v5 adds bought paints and
+accessories and, while `config.dev.testCoins` is set, tops profiles up to the test coins.
 
 ## 14. Testing
 
-Vitest: mountain height (finite, slope limit, continuity), carved trail coherence (centre
-height, cross slope, bridges above water), trail routing and spacing, query vs brute force,
-jeep handling and feel (no NaN in 10 000 steps, settling after a drop with limited rebound,
-no air control, engine braking, anti-flip, crest stick, top speed), tree tiers and debris,
-daily objectives, save migrations, registries and core utilities.
-`scripts/e2e-screenshots.mjs` drives the built game with Playwright (menu → summit → drive →
-trees broken → results) on desktop and mobile and captures screenshots.
+Vitest:
+
+- terrain: slope mix within the targets, continuity, bounded curvature (no spikes), carved
+  trail coherence, bridges above water; LOD0 face size and longest edge, triangle budget per
+  preset, patch skirts and exact grid positions;
+- trails: spacing, grade (average and over 20 m windows), minimum bend radius, shallow fords,
+  width range, surface variety and lay-bys, query vs brute force;
+- props: rock density (≤ 30 % of the old one), rocks with a reason, nothing on trail bands,
+  forests on slopes rather than flats;
+- palette: valid ramps, every material/surface colour declared, splat colours within the
+  palette and smooth between neighbouring vertices;
+- tyre tracks: capacity, ring order, pooling, dirty ranges, ground-following vertices, none in
+  water;
+- drivability: a bot drives every mountain's whole main trail with the real jeep physics, no
+  stuck, no roll-over, never lost;
+- jeep handling and feel, tree tiers and debris, objectives, save migrations (v5, test coins,
+  every paid item affordable), registries and core utilities.
+
+`scripts/e2e-screenshots.mjs` drives the built game with Playwright on desktop (1280×720) and
+mobile landscape (844×390): menu → garage with the test coins (buys an upgrade, a paint and an
+accessory) → summit → trail → off-trail with tyre tracks → trees (desktop) → results, failing
+on console errors, and captures the README screenshots.

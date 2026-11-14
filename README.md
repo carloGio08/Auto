@@ -1,46 +1,51 @@
 # Mountain Drop
 
 **Low-poly off-road descent in the browser.** Start on the snowy summit of a huge mountain in
-a 4x4 jeep and find your way down to the village by the lake — about 1800 m of drop and 8 × 8
+a 4x4 jeep and find your way down to the village by the lake — about 1600 m of drop and 8 × 8
 km of free roam. No timer and no checkpoints: follow the trails carved into the slopes, cut
-across meadows and scree, snap young trees on the way, drift the hairpins. Works on desktop
-and on phones (landscape, touch or tilt), installable as a PWA and playable offline.
+across meadows and scree, snap young trees on the way, leave your tracks in the snow. Works on
+desktop and on phones (landscape, touch or tilt), installable as a PWA and playable offline.
 
 **▶ Play: https://carlogio08.github.io/Auto/** (see [Deployment](#deployment) — the address
 follows the repository name, e.g. `/mountain-drop/` if the repository is renamed)
 
 ![Main menu](docs/screenshots/desktop-menu.png)
 
-| Summit start                                       | Down the mountain                                    |
-| -------------------------------------------------- | ---------------------------------------------------- |
-| ![Summit](docs/screenshots/desktop-summit.png)     | ![Trees](docs/screenshots/desktop-trees.png)         |
-| **Garage**                                         | **Results**                                          |
-| ![Garage](docs/screenshots/desktop-garage.png)     | ![Results](docs/screenshots/desktop-results.png)     |
-| **Mobile (landscape, touch)**                      | **Mobile summit**                                    |
-| ![Mobile trees](docs/screenshots/mobile-trees.png) | ![Mobile summit](docs/screenshots/mobile-summit.png) |
+| On the trail                                   | Off the trail, tyre tracks                              |
+| ---------------------------------------------- | ------------------------------------------------------- |
+| ![Trail](docs/screenshots/desktop-drive.png)   | ![Off-road](docs/screenshots/desktop-offroad.png)       |
+| **Summit start**                               | **Forest, destructible trees**                          |
+| ![Summit](docs/screenshots/desktop-summit.png) | ![Trees](docs/screenshots/desktop-trees.png)            |
+| **Garage (test coins, accessories, paints)**   | **Results**                                             |
+| ![Garage](docs/screenshots/desktop-garage.png) | ![Results](docs/screenshots/desktop-results.png)        |
+| **Mobile (landscape, touch)**                  | **Mobile off-road**                                     |
+| ![Mobile](docs/screenshots/mobile-drive.png)   | ![Mobile off-road](docs/screenshots/mobile-offroad.png) |
 
 ## Features
 
-- **One huge mountain** from an analytic, smooth `height(x, z)`: rounded massif, domain warp,
-  a few cliffs, rivers and a lake, biomes by altitude (snow, rock, scree, alpine meadow,
-  forest, valley), streamed with a quadtree LOD (2–3 m faces up close, flat shaded).
-- **Trails carved into the terrain**: a main trail and branches routed with a grade-limited
-  A\*, hairpins that follow the contours, banking, variable width, wooden footbridges, painted
-  waymarks, cairns, signs and fences. Leave them whenever you like.
+- **A designed, organic mountain**: data-driven landforms (crests, valleys, cirques,
+  terraces, high meadows, saddles, steep faces, foothills, lake basin) blended with smooth
+  min/max, baked into a heightmap and eroded (talus, thermal, flow routing and stream
+  incision) in a Web Worker. About a quarter of the ground is flat, most of it gentle or
+  medium, a quarter steep, almost no walls.
+- **Small faces**: ~1 m flat-shaded triangles around the jeep (1.5 / 2.5 m on medium / low),
+  coarser rings farther away, a triangle budget per quality level.
+- **Organic trails carved into the terrain**: minimum-cost routing that follows contours,
+  terraces, saddles and valley floors; hairpins only where needed; 4–7 m wide with lay-bys
+  and viewpoints, camber, ditches and embankments; packed dirt, gravel, grassy two-tracks,
+  ruts, puddles, snow; wooden bridges and fords. Leave them whenever you like.
+- **Rich, smoothly blended colours**: ramps of tones per material (61 colours for the terrain)
+  splatted per vertex from altitude, slope, aspect, curvature, wetness and the snow line;
+  re-themed by time of day and weather. No textures.
+- **Tyre tracks** that follow the ground: grooves in the snow, dark mud, crushed grass,
+  scratches on gravel, fading after a minute or two.
+- **Ecological props**: forests in valleys and on medium slopes, open meadows, a thin tree
+  line; few rocks, only where they belong (outcrops, scree, stream beds).
 - **4x4 jeeps** (Trailblazer, Scout, Crawler, Nomad): low centre of mass, stiff long-travel
   suspension that does not bounce, tolerant tyres, engine braking, ground stick, anti-flip on
-  the ground and **no air control**. Paint and upgrades in the garage.
-- **Destructible trees**: young ones always snap, medium ones above an impact energy, old
-  ones never; stumps, tumbling pieces, splinters and leaves.
-- **Camera made for descents**: high chase view that looks ahead and tilts down the slope,
-  wide and hood views, free look (mouse, right stick, one-finger drag), trees between you and
-  the jeep shrink away. A skippable fly-over opens every run.
-- **Modes**: _Free descent_ (style score medals) and _Daily challenge_ (a new mountain,
-  weather and three objectives every day). Style combos for drifts, jumps, flips, near
-  misses and felled trees; nitro, coins, crystals, boulders and rockslides.
-- **Diorama look, no assets**: ~26 flat palette colours re-themed by time of day and weather,
-  low-poly sky and clouds, instanced low-poly particles. Every mesh, colour, icon (SVG) and
-  sound (WebAudio) is generated in code; no textures.
+  the ground and **no air control**. Paints, accessories and upgrades in the garage.
+- **Destructible trees**, a **camera made for descents**, **Free descent** and **Daily
+  challenge** modes, style combos, nitro, coins, crystals, boulders and rockslides.
 - **Mobile first**: multitouch buttons or tilt, auto-accelerate option, vibration, safe
   areas, fullscreen, adaptive quality and dynamic resolution. **English and Italian**.
 
@@ -61,7 +66,7 @@ follows the repository name, e.g. `/mountain-drop/` if the repository is renamed
 `R` puts the jeep back on the last safe spot (sampled automatically) facing downhill; press
 again to go further back. It also happens on its own if you stay upside down, sink in deep
 water or leave the map. Keys can be rebound in **Settings → Controls**; camera distance,
-height, field of view and shake are in **Settings**.
+height, field of view and shake, and the tyre tracks (Off / Low / High) are in **Settings**.
 
 ## Run locally
 
@@ -83,12 +88,14 @@ npm run e2e       # Playwright smoke test + screenshots (needs `npm run preview`
 ```
 
 Debug helpers: `?autopilot` (the built-in driver follows the main trail), `?e2e` (skips the
-fly-over and exposes `window.__md`), **F3** (FPS / draw-call overlay).
+fly-over and exposes `window.__md`), **F3** (FPS / draw-call overlay), **F4** in dev builds or
+with `?debug` (map of slopes, trails, fords, landforms and the jeep).
 
 ## Tuning
 
 Everything lives in [`src/config.ts`](src/config.ts) (grouped by area, plus feature flags);
-per-jeep values are in [`src/data/cars/`](src/data/cars), tree tiers in
+per-jeep values are in [`src/data/cars/`](src/data/cars), mountains and their landforms in
+[`src/data/mountains/`](src/data/mountains), tree tiers in
 [`src/data/trees.ts`](src/data/trees.ts), colours in [`src/data/palette.ts`](src/data/palette.ts).
 The most useful knobs for the driving feel:
 
@@ -110,13 +117,14 @@ src/
   data/      mountains (+ daily generator), jeeps, palette & themes, surfaces, trees, objectives,
              upgrades, hazards, environment, modes, achievements, registry
   input/     actions, input manager, keyboard, gamepad, touch, tilt, pointer free look
-  terrain/   mountain (natural height, rivers), trail router, road (trail network), terrain
-             (carving, biomes), course (placement), quadtree terrain mesh
+  terrain/   landforms, generator (heightmap + erosion), heightfield, mountain, trail router,
+             road, terrain (carving), biome model, splat colours, patch builder, quadtree mesh,
+             terrain worker + service, course (placement)
   vehicle/   physics, jeep model, telemetry, camera rig, autopilot, vehicle
-  world/     world, props (streamed instancing), structures, colliders, tree debris, sky,
+  world/     world, props (placement + streamed instancing), structures, colliders, debris, sky,
              lighting, water, weather
   systems/   nitro, style, hazards, collectibles, trees, objectives, medals, achievements
-  effects/   instanced shards (particle kinds), tyre strips, speed lines, CSS post-fx
+  effects/   instanced shards (particle kinds), tyre tracks, speed lines, CSS post-fx
   audio/     audio engine (mixer), engine sound, sfx, music, director
   game/      run session, progression, menu backdrop, garage scene
   ui/        UI manager (focus navigation), screens, HUD, components, icons, theme.css
@@ -127,6 +135,24 @@ src/
 Read [ARCHITECTURE.md](ARCHITECTURE.md) for the module diagram, the terrain/trail maths, the
 physics and the performance strategy, and [CONTRIBUTING.md](CONTRIBUTING.md) for step-by-step
 guides to add a mountain, a jeep, a hazard, a palette theme, a mechanic or a language.
+
+## Before release (Prima del rilascio)
+
+The build currently ships with **test coins** so every paid item can be tried:
+
+```ts
+// src/config.ts
+dev: {
+  testCoins: 100000, // coins for new profiles, top-up of existing saves, "Test" button
+  unlockAll: true,   // achievement-locked jeeps can be bought
+},
+```
+
+Before releasing set `testCoins: 0` and `unlockAll: false`. With `testCoins` at 0 new
+profiles start with 0 coins, the save migration no longer tops anything up and the "Test:
+reset coins" button disappears from the settings. Profiles that already received the test
+coins keep them: to start clean, use **Settings → Reset all progress** (or bump the save schema
+with a migration that resets `coins`).
 
 ## Deployment
 

@@ -4,6 +4,56 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] - 2026-11-14
+
+Terrain update: an organic, designed mountain with smaller faces, organic trails, richer
+colours, sensible props and tyre tracks.
+
+### Added
+
+- Data-driven landforms (ridges, valleys, cirques, plateaus, meadows, saddles, steep faces,
+  foothills, lake basin) blended with smooth min/max over a terraced radial profile.
+- Generation pipeline in a Web Worker with a progress bar: designed shape → 12 m heightmap →
+  talus limiter, thermal erosion, priority-flood flow routing, stream-power incision and
+  valley-floor smoothing → moisture and streams; cubic B-spline sampling plus analytic detail
+  that depends on the zone. Slope mix ≈ 24 % flat, 44 % gentle/medium, 27 % steep, < 5 %
+  walls (tested).
+- Finer quadtree LOD: ~1 m faces near the jeep (1.5 m medium, 2.5 m low), then ~2.5, 6, 16 and
+  48 m rings; triangle budget per preset; patches built in the worker with Int16 positions,
+  Uint8 colours, Int8 normals and pooled buffers.
+- Organic trails: minimum-cost routing with side-slope, turn and stream-crossing costs,
+  bends relaxed to a 12 m radius, ~10 % average grade on the main trail (≤ 20 %); width
+  4–7 m with a meandering band, lay-bys and viewpoints, shoulders, drainage ditches, rounded
+  cut and fill; packed dirt, gravel and grassy two-tracks with ruts, puddles and stones; fords
+  on branches, bridges on the main trail; new gravel surface.
+- Palette of material ramps (61 terrain colours, 9 for props) and per-vertex splat colouring
+  from altitude, slope, aspect, curvature, wetness and the snow line.
+- Tyre tracks following the terrain with per-surface looks, pooling and fading; "Tyre tracks"
+  setting (Off / Low / High).
+- Purchasable premium paints and jeep accessories (roof rack, jerrycans and bags, light bar,
+  snorkel, spare wheel) that can be switched on and off.
+- `config.dev.testCoins` (100000) and `config.dev.unlockAll` for testing every paid item, with
+  a "Test: reset coins" button in the settings.
+- Debug map overlay (F4 in dev builds or with `?debug`): slope classes, trails, bridges and
+  fords, landforms, jeep.
+- Tests: slope mix, no spikes, trail grades and radii, fords, LOD0 edges and triangle budget,
+  rock density and clear trails, palette and smooth colours, tyre track buffer, test coins and
+  purchases, and a bot that drives every main trail to the base.
+
+### Changed
+
+- Rocks reduced by ~86 % and placed only as outcrops, talus, stream beds and a few trailside
+  stones; new rock shapes. Trees follow the same forest density as the ground colours.
+- Granite Massif and the daily challenge derive their landforms from the main massif
+  (mirrored, moved, reshaped from a seed).
+- The menu backdrop parks the jeep where the descent opens up below.
+- Save schema v5 (paints, accessories; test coins top-up while the flag is on).
+
+### Removed
+
+- The analytic massif with spurs and authored cliffs, the old two-tone palette and the skid
+  strips (replaced by the tyre tracks).
+
 ## [2.0.0] - 2026-11-14
 
 Free-roam update: one huge mountain, a 4x4 jeep and no clock.

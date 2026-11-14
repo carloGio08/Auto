@@ -19,33 +19,62 @@ Conventions: TypeScript strict, English code and comments, Prettier formatting,
 palette), sounds and icons are generated in code (WebAudio, inline SVG).
 
 Debug helpers (dev server or `?e2e`): `window.__md` exposes the session and
-`trail(metres)`, `aimAtTree('young' | 'medium' | 'old')` and `finish()`; `?autopilot` lets the
-built-in driver follow the main trail; `?e2e` also skips the opening fly-over; **F3** toggles
-the FPS overlay.
+`trail(metres)`, `offroad(metres, lateral)`, `aimAtTree('young' | 'medium' | 'old')` and
+`finish()`; `?autopilot` lets the built-in driver follow the main trail; `?e2e` also skips the
+opening fly-over; **F3** toggles the FPS overlay; **F4** (dev server or `?debug`) shows the
+debug map: slope classes, trails, bridges and fords, landforms and the jeep.
 
 ---
 
 ## How to add a mountain
 
-1. Create `src/data/mountains/myMountain.ts` exporting a `MountainDef` (copy `alpine.ts`):
-   - shape: `halfSize`, `summit { x, z, height, plateauRadius }`, `baseHeight`, per-direction
-     `radii`, `spurs`, `noise` (domain warp + two fbm layers), `maxSlope` (tests enforce it on
-     the natural terrain, outside the authored `cliffs`), `rimHeight`, `lake`, `rivers`
-     (springs; the course follows the steepest descent);
+1. Create `src/data/mountains/myMountain.ts` exporting a `MountainDef` (copy `alpine.ts`), or
+   derive one from an existing mountain with `variantOf(base, { seed, mirror, jitter,
+relief, rugged })` like `granite.ts` and the daily challenge do.
+   - massif: `halfSize`, `summit { x, z, height, plateauRadius }`, `baseHeight`,
+     per-direction `radii`, the radial `profile` (normalised distance → height fraction,
+     flat stretches become terraces), `terracing { amount, scale }` (how much of the massif
+     follows the stepped profile, mixed by noise), `noise` (`warp`, `broad` undulations baked
+     in the heightmap, analytic `detail` stronger on rugged ground), `rimHeight`;
+   - `landforms` (see below), `erosion` (`thermalIterations`, `talus`, `hydraulicPasses`,
+     `hydraulicStrength`, `floorSmoothing`), `lake`, `rivers` (springs: streams are traced
+     down the flow graph to the lake);
    - `biomes`: altitude lines for snow, rock, tree line, dense forest and valley;
    - `trails`: a `main` trail from `start` to `base` plus `branch`/`shortcut` trails with
-     waypoints, `width: [min, max]`, `targetGrade`, `maxGrade` and optional `startOn` /
-     `endOn` (id of the trail they leave from / rejoin). Routing, hairpins, banking,
-     footbridges and the carving are automatic;
-   - `start` (on the summit plateau) and `base { x, z, radius }` (the arrival zone);
-   - `props` densities, `hazards` (`{ kind, at }` with `at` a fraction of the main trail),
-     `collectibles`, `defaultTime`, `defaultWeather`, score `medals`, optional `unlockAfter`
-     and `objectives`.
-2. Add it to `src/data/mountains/index.ts`.
-3. Add `mountain.<id>.name` / `mountain.<id>.desc` to `src/i18n/en.ts` and `src/i18n/it.ts`.
-4. `npm test` — height continuity, slope limits, trail routing, carving and placement are
-   checked for every mountain. Building a course takes a few hundred milliseconds; keep main
-   trails around 8–12 km so a descent lasts 6–10 minutes.
+     waypoints (put them on terraces, saddles and valley floors), `width: [min, max]` (4–7 m),
+     `targetGrade`, `maxGrade` (main ≈ 0.10 / 0.19, shortcuts up to 0.3) and optional
+     `startOn` / `endOn`. Routing, hairpins, lay-bys, banking, surfaces, bridges, fords and
+     the carving are automatic;
+   - `start`, `base { x, z, radius }`, `props` densities, `hazards`, `collectibles`,
+     `defaultTime`, `defaultWeather`, score `medals`, optional `unlockAfter` and `objectives`.
+2. Add it to `src/data/mountains/index.ts` and its `mountain.<id>.name` / `.desc` strings.
+3. Tune with the debug map (**F4**) and `npm test`: the slope mix (≈ 25 % flat < 8°, 45 %
+   8–25°, 25 % 25–38°, < 5 % walls), continuity and no spikes, trail grades and radii, fords,
+   placement and the full-descent bot are checked for every mountain. Generation runs in the
+   terrain worker in 1–3 s.
+
+## How to add a landform
+
+Landforms are data in a mountain's `landforms` array, applied in order on top of the massif
+and blended with smooth min/max (`src/terrain/landforms.ts`), never with hard seams:
+
+| kind      | uses          | effect                                                        |
+| --------- | ------------- | ------------------------------------------------------------- |
+| `ridge`   | `path`        | rounded crest of `height`, `radius` half width                |
+| `valley`  | `path` (down) | U valley `height` deep, floor descending evenly, `wall` slope |
+| `cirque`  | `at`          | bowl with a steep back wall (`wall`) under a summit           |
+| `plateau` | `at`          | flattened terrace at the natural altitude (+ `height`)        |
+| `meadow`  | `at`          | gently undulating flat                                        |
+| `saddle`  | `at`          | pass lowered by `height` across a ridge                       |
+| `slope`   | `path`        | steep face (step of `height`)                                 |
+| `hills`   | `at`          | rolling foothills of amplitude `height`                       |
+| `basin`   | `at`          | lake basin                                                    |
+
+`blend` sets the width of the transition, `rugged` (0..1) the rockiness (more detail, rock
+colours, outcrops, a steeper talus allowed). To add a new kind: add it to `LandformKind` in
+`src/data/types.ts`, implement it in `LandformField.apply()` (return the new height, set
+`roughHere` / `flatten`), and add a row above. Keep blends wide: the slope test fails if
+edges turn into walls.
 
 ## How to add a jeep
 
@@ -86,17 +115,31 @@ Tip: static compression = `mass × 15 / 4 / stiffness`; keep it around 25–35 %
 3. Place it on a mountain with `{ kind, at }` (`at` = fraction of the main trail).
 4. Add `hazard.<kind>` strings to both dictionaries.
 
-## How to add a palette theme
+## How to add a palette material or theme
 
-The whole world is coloured from `src/data/palette.ts`: 13 keys × 2 tones.
+The world is coloured from `src/data/palette.ts`: one ramp of tones per material, ordered
+dark → light (61 terrain colours and 9 for props).
 
-- **A new look for everything**: edit `defaultPalette` (keep each pair light/dark; the tests
-  and the terrain classifier only care about the keys).
+- **Retint a material**: edit its ramp (2–7 tones). Terrain vertices pick a continuous tone
+  along the ramp (large patches, curvature, wetness) and blend materials smoothly.
+- **A new terrain material**: add its key to `PaletteKey` (`src/data/types.ts`) and a ramp to
+  `defaultPalette`, add it to `MATERIALS` / `Mat` and `MATERIAL_SURFACE` in
+  `src/terrain/biome.ts`, give it a weight in `BiomeModel.weights()` (altitude, slope,
+  aspect, curvature, wetness...) and a tone bias in `BIAS` (`src/terrain/splat.ts`).
+  `tests/palette.test.ts` checks that every material has a ramp and that colours change
+  smoothly.
 - **A time of day or weather mood**: add or edit an entry of `timeThemes` / `weatherThemes`
   (`tint`, `tintAmount`, `brightness`, `desaturate`). `resolvePalette()` applies the
   palette, then the time theme, then the weather theme, once when a world is built. A new time
   or weather id also needs its `TimeOfDayDef` / `WeatherDef` in `src/data/environment.ts` and
   `time.<id>` / `weather.<id>` strings.
+
+## How to tune rocks, trees and tracks
+
+- Placement rules are in `src/world/propPlacement.ts` (rock reasons: outcrop, talus,
+  streambed, trailside, erratic; trees from `BiomeModel.forestDensity`).
+- Tyre track looks per surface and fade times: `styles` in `src/effects/tireTracks.ts`;
+  capacities in `TRACK_CAPACITY`.
 
 ## How to tune trees
 
