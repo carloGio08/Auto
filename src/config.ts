@@ -162,12 +162,14 @@ export const config = {
     /** Baked ambient occlusion: darkening strength (0 = off) and ring radii (m). */
     ao: { strength: 0.32, radii: [6, 18] as number[] },
     /**
-     * Visibility fog on a clear day (m): the scene fades into the horizon colour,
-     * 63 % at this distance and 95 % at 1.7 ×. Foggier weather divides it by √fogDensity.
+     * Visibility fog on a clear day: nothing within `fogStart` m, then the scene fades into
+     * the horizon colour, 63 % at start + V and 95 % at start + 1.7 V (thinner on high peaks).
+     * Foggier weather divides both by √fogDensity.
      */
-    fogVisibility: 520,
+    fogVisibility: 650,
+    fogStart: 300,
     /** Saturation multiplier applied to the whole palette (1 = as declared). */
-    vividness: 1.4,
+    vividness: 1.15,
     /** Max ms per frame spent building terrain patches on the main thread (no worker). */
     chunkBuildBudgetMs: 4,
     /** Props are generated and instanced per cell of this size (m). */
@@ -274,6 +276,8 @@ export const config = {
       /** Seconds between adjustments. */
       interval: 1,
     },
+    /** Grade after ACES tone mapping: saturation and contrast multipliers (1 = neutral). */
+    grade: { saturation: 1.12, contrast: 1.07 },
     /**
      * Shadow frustum half-size (m), centred `shadowAhead` m in front of the car along the view
      * so the road ahead gets shadows; bias tuned for the terrain (no acne, no peter-panning).
@@ -308,7 +312,7 @@ export const config = {
   /** Visual benchmark view (`?shot=benchmark`): fixed point of the main trail and look. */
   benchmark: {
     /** Metres from the summit along the main trail. */
-    trailDistance: 6200,
+    trailDistance: 9200,
     time: 'day' as const,
     weather: 'clear' as const,
   },

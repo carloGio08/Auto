@@ -5,6 +5,7 @@ import {
   Vector3,
   type WebGLProgramParametersWithUniforms,
 } from 'three';
+import { config } from '../config';
 
 /**
  * Atmosphere shared by every fogged material (one set of uniform objects, updated once per
@@ -26,7 +27,14 @@ export const atmosphereUniforms = {
    * Visibility fog: everything fades into the horizon colour of the sky with distance,
    * 1 - exp(-(d / V)²) (63 % at V, 95 % at 1.7 V). 0 switches it off.
    */
-  uFogVisibility: { value: 520 },
+  uFogVisibility: { value: 650 },
+  /** Distance (m) where the visibility fog starts: the foreground and middle stay crisp. */
+  uFogStart: { value: 300 },
+  /**
+   * Height (m) over which the visibility fog thins above the camera: high snowy peaks show
+   * through it while distant valleys and low ground fade out.
+   */
+  uFogHeight: { value: 450 },
   /** Height fog: colour, base altitude, density (1/m at the base) and falloff height (m). */
   uFogLowColor: { value: new Color('#d9e2ea') },
   uFogBase: { value: 0 },
@@ -73,6 +81,8 @@ uniform float uHazeDistance;
 uniform float uHazeStrength;
 uniform float uHazeDesaturate;
 uniform float uFogVisibility;
+uniform float uFogStart;
+uniform float uFogHeight;
 uniform vec3 uFogLowColor;
 uniform float uFogBase;
 uniform float uFogDensity;
@@ -105,8 +115,9 @@ if ( uHazeDistance > 0.0 ) {
   col = mix( col, uHazeColor, haze );
   col = mix( col, uFogLowColor, clamp( fogLow, 0.0, 0.95 ) );
   if ( uFogVisibility > 0.0 ) {
-    float v = dist / uFogVisibility;
-    col = mix( col, uHazeColor, 1.0 - exp( - v * v ) );
+    float v = max( dist - uFogStart, 0.0 ) / uFogVisibility;
+    float above = max( vFogWorld.y - uAtmoCamera.y - 60.0, 0.0 ) / uFogHeight;
+    col = mix( col, uHazeColor, ( 1.0 - exp( - v * v ) ) * exp( - above ) );
   }
   gl_FragColor.rgb = col;
 } else {
@@ -116,6 +127,20 @@ if ( uHazeDistance > 0.0 ) {
   float fogFactor = smoothstep( fogNear, fogFar, vFogDepth );
 #endif
   gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );
+}
+#endif`;
+  // Colour grade after the ACES tone mapping: a little more saturation and contrast (around
+  // mid grey) for a vibrant, punchy look. Constants, so materials need no extra uniforms.
+  const g = config.graphics.grade;
+  const f = (v: number): string => v.toFixed(4);
+  ShaderChunk.tonemapping_fragment = `#if defined( TONE_MAPPING )
+gl_FragColor.rgb = toneMapping( gl_FragColor.rgb );
+{
+  vec3 c = max( gl_FragColor.rgb, vec3( 0.0 ) );
+  float l = dot( c, vec3( 0.2126, 0.7152, 0.0722 ) );
+  c = max( mix( vec3( l ), c, ${f(g.saturation)} ), vec3( 0.0 ) );
+  c = 0.18 * pow( c / 0.18 + 1e-5, vec3( ${f(g.contrast)} ) );
+  gl_FragColor.rgb = clamp( c, 0.0, 1.0 );
 }
 #endif`;
   // Default hook: every material without its own onBeforeCompile gets the uniforms.
@@ -141,8 +166,9 @@ export function setAtmosphere(o: {
   haze: Color;
   low: Color;
   hazeDistance: number;
-  /** Visibility fog distance V (m), 0 = off. */
+  /** Visibility fog distance V (m), 0 = off, and start distance (m). */
   visibility: number;
+  start: number;
   base: number;
   density: number;
   falloff: number;
@@ -154,6 +180,7 @@ export function setAtmosphere(o: {
   u.uFogLowColor.value.copy(o.low).convertLinearToSRGB();
   u.uHazeDistance.value = o.hazeDistance;
   u.uFogVisibility.value = o.visibility;
+  u.uFogStart.value = o.start;
   cloudFogVisibility.value = o.visibility * 5;
   u.uFogBase.value = o.base;
   u.uFogDensity.value = o.density;

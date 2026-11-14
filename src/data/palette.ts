@@ -20,20 +20,20 @@ export const defaultPalette: Palette = {
   scree: ['#988e7b', '#a89e8a', '#b8ae99', '#c7bea9'],
   rockGrass: ['#80864f', '#979b5f'],
   // Ground: earth (trails, bare soil), mud, sand.
-  earth: ['#6e5038', '#84613f', '#9a744c', '#b0885c', '#c49c6e'],
+  earth: ['#74462a', '#8e5630', '#a86837', '#be7a41', '#cf8f52'],
   mud: ['#4a3a2c', '#5a4532', '#6b533c'],
   sand: ['#c8b383', '#d8c493', '#e6d4a6'],
   // Vegetation: dry alpine grass, grass, flowering meadow, undergrowth, forest floor, moss.
   dryGrass: ['#9e9a5a', '#b0a964', '#c2b872', '#d1c584'],
-  grass: ['#4f7f3a', '#5e8f42', '#6e9f4b', '#7fae55', '#91bc62'],
+  grass: ['#4f8030', '#619336', '#74a63c', '#89b844', '#9ec84f'],
   flowers: ['#86ab52', '#a4bd5e', '#d8c86c', '#d6a9c8'],
   undergrowth: ['#3f5f2f', '#4c6d35', '#5b7c3d'],
-  forest: ['#2f4a29', '#3a5730', '#466438', '#537241'],
+  forest: ['#2a4a2a', '#345a31', '#3f6a38', '#4b7a40'],
   moss: ['#5d7a3a', '#6f8c43', '#82a050'],
   water: ['#2f6f91', '#3a87ab', '#4aa3c7'],
   // Props.
   wood: ['#5e3f26', '#734d2f', '#9a6a42'],
-  foliage: ['#2f5a30', '#3a6e3a', '#4f8b46', '#66a052'],
+  foliage: ['#1e4a35', '#26603f', '#30744a', '#3f8a56'],
   paint: ['#d4473a', '#efe9df'],
 };
 

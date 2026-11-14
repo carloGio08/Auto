@@ -101,17 +101,19 @@ export class World {
   /** Pushes this world's atmosphere into the shared shader uniforms. */
   private applyAtmosphereUniforms(): void {
     const w = this.weather;
-    const visibility = (config.world.fogVisibility * this.fogScale) / Math.sqrt(w.fogDensity);
+    const thick = Math.sqrt(w.fogDensity);
+    const visibility = (config.world.fogVisibility * this.fogScale) / thick;
     setAtmosphere({
       haze: this.hazeColor,
       low: this.fogColor,
       hazeDistance: (9000 * this.fogScale) / w.fogDensity,
       visibility,
+      start: (config.world.fogStart * this.fogScale) / thick,
       base: this.course.def.lake.level,
       density: 0.00022 * w.fogDensity * w.fogDensity,
       falloff: 170,
     });
-    this.sky?.setFogBand(Math.min(0.5, (0.3 * config.world.fogVisibility) / visibility));
+    this.sky?.setFogBand(Math.min(0.5, (0.12 * config.world.fogVisibility) / visibility));
   }
 
   /** Fog distance multiplier (the opening fly-over looks further). */
