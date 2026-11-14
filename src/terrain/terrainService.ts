@@ -3,6 +3,7 @@ import { buildCourseData, type Course, type CourseData } from './course';
 import { ArrayPool, PatchBuild, type PatchArrays, type PatchRequest } from './patchBuilder';
 import type { PatchPalette } from './splat';
 import { placeCell, type CellData } from '../world/propPlacement';
+import { buildFarField, type FarFieldArrays, type FarFieldRequest } from './farField';
 import type { WorkerRequest, WorkerResponse } from './terrainWorker';
 
 /** A course generation in progress (or done). Poll it from a state's update. */
@@ -27,6 +28,8 @@ export interface PatchBackend {
   readonly pending: number;
   /** Drops queued requests (positions changed a lot, e.g. a teleport). */
   cancelAll(): void;
+  /** Far-field ring mesh (distant terrain). */
+  requestFarField(req: FarFieldRequest, done: (a: FarFieldArrays) => void): void;
   /** Props placement of a cell (trees, rocks, undergrowth, canopy masses). */
   requestCell(
     cx: number,
@@ -64,6 +67,10 @@ class LocalBackend implements PatchBackend {
   }
 
   private readonly cellQueue: (() => void)[] = [];
+
+  requestFarField(req: FarFieldRequest, done: (a: FarFieldArrays) => void): void {
+    this.cellQueue.push(() => done(buildFarField(this.course, this.palette, req)));
+  }
 
   requestCell(
     cx: number,
@@ -126,6 +133,22 @@ class WorkerBackend implements PatchBackend {
 
   private readonly cellWaiting = new Map<number, (d: CellData) => void>();
   private cellSeq = 1;
+  private farDone: ((a: FarFieldArrays) => void) | null = null;
+
+  requestFarField(req: FarFieldRequest, done: (a: FarFieldArrays) => void): void {
+    if (this.failed) {
+      this.local.requestFarField(req, done);
+      return;
+    }
+    this.farDone = done;
+    this.service.post({ type: 'farfield', gen: this.gen, req });
+  }
+
+  receiveFarField(a: FarFieldArrays): void {
+    const cb = this.farDone;
+    this.farDone = null;
+    cb?.(a);
+  }
 
   requestCell(
     cx: number,
@@ -245,6 +268,10 @@ export class TerrainService {
     }
     if (msg.type === 'patch') {
       if (this.active && msg.gen === this.active.gen) this.active.receive(msg.key, msg.result);
+      return;
+    }
+    if (msg.type === 'farfield') {
+      if (this.active && msg.gen === this.active.gen) this.active.receiveFarField(msg.data);
       return;
     }
     if (msg.type === 'cell') {

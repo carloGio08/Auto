@@ -206,6 +206,76 @@ export const alpine: MountainDef = {
     // Lake basin.
     { kind: 'basin', at: [-200, 2950], radius: 520, height: 8, wall: 0.1, blend: 120 },
   ],
+  // Distant ranges (far-field ring only): a high wall to the north, flanking ranges east and
+  // west, low hills beyond the lake, and two nearer spurs that stand out in front.
+  farRanges: [
+    {
+      kind: 'ridge',
+      path: [
+        [-16000, -7000],
+        [-8000, -12500],
+        [1000, -14000],
+        [9000, -12000],
+        [16500, -6000],
+      ],
+      radius: 3800,
+      height: 1900,
+      rugged: 0.8,
+    },
+    {
+      kind: 'ridge',
+      path: [
+        [12500, -3000],
+        [15500, 4000],
+        [13000, 12500],
+      ],
+      radius: 3200,
+      height: 1500,
+      rugged: 0.7,
+    },
+    {
+      kind: 'ridge',
+      path: [
+        [-12500, -5000],
+        [-15500, 3000],
+        [-13500, 11000],
+      ],
+      radius: 3200,
+      height: 1650,
+      rugged: 0.7,
+    },
+    {
+      kind: 'ridge',
+      path: [
+        [-10000, 11500],
+        [0, 13500],
+        [10000, 11000],
+      ],
+      radius: 3200,
+      height: 700,
+      rugged: 0.3,
+    },
+    {
+      kind: 'ridge',
+      path: [
+        [-8200, -6500],
+        [-6000, -8200],
+      ],
+      radius: 1500,
+      height: 1100,
+      rugged: 0.9,
+    },
+    {
+      kind: 'ridge',
+      path: [
+        [6500, -6800],
+        [9200, -7600],
+      ],
+      radius: 1600,
+      height: 1250,
+      rugged: 0.9,
+    },
+  ],
   relief: {
     warp: { amplitude: 70, scale: 420 },
     spurs: { amplitude: 10, scale: 300 },

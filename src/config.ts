@@ -198,6 +198,9 @@ export const config = {
         undergrowthDistance: 60,
         treeLimit: 3000,
         canopyLimit: 3000,
+        /** Far-field ring: grid spacing (m) and half extent (m). */
+        farSpacing: 192,
+        farExtent: 12000,
         propDensity: 0.5,
         particles: 400,
         clouds: 6,
@@ -221,6 +224,9 @@ export const config = {
         undergrowthDistance: 100,
         treeLimit: 5000,
         canopyLimit: 6000,
+        /** Far-field ring: grid spacing (m) and half extent (m). */
+        farSpacing: 128,
+        farExtent: 16000,
         propDensity: 0.75,
         particles: 900,
         clouds: 10,
@@ -244,6 +250,9 @@ export const config = {
         undergrowthDistance: 140,
         treeLimit: 8000,
         canopyLimit: 9000,
+        /** Far-field ring: grid spacing (m) and half extent (m). */
+        farSpacing: 112,
+        farExtent: 20000,
         propDensity: 1,
         particles: 1600,
         clouds: 16,

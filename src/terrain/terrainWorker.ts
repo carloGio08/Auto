@@ -9,12 +9,14 @@ import { ArrayPool, buildPatch, type PatchArrays, type PatchRequest } from './pa
 import type { MountainDef } from '../data/types';
 import type { PatchPalette } from './splat';
 import { placeCell, type CellData } from '../world/propPlacement';
+import { buildFarField, type FarFieldArrays, type FarFieldRequest } from './farField';
 
 export type WorkerRequest =
   | { type: 'generate'; id: number; def: MountainDef }
   | { type: 'activate'; def: MountainDef; data: CourseData; palette: PatchPalette }
   | { type: 'patch'; req: PatchRequest }
   | { type: 'recycle'; buffers: ArrayBuffer[] }
+  | { type: 'farfield'; gen: number; req: FarFieldRequest }
   | {
       type: 'cell';
       id: number;
@@ -32,6 +34,7 @@ export type WorkerResponse =
   | { type: 'error'; id: number; message: string }
   | { type: 'patchError'; key: number; gen: number; message: string }
   | { type: 'cell'; id: number; gen: number; data: CellData }
+  | { type: 'farfield'; gen: number; data: FarFieldArrays }
   | { type: 'patch'; key: number; gen: number; result: PatchArrays };
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
@@ -55,6 +58,13 @@ scope.onmessage = (e: MessageEvent<WorkerRequest>): void => {
       scope.postMessage(
         { type: 'patch', key: msg.req.key, gen: msg.req.gen, result } as WorkerResponse,
         [result.position.buffer, result.color.buffer, result.normal.buffer],
+      );
+    } else if (msg.type === 'farfield') {
+      if (!active || msg.gen !== active.gen) return;
+      const data = buildFarField(active.course, active.palette, msg.req);
+      scope.postMessage(
+        { type: 'farfield', gen: msg.gen, data } as WorkerResponse,
+        [data.position.buffer, data.color.buffer, data.index.buffer] as ArrayBuffer[],
       );
     } else if (msg.type === 'cell') {
       if (!active || msg.gen !== active.gen) return;

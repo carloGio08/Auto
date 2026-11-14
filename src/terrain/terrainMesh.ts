@@ -123,6 +123,11 @@ export class TerrainMesh {
     return rings[rings.length - 1][1];
   }
 
+  /** Half size (m) of the area the quadtree covers (the far field starts there). */
+  get rootHalf(): number {
+    return this.rootSize / 2;
+  }
+
   /** Face size (m) of the finest level. */
   get finestCell(): number {
     return this.rootSize / (1 << this.maxDepth) / this.n;

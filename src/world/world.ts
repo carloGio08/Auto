@@ -1,4 +1,14 @@
-import { Color, Fog, Scene, Vector3 } from 'three';
+import {
+  BufferAttribute,
+  BufferGeometry,
+  Color,
+  Fog,
+  Mesh,
+  MeshLambertMaterial,
+  Scene,
+  Vector3,
+} from 'three';
+import { atmosphereUniforms, installAtmosphere, setAtmosphere } from './atmosphere';
 import type { QualityPreset } from '../config';
 import {
   defaultPalette,
@@ -12,7 +22,7 @@ import type { I18nKey } from '../i18n/en';
 import type { Course } from '../terrain/course';
 import { TerrainMesh } from '../terrain/terrainMesh';
 import { toPatchPalette } from '../terrain/splat';
-import { TerrainService } from '../terrain/terrainService';
+import { TerrainService, type PatchBackend } from '../terrain/terrainService';
 import { CollisionWorld } from './colliders';
 import { Lighting } from './lighting';
 import { Props } from './props';
@@ -76,8 +86,29 @@ export class World {
       new Color('#a7b0ba'),
       this.weather.overcast * 0.6,
     );
-    this.scene.background = this.fogColor.clone();
+    // Atmosphere: haze towards the sky's horizon colour, height fog in the fog colour.
+    installAtmosphere();
+    const grey = new Color('#9aa3ad');
+    this.hazeColor = new Color(this.time.skyHorizon).lerp(grey, this.weather.overcast);
+    this.scene.background = this.hazeColor.clone();
     this.applyFog();
+  }
+
+  readonly hazeColor: Color;
+  /** Far-field ring (distant terrain), once built. */
+  farField: Mesh | null = null;
+
+  /** Pushes this world's atmosphere into the shared shader uniforms. */
+  private applyAtmosphereUniforms(): void {
+    const w = this.weather;
+    setAtmosphere({
+      haze: this.hazeColor,
+      low: this.fogColor,
+      hazeDistance: (9000 * this.fogScale) / w.fogDensity,
+      base: this.course.def.lake.level,
+      density: 0.00022 * w.fogDensity * w.fogDensity,
+      falloff: 170,
+    });
   }
 
   /** Fog distance multiplier (the opening fly-over looks further). */
@@ -90,9 +121,39 @@ export class World {
   }
 
   private applyFog(): void {
-    const far = (this.preset.viewDistance * this.fogScale) / this.weather.fogDensity;
-    this.scene.fog = new Fog(this.fogColor, Math.min(120, far * 0.12), far);
+    // The Fog only switches the fog code on; the atmosphere uniforms drive it.
+    if (!this.scene.fog) this.scene.fog = new Fog(this.fogColor, 1, 30000);
+    this.applyAtmosphereUniforms();
   }
+
+  /** Builds the far-field ring in the worker (or on the main thread) and adds it. */
+  private requestFarField(backend: PatchBackend): void {
+    backend.requestFarField(
+      {
+        hole: this.terrainMesh.rootHalf,
+        spacing: this.preset.farSpacing,
+        extent: this.preset.farExtent,
+      },
+      (a) => {
+        if (this.disposed) return;
+        const geo = new BufferGeometry();
+        geo.setAttribute('position', new BufferAttribute(a.position, 3));
+        geo.setAttribute('color', new BufferAttribute(a.color, 3, true));
+        geo.setIndex(new BufferAttribute(a.index, 1));
+        const mesh = new Mesh(
+          geo,
+          new MeshLambertMaterial({ vertexColors: true, flatShading: true }),
+        );
+        mesh.name = 'farField';
+        mesh.frustumCulled = false;
+        mesh.matrixAutoUpdate = false;
+        this.farField = mesh;
+        this.scene.add(mesh);
+      },
+    );
+  }
+
+  private disposed = false;
 
   /** Incremental build around the start (or `focus`); iterate to completion. */
   *build(focus?: { x: number; y: number; z: number }): Generator<BuildStep> {
@@ -115,6 +176,7 @@ export class World {
       backend,
     );
     this.scene.add(this.terrainMesh.group);
+    this.requestFarField(backend);
     const async = !!this.terrainService && this.async;
     const gen = async
       ? this.terrainMesh.prebuildAsync(st.x, st.y + 4, st.z)
@@ -135,7 +197,14 @@ export class World {
     else this.props.prebuild(st.x, st.z);
     yield { stage: 'loading.props', progress: 0.88 };
     const center = new Vector3(0, course.def.baseHeight, 0);
-    this.sky = new Sky(this.time, this.weather, this.preset.clouds, course.def.seed, center);
+    this.sky = new Sky(
+      this.time,
+      this.weather,
+      this.preset.clouds,
+      course.def.seed,
+      center,
+      course.def.summit.height,
+    );
     this.scene.add(this.sky.group);
     this.lighting = new Lighting(
       this.scene,
@@ -192,6 +261,8 @@ export class World {
    */
   update(dt: number, camera: Vector3, focus: Vector3 = camera, buildBudgetMs?: number): void {
     this.elapsed += dt;
+    this.applyAtmosphereUniforms();
+    atmosphereUniforms.uAtmoCamera.value.copy(camera);
     this.terrainMesh.update(camera.x, camera.y, camera.z, buildBudgetMs);
     this.props.update(camera.x, camera.z, focus.x, focus.z);
     this.sky.update(dt, camera);
@@ -201,6 +272,12 @@ export class World {
   }
 
   dispose(): void {
+    this.disposed = true;
+    if (this.farField) {
+      this.farField.geometry.dispose();
+      (this.farField.material as MeshLambertMaterial).dispose();
+      this.farField = null;
+    }
     this.terrainMesh?.dispose();
     this.props?.dispose();
     this.structures?.dispose();

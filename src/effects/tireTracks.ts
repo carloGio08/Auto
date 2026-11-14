@@ -1,3 +1,4 @@
+import { applyAtmosphere } from '../world/atmosphere';
 import {
   BufferAttribute,
   BufferGeometry,
@@ -227,6 +228,7 @@ export class TireTracks {
       polygonOffsetUnits: -3,
     });
     mat.onBeforeCompile = (shader) => {
+      applyAtmosphere(shader);
       shader.uniforms.uTime = this.uniforms.uTime;
       shader.vertexShader = shader.vertexShader
         .replace(

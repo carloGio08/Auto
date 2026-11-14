@@ -12,6 +12,7 @@ import {
   Scene,
 } from 'three';
 import type { CarDef } from '../data/types';
+import { atmosphereUniforms } from '../world/atmosphere';
 import { CarModel } from '../vehicle/model';
 
 /** Studio scene with a turntable for the garage. Drag to rotate the car. */
@@ -32,6 +33,8 @@ export class GarageScene {
   ) {
     this.scene.background = new Color('#1c2333');
     this.scene.fog = new Fog('#1c2333', 14, 40);
+    // Plain distance fog in the garage (no outdoor atmosphere).
+    atmosphereUniforms.uHazeDistance.value = 0;
     this.camera = new PerspectiveCamera(42, aspect, 0.1, 100);
     const hemi = new HemisphereLight('#c8d8ff', '#3a3040', 1.2);
     const key = new DirectionalLight('#fff1dd', 2.4);

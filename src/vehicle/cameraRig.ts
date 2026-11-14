@@ -65,7 +65,7 @@ export class CameraRig {
 
   constructor(aspect: number) {
     this.aspect = aspect;
-    this.camera = new PerspectiveCamera(config.camera.fovBase, aspect, 0.5, 13000);
+    this.camera = new PerspectiveCamera(config.camera.fovBase, aspect, 0.5, 28000);
   }
 
   /** Copies the user's camera preferences (no allocation; safe to call every frame). */

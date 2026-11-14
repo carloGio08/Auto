@@ -3,7 +3,6 @@ import {
   BackSide,
   BufferGeometry,
   Color,
-  ConeGeometry,
   Float32BufferAttribute,
   Group,
   IcosahedronGeometry,
@@ -42,7 +41,10 @@ void main() {
   float h = vDir.y;
   vec3 col = h > 0.0 ? mix(horizonColor, topColor, pow(min(h * 1.6, 1.0), 0.7)) : mix(horizonColor, bottomColor, min(-h * 4.0, 1.0));
   float d = max(dot(normalize(vDir), normalize(sunDir)), 0.0);
-  col += sunColor * (pow(d, 900.0 / sunSize) * 1.6 + pow(d, 12.0) * 0.18);
+  // Sun disc, a soft halo and a wide glow that warms the horizon on the sun's side.
+  col += sunColor * (pow(d, 900.0 / sunSize) * 1.6 + pow(d, 12.0) * 0.22 + pow(d, 3.0) * 0.1);
+  float horizon = 1.0 - abs(normalize(vDir).y);
+  col += sunColor * pow(d, 2.0) * pow(horizon, 6.0) * 0.12;
   gl_FragColor = vec4(col, 1.0);
   #include <colorspace_fragment>
 }`;
@@ -56,7 +58,6 @@ export class Sky {
   private readonly dome: Mesh<SphereGeometry, ShaderMaterial>;
   private readonly stars: Points;
   private readonly clouds: InstancedMesh;
-  private readonly backdrop: Mesh;
   private readonly cloudData: {
     x: number;
     y: number;
@@ -75,6 +76,8 @@ export class Sky {
     cloudCount: number,
     seed: number,
     center: Vector3,
+    /** Summit altitude (m): the middle cloud layer floats around it. */
+    summit = 1800,
   ) {
     this.group.name = 'sky';
     const sunDir = this.sunDirection.setFromSphericalCoords(
@@ -154,16 +157,24 @@ export class Sky {
         flatShading: true,
         emissive: cloudColor,
         emissiveIntensity: 0.35,
-        fog: false,
       }),
       n,
     );
+    // Three layers: high clouds, clouds at the summit's height and low banks lying in the
+    // valleys (seen from above at the start); the haze shades the far ones.
     for (let i = 0; i < n; i++) {
+      const layer = i % 5 === 0 ? 2 : i % 3 === 0 ? 1 : 0;
+      const y =
+        layer === 0
+          ? rng.range(2600, 3400)
+          : layer === 1
+            ? summit + rng.range(-150, 250)
+            : summit * rng.range(0.45, 0.7);
       this.cloudData.push({
-        x: center.x + rng.range(-6000, 6000),
-        y: rng.range(2300, 3100),
-        z: center.z + rng.range(-6000, 6000),
-        s: rng.range(90, 200),
+        x: center.x + rng.range(-12000, 12000),
+        y,
+        z: center.z + rng.range(-12000, 12000),
+        s: rng.range(90, 220) * (layer === 2 ? 1.4 : 1),
         r: rng.range(0, Math.PI * 2),
         speed: rng.range(1.5, 4),
       });
@@ -171,44 +182,6 @@ export class Sky {
     this.clouds.frustumCulled = false;
     this.group.add(this.clouds);
     this.updateClouds(0);
-
-    // Distant mountain ring (no fog, pre-tinted towards the fog colour for depth).
-    const ring: BufferGeometry[] = [];
-    const peaks = 46;
-    for (let i = 0; i < peaks; i++) {
-      const a = (i / peaks) * Math.PI * 2 + rng.range(-0.05, 0.05);
-      const r = rng.range(9000, 11000);
-      const h = rng.range(1600, 3600);
-      const cone = new ConeGeometry(rng.range(1300, 2300), h, 5 + (i % 3), 1);
-      const pos = cone.getAttribute('position');
-      for (let k = 0; k < pos.count; k++) {
-        if (pos.getY(k) > h / 2 - 1) continue;
-        pos.setX(k, pos.getX(k) * rng.range(0.8, 1.2));
-        pos.setZ(k, pos.getZ(k) * rng.range(0.8, 1.2));
-      }
-      cone.translate(center.x + Math.cos(a) * r, h / 2 - 100, center.z + Math.sin(a) * r);
-      ring.push(cone.toNonIndexed());
-      cone.dispose();
-    }
-    const ringGeo = mergeGeometries(ring);
-    ring.forEach((g) => g.dispose());
-    ringGeo.computeVertexNormals();
-    const far = new Color('#5f6e86')
-      .lerp(new Color(time.fogColor), 0.55)
-      .lerp(grey, weather.overcast * 0.5);
-    if (time.id === 'night') far.multiplyScalar(0.5);
-    this.backdrop = new Mesh(
-      ringGeo,
-      new MeshLambertMaterial({
-        color: far,
-        flatShading: true,
-        fog: false,
-        emissive: far,
-        emissiveIntensity: 0.55,
-      }),
-    );
-    this.backdrop.renderOrder = -5;
-    this.group.add(this.backdrop);
   }
 
   private updateClouds(t: number): void {

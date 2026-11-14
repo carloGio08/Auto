@@ -1,3 +1,4 @@
+import { applyAtmosphere } from './atmosphere';
 import {
   Color,
   Group,
@@ -87,6 +88,7 @@ interface FadeUniforms {
 function fadeMaterial(u: FadeUniforms, shrink = false): MeshLambertMaterial {
   const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
   mat.onBeforeCompile = (shader) => {
+    applyAtmosphere(shader);
     Object.assign(shader.uniforms, u);
     shader.vertexShader = shader.vertexShader
       .replace(

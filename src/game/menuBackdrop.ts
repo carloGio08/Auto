@@ -84,7 +84,7 @@ export class MenuBackdrop {
     // See the whole descent: the fog starts further away than during a run.
     this.world.setFogScale(1.6);
     this.car = this.makeCar();
-    this.camera = new PerspectiveCamera(55, ctx.renderer.width / ctx.renderer.height, 0.3, 13000);
+    this.camera = new PerspectiveCamera(55, ctx.renderer.width / ctx.renderer.height, 0.3, 28000);
     this.world.update(0, this.carPos, this.carPos, 50);
     window.addEventListener('pointermove', this.onPointer);
     window.addEventListener('deviceorientation', this.onOrientation);

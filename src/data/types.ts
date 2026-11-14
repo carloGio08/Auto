@@ -350,6 +350,11 @@ export interface MountainDef {
   };
   /** Landforms blended into the massif, in order. */
   landforms: LandformDef[];
+  /**
+   * Distant ranges beyond the map (landforms too, usually large ridges): only the far-field
+   * ring shows them, they never touch the playable terrain.
+   */
+  farRanges?: LandformDef[];
   relief: ReliefDef;
   erosion: ErosionDef;
   /** Natural boundary: ridges rising towards the map edge (m). */

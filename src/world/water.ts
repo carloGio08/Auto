@@ -1,3 +1,4 @@
+import { applyAtmosphere } from './atmosphere';
 import {
   BufferGeometry,
   Float32BufferAttribute,
@@ -30,6 +31,7 @@ export class Water {
       emissiveIntensity: 0.25,
     });
     this.material.onBeforeCompile = (shader) => {
+      applyAtmosphere(shader);
       shader.uniforms.uTime = this.uniforms.uTime;
       shader.vertexShader =
         'uniform float uTime;\n' +
