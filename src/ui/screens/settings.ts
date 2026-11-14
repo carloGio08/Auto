@@ -4,6 +4,7 @@ import {
   type LanguageSetting,
   type QualitySetting,
   type TouchMode,
+  TRACK_SETTINGS,
 } from '../../core/settings';
 import { LANGUAGES } from '../../core/i18n';
 import { DEFAULT_KEY_BINDINGS, REBINDABLE, type ActionId } from '../../input/actions';
@@ -116,6 +117,12 @@ export function createSettings(
         })),
         s.quality,
         (v) => ((s.quality = v), apply()),
+      ),
+      stepper(
+        t('settings.tracks'),
+        TRACK_SETTINGS.map((v) => ({ value: v, label: t(`settings.tracks.${v}` as I18nKey) })),
+        s.tireTracks,
+        (v) => ((s.tireTracks = v), apply()),
       ),
       toggle(
         t('settings.showFps'),

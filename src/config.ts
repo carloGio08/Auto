@@ -243,7 +243,8 @@ export const config = {
     music: true,
     tilt: true,
     haptics: true,
-    skidmarks: true,
+    /** Tyre tracks laid on the terrain (quality chosen in the settings). */
+    tireTracks: true,
     /** Cinematic fly-over onto the summit at the start of a descent. */
     introFlyover: true,
     /** Shows an FPS / physics overlay (also toggled with F3). */

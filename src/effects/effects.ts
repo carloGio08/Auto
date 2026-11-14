@@ -7,7 +7,7 @@ import { clamp } from '../math/util';
 import { PostFx } from './postfx';
 import { shardKinds as K } from './shardKinds';
 import { ShardSystem, type ShardKind } from './shards';
-import { Skidmarks } from './skidmarks';
+import { TireTracks, TRACK_CAPACITY, type WheelTrackInput } from './tireTracks';
 import { SpeedLines } from './speedLines';
 
 type Particle = SurfaceDef['particle'];
@@ -23,14 +23,24 @@ const upV = new Vector3();
  */
 export class Effects {
   readonly shards: ShardSystem;
-  readonly skidmarks: Skidmarks | null;
+  readonly tracks: TireTracks | null;
+  private readonly trackIn: WheelTrackInput = {
+    contact: false,
+    x: 0,
+    y: 0,
+    z: 0,
+    surface: 'trail',
+    skid: 0,
+    load: 1,
+    spin: 0,
+    inWater: false,
+  };
   readonly speedLines: SpeedLines | null;
   readonly postfx: PostFx;
   private readonly offs: (() => void)[] = [];
   private emitAcc = 0;
   private steamAcc = 0;
   private readonly colors: Record<Exclude<Particle, 'none'>, [Color, Color]>;
-  private readonly skidColors: Record<Exclude<Particle, 'none'>, Color>;
   private readonly water: Color;
   private readonly wood: [Color, Color];
   private readonly leaves: [Color, Color, Color];
@@ -55,18 +65,15 @@ export class Effects {
       gravel: [pal.scree[3], pal.rockDark[2]],
       mud: [pal.mud[2], pal.earth[1]],
     };
-    const dark = (c: Color, k: number): Color => c.clone().multiplyScalar(k);
-    this.skidColors = {
-      dust: dark(pal.earth[3], 0.62),
-      snow: dark(pal.snow[2], 0.82),
-      gravel: dark(pal.scree[2], 0.7),
-      mud: dark(pal.mud[2], 0.7),
-    };
     this.water = pal.water[2];
     this.wood = [pal.wood[2], pal.wood[1]];
     this.leaves = [pal.foliage[2], pal.foliage[1], pal.grass[2]];
-    this.skidmarks = config.features.skidmarks ? new Skidmarks() : null;
-    if (this.skidmarks) world.scene.add(this.skidmarks.mesh);
+    const trackSetting = session.ctx.save.data.settings.tireTracks;
+    this.tracks =
+      config.features.tireTracks && trackSetting !== 'off'
+        ? new TireTracks(session.course.terrain, pal, TRACK_CAPACITY[trackSetting])
+        : null;
+    if (this.tracks) world.scene.add(this.tracks.mesh);
     this.speedLines = config.features.speedLines ? new SpeedLines() : null;
     if (this.speedLines) {
       this.speedLines.attach(session.camera.camera);
@@ -209,13 +216,30 @@ export class Effects {
     const emitNow = this.emitAcc > 1 / 60;
     if (emitNow) this.emitAcc = 0;
     fwd.set(0, 0, 1).applyQuaternion(car.quaternion);
+    const staticLoad = (car.mass * config.physics.gravity) / 4;
+    const wheelWidth = this.session.vehicle.def.look.wheelWidth;
+    {
+      const l = Math.hypot(fwd.x, fwd.z) || 1;
+      fwd.x /= l;
+      fwd.z /= l;
+    }
     for (let i = 0; i < 4; i++) {
       const w = car.wheels[i];
       const pk = surfaces[w.surface].particle;
-      const marking = w.contact && w.skid > 0.3 && pk !== 'none' && w.surface !== 'grass';
-      if (this.skidmarks) {
-        const col = pk === 'none' ? this.skidColors.dust : this.skidColors[pk];
-        this.skidmarks.add(i, w.contactPoint, marking, col, car.def.wheelRadius * 0.7);
+      if (this.tracks) {
+        const t = this.trackIn;
+        t.contact = w.contact;
+        t.x = w.contactPoint.x;
+        t.y = w.contactPoint.y;
+        t.z = w.contactPoint.z;
+        t.surface = w.surface;
+        t.skid = w.skid;
+        t.load = w.load / staticLoad;
+        const roll = Math.abs(w.spinRate) * car.def.wheelRadius;
+        t.spin = w.driven ? clamp((roll - Math.abs(w.longSpeed)) / 6, 0, 1) : 0;
+        t.inWater = this.session.course.terrain.waterLevel(t.x, t.z) > t.y - 0.05;
+        const inp = this.session.input;
+        this.tracks.step(dt, i, t, wheelWidth, fwd.x, fwd.z, inp.handbrake, inp.brake);
       }
       if (!emitNow || !w.contact || pk === 'none') continue;
       // Mostly when sliding; a light trail at speed from the rear wheels.
@@ -289,17 +313,18 @@ export class Effects {
     const intensity = Math.max(0, (speed - 26) / 20) + (car.nitroActive ? 0.6 : 0);
     this.speedLines?.update(realDt, intensity, speed);
     this.postfx.update(realDt, car.nitroActive);
+    this.tracks?.update(car.position.x, car.position.z);
   }
 
   clear(): void {
     this.shards.clear();
-    this.skidmarks?.clear();
+    this.tracks?.clear();
   }
 
   dispose(): void {
     this.offs.forEach((o) => o());
     this.shards.dispose();
-    this.skidmarks?.dispose();
+    this.tracks?.dispose();
     this.speedLines?.dispose();
     this.postfx.dispose();
   }

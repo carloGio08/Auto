@@ -4,6 +4,8 @@ export type QualitySetting = 'auto' | 'low' | 'medium' | 'high';
 export type LanguageSetting = 'auto' | 'en' | 'it';
 export type TouchMode = 'buttons' | 'tilt';
 export type CameraMode = 'chase' | 'wide' | 'hood';
+export type TrackSetting = 'off' | 'low' | 'high';
+export const TRACK_SETTINGS: TrackSetting[] = ['off', 'low', 'high'];
 export const CAMERA_MODES: CameraMode[] = ['chase', 'wide', 'hood'];
 
 export interface Settings {
@@ -21,6 +23,8 @@ export interface Settings {
   autoAccelerate: boolean;
   haptics: boolean;
   showFps: boolean;
+  /** Tyre tracks on the terrain: off, low (≈1500 segments) or high (≈4000). */
+  tireTracks: TrackSetting;
   camera: CameraMode;
   /** Chase camera distance / height multipliers (0.7..1.5). */
   cameraDistance: number;
@@ -48,6 +52,9 @@ export function defaultSettings(): Settings {
     autoAccelerate: false,
     haptics: true,
     showFps: false,
+    // Phones (coarse pointer) start with the lighter tracks buffer.
+    tireTracks:
+      typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches ? 'low' : 'high',
     camera: 'chase',
     cameraDistance: 1,
     cameraHeight: 1,
