@@ -1,4 +1,5 @@
 import { DebugMap } from '../ui/debugMap';
+import { DebugProbe } from '../ui/debugProbe';
 import { benchmark } from '../core/benchmark';
 import { config } from '../config';
 import { createRoadPoint } from '../terrain/road';
@@ -32,8 +33,15 @@ export class PlayingState implements GameState<StateId> {
   };
   /** Development map (F4 in dev builds or with ?debug). */
   private debugMap: DebugMap | null = null;
+  /** Development probe (F6 in dev builds or with ?debug; ?probe shows it at start). */
+  private probe: DebugProbe | null = null;
   private readonly onDebugKey = (e: KeyboardEvent): void => {
-    if (e.code !== 'F4' || !this.session) return;
+    if (!this.session) return;
+    if (e.code === 'F6') {
+      this.probe ??= new DebugProbe(this.session.course, this.session.world.cover);
+      this.probe.toggle();
+    }
+    if (e.code !== 'F4') return;
     this.debugMap ??= new DebugMap(this.session.course);
     this.debugMap.toggle();
   };
@@ -64,13 +72,28 @@ export class PlayingState implements GameState<StateId> {
       const st = ctx.save.data.settings;
       Object.assign(st, { camera: 'chase', cameraDistance: 1, cameraHeight: 1, cameraShake: 0 });
       this.session.start(false);
-      const p = this.session.course.road.pointAt(config.benchmark.trailDistance, createRoadPoint());
-      this.session.teleport(p.x, p.z, Math.atan2(p.tx, p.tz));
+      const spot = config.benchmark.spots[benchmark.spot];
+      const p = this.session.course.road.pointAt(
+        spot ? spot.s : config.benchmark.trailDistance,
+        createRoadPoint(),
+      );
+      const lat = spot ? spot.lateral : 0;
+      this.session.teleport(p.x + p.tz * lat, p.z - p.tx * lat, Math.atan2(p.tx, p.tz));
       this.session.camera.mode = 'chase';
       this.session.camera.snap(this.session.vehicle, this.session.course.terrain);
       this.frozen = true;
       document.documentElement.dataset.benchmark = 'running';
     } else this.session.start(!query.has('autopilot') && !query.has('e2e'));
+    // Debug route (dev builds or ?debug): ?goto=x,z[,heading] jumps the jeep and camera.
+    const go = query.get('goto');
+    if (go && (import.meta.env.DEV || query.has('debug'))) {
+      const [gx, gz, gh] = go.split(',').map(Number);
+      if (Number.isFinite(gx) && Number.isFinite(gz)) {
+        this.session.skipIntro();
+        this.session.teleport(gx, gz, Number.isFinite(gh) ? gh : 0);
+        this.session.camera.snap(this.session.vehicle, this.session.course.terrain);
+      }
+    }
     window.addEventListener('pointerdown', this.onSkipTap);
     this.offs.push(
       this.session.events.on(
@@ -102,13 +125,27 @@ export class PlayingState implements GameState<StateId> {
     );
     document.addEventListener('visibilitychange', this.onVisibility);
     window.addEventListener('resize', this.onResize);
-    if (import.meta.env.DEV || new URLSearchParams(location.search).has('debug'))
+    if (import.meta.env.DEV || new URLSearchParams(location.search).has('debug')) {
       window.addEventListener('keydown', this.onDebugKey);
+      if (new URLSearchParams(location.search).has('probe')) {
+        this.probe = new DebugProbe(this.session.course, this.session.world.cover);
+        this.probe.toggle(true);
+      }
+    }
     // Debug hook for automated tests (dev builds or ?e2e only).
     if (import.meta.env.DEV || new URLSearchParams(location.search).has('e2e')) {
       const s = this.session;
       (window as unknown as { __md?: object }).__md = {
         session: s,
+        /** Names of the worst-case richness spots. */
+        spots: config.benchmark.spots.map((sp) => sp.name),
+        /** Parks the jeep at worst-case richness spot `i` (config.benchmark.spots). */
+        spot: (i: number) => {
+          const sp = config.benchmark.spots[i];
+          const p = s.course.road.pointAt(sp.s, createRoadPoint());
+          s.teleport(p.x + p.tz * sp.lateral, p.z - p.tx * sp.lateral, Math.atan2(p.tx, p.tz));
+          s.camera.snap(s.vehicle, s.course.terrain);
+        },
         /** Renderer statistics of the last frame (draw calls, triangles). */
         renderInfo: () => ({ ...ctx.renderer.gl.info.render }),
         /** Drops the jeep inside the base zone: the run finishes on the next step. */
@@ -233,6 +270,10 @@ export class PlayingState implements GameState<StateId> {
     }
     s.update(this.paused ? 0 : dt, alpha);
     this.hud.update(dt);
+    if (this.probe?.visible) {
+      const ph = s.vehicle.physics;
+      this.probe.update(dt, ph.position.x, ph.position.z);
+    }
     if (this.debugMap?.visible) {
       const ph = s.vehicle.physics;
       const f = ph.quaternion;
@@ -283,6 +324,8 @@ export class PlayingState implements GameState<StateId> {
     window.removeEventListener('pointerdown', this.onSkipTap);
     window.removeEventListener('keydown', this.onDebugKey);
     this.debugMap?.dispose();
+    this.probe?.dispose();
+    this.probe = null;
     this.debugMap = null;
     this.offs.forEach((o) => o());
     ctx.input.remove('touch');
