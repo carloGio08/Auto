@@ -3,8 +3,7 @@ import { createRegistries, Registry } from '../src/data/registry';
 import { en } from '../src/i18n/en';
 import { it as itDict } from '../src/i18n/it';
 import { systemFactories } from '../src/systems';
-import { surfaces } from '../src/data/surfaces';
-import { createDailyTrack } from '../src/data/tracks';
+import { createDailyMountain } from '../src/data/mountains';
 
 const reg = createRegistries();
 const hasKey = (k: string): boolean => k in en;
@@ -51,20 +50,31 @@ describe('content registries', () => {
     expect(reg.cars.all().filter((c) => c.price === 0)).toHaveLength(1);
   });
 
-  it.each([...reg.tracks.all(), createDailyTrack('2026-11-13')].map((t) => [t.id, t] as const))(
-    'track %s has every required field',
-    (_id, t) => {
-      expect(hasKey(t.nameKey)).toBe(true);
-      expect(hasKey(t.descriptionKey)).toBe(true);
-      expect(t.medals.gold).toBeGreaterThan(t.medals.silver);
-      expect(t.medals.silver).toBeGreaterThan(t.medals.bronze);
-      expect(t.surfaces.every((z) => z.surface in surfaces && z.from < z.to)).toBe(true);
-      expect(
-        [...t.jumps.map((j) => j.at), ...t.hazards.map((h) => h.at)].every((f) => f >= 0 && f <= 1),
-      ).toBe(true);
-      if (t.unlockAfter) expect(reg.tracks.has(t.unlockAfter)).toBe(true);
-    },
-  );
+  it.each(
+    [...reg.mountains.all(), createDailyMountain('2026-11-13')].map((t) => [t.id, t] as const),
+  )('mountain %s has every required field', (_id, t) => {
+    expect(hasKey(t.nameKey)).toBe(true);
+    expect(hasKey(t.descriptionKey)).toBe(true);
+    expect(t.medals.gold).toBeGreaterThan(t.medals.silver);
+    expect(t.medals.silver).toBeGreaterThan(t.medals.bronze);
+    expect(t.halfSize).toBeGreaterThanOrEqual(3000);
+    expect(t.summit.height - t.baseHeight).toBeGreaterThan(1400);
+    expect(t.trails[0].kind).toBe('main');
+    expect(t.trails.every((tr) => tr.waypoints.length >= 2 && tr.maxGrade > tr.targetGrade)).toBe(
+      true,
+    );
+    const ids = new Set(t.trails.map((tr) => tr.id));
+    for (const tr of t.trails) {
+      if (tr.startOn) expect(ids.has(tr.startOn)).toBe(true);
+      if (tr.endOn) expect(ids.has(tr.endOn)).toBe(true);
+    }
+    const b = t.biomes;
+    expect(
+      b.snowLine > b.rockLine && b.rockLine > b.treeLine && b.treeLine > b.denseForestLine,
+    ).toBe(true);
+    expect(t.hazards.every((h) => h.at >= 0 && h.at <= 1)).toBe(true);
+    if (t.unlockAfter) expect(reg.mountains.has(t.unlockAfter)).toBe(true);
+  });
 
   it('modes only reference registered systems', () => {
     for (const m of reg.modes.all()) {

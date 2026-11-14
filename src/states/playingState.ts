@@ -2,11 +2,11 @@ import type { GameContext, StateId } from '../core/context';
 import type { GameState } from '../core/stateMachine';
 import { vibrate } from '../core/device';
 import type { RunSession } from '../game/session';
-import { finalizeRun, isTrackUnlocked } from '../game/progression';
+import { finalizeRun, isMountainUnlocked } from '../game/progression';
 import { Autopilot } from '../vehicle/autopilot';
 import { TouchSource } from '../input/touch';
 import { Hud } from '../ui/hud';
-import { createDailyTrack, todayKey } from '../data/tracks';
+import { createDailyMountain, todayKey } from '../data/mountains';
 
 /** Drives a RunSession: input, simulation, HUD, pause and the transition to results. */
 export class PlayingState implements GameState<StateId> {
@@ -151,27 +151,27 @@ export class PlayingState implements GameState<StateId> {
   }
 
   /** Builds loading params for the track after this one (or null at the end). */
-  nextTrack(): {
-    trackId: string;
+  nextMountain(): {
+    mountainId: string;
     mode: 'freeDescent' | 'daily';
     time: 'default';
     weather: 'default';
-    track?: ReturnType<typeof createDailyTrack>;
+    mountain?: ReturnType<typeof createDailyMountain>;
   } | null {
     const s = this.session;
     if (s.cfg.mode.id === 'daily')
       return {
-        trackId: s.cfg.track.id,
+        mountainId: s.cfg.mountain.id,
         mode: 'daily',
         time: 'default',
         weather: 'default',
-        track: createDailyTrack(todayKey()),
+        mountain: createDailyMountain(todayKey()),
       };
-    const all = this.ctx.registries.tracks.all();
-    const i = all.findIndex((t) => t.id === s.cfg.track.id);
+    const all = this.ctx.registries.mountains.all();
+    const i = all.findIndex((t) => t.id === s.cfg.mountain.id);
     const next = all[i + 1];
-    return next && isTrackUnlocked(this.ctx, next.id)
-      ? { trackId: next.id, mode: 'freeDescent', time: 'default', weather: 'default' }
+    return next && isMountainUnlocked(this.ctx, next.id)
+      ? { mountainId: next.id, mode: 'freeDescent', time: 'default', weather: 'default' }
       : null;
   }
 

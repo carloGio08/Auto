@@ -18,7 +18,7 @@ export class MedalsSystem extends BaseSystem {
 
   protected setup(): void {
     this.onEvent('run:finish', ({ score }) => {
-      const medal = medalFor(score, this.session.cfg.track.medals);
+      const medal = medalFor(score, this.session.cfg.mountain.medals);
       this.session.medal = medal;
       this.session.events.emit('medal:awarded', { medal });
     });

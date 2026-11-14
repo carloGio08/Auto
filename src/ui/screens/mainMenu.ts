@@ -1,5 +1,5 @@
 import type { GameContext } from '../../core/context';
-import { todayKey } from '../../data/tracks';
+import { todayKey } from '../../data/mountains';
 import { h } from '../dom';
 import { button, iconButton } from '../components';
 import { icon } from '../icons';

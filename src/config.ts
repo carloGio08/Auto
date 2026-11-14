@@ -114,55 +114,57 @@ export const config = {
   },
 
   world: {
-    /** Terrain chunk size (m) and cell sizes per LOD (m). */
-    chunkSize: 128,
-    lodCellSizes: [4, 8, 16] as const,
-    /** Distance thresholds (m) for LOD0 / LOD1; beyond → LOD2. */
-    lodDistances: [190, 420] as const,
-    /** Skirt depth hiding cracks between LODs (m). */
-    skirtDepth: 8,
-    /** Max ms per frame spent building terrain chunks. */
-    chunkBuildBudgetMs: 5,
-    /** Props are instanced per cell of this size (m). */
-    propCellSize: 192,
+    /** Quadtree terrain: split a patch when the camera is closer than size × lodSplit. */
+    lodSplit: 1.35,
+    /** Max ms per frame spent building terrain patches. */
+    chunkBuildBudgetMs: 4,
+    /** Props are generated and instanced per cell of this size (m). */
+    propCellSize: 320,
+    /** Distance (m) under which trees use their detailed mesh (farther: simple cones). */
+    treeDetailDistance: 260,
     roadSampleSpacing: 2,
+    /** Minimum width of the soft embankment beside a trail (m) and centre crown (m). */
     roadShoulder: 9,
-    roadCrown: 0.12,
-    /** Road ribbon offset above terrain (m) to avoid z-fighting. */
-    roadOffset: 0.06,
+    roadCrown: 0.1,
   },
 
   graphics: {
     presets: {
       low: {
+        /** Terrain patch resolution (cells per side): finest cells ≈ 156 m / N. */
+        terrainCells: 32,
         pixelRatioCap: 1,
         shadows: false,
         shadowMapSize: 512,
         antialias: false,
-        viewDistance: 460,
-        propDistance: 230,
-        propDensity: 0.55,
+        viewDistance: 1500,
+        propDistance: 420,
+        propDensity: 0.5,
         particles: 400,
         clouds: 6,
       },
       medium: {
+        /** Terrain patch resolution (cells per side): finest cells ≈ 156 m / N. */
+        terrainCells: 48,
         pixelRatioCap: 1.5,
         shadows: true,
         shadowMapSize: 1024,
         antialias: false,
-        viewDistance: 760,
-        propDistance: 380,
-        propDensity: 0.8,
+        viewDistance: 2300,
+        propDistance: 600,
+        propDensity: 0.75,
         particles: 900,
         clouds: 10,
       },
       high: {
+        /** Terrain patch resolution (cells per side): finest cells ≈ 156 m / N. */
+        terrainCells: 64,
         pixelRatioCap: 2,
         shadows: true,
         shadowMapSize: 2048,
         antialias: true,
-        viewDistance: 1000,
-        propDistance: 520,
+        viewDistance: 3200,
+        propDistance: 820,
         propDensity: 1,
         particles: 1600,
         clouds: 16,
@@ -177,7 +179,7 @@ export const config = {
       interval: 1,
     },
     /** Shadow frustum half-size around the car (m). */
-    shadowExtent: 55,
+    shadowExtent: 60,
   },
 
   audio: {

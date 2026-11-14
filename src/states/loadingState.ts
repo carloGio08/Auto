@@ -1,18 +1,18 @@
 import type { GameContext, StateId } from '../core/context';
 import type { GameState } from '../core/stateMachine';
-import type { ModeId, TimeOfDayId, TrackDef, WeatherId } from '../data/types';
+import type { ModeId, TimeOfDayId, MountainDef, WeatherId } from '../data/types';
 import { RunSession } from '../game/session';
 import type { BuildStep } from '../world/world';
 import { createLoading, type LoadingScreen } from '../ui/screens/loading';
 import type { BackdropHost } from './backdropHost';
 
 export interface LoadingParams {
-  trackId: string;
+  mountainId: string;
   mode: ModeId;
   time: TimeOfDayId | 'default';
   weather: WeatherId | 'default';
   /** Procedural track (daily challenge) not in the registry. */
-  track?: TrackDef;
+  mountain?: MountainDef;
 }
 
 /** Builds the run incrementally (a few ms per frame) while showing progress and a tip. */
@@ -30,19 +30,19 @@ export class LoadingState implements GameState<StateId> {
   enter(params?: unknown): void {
     const ctx = this.ctx;
     const p = params as LoadingParams;
-    const track = p.track ?? ctx.registries.tracks.get(p.trackId);
+    const mountain = p.mountain ?? ctx.registries.mountains.get(p.mountainId);
     const mode = ctx.registries.modes.get(p.mode);
     // Free the menu world before building the race world.
     ctx.view = null;
     this.backdrop.release();
-    this.screen = createLoading(ctx, ctx.i18n.tk(track.nameKey));
+    this.screen = createLoading(ctx, ctx.i18n.tk(mountain.nameKey));
     ctx.ui.setScreen(this.screen);
     this.gen = RunSession.create(ctx, {
-      track,
+      mountain,
       mode,
       carId: ctx.save.data.selectedCar,
-      time: p.time === 'default' ? track.defaultTime : p.time,
-      weather: p.weather === 'default' ? track.defaultWeather : p.weather,
+      time: p.time === 'default' ? mountain.defaultTime : p.time,
+      weather: p.weather === 'default' ? mountain.defaultWeather : p.weather,
     });
   }
 

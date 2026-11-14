@@ -23,6 +23,8 @@ export interface Collider {
   /** Count near misses for this collider only once per pass. */
   lastNearMiss: number;
   enabled: boolean;
+  /** Owner reference (e.g. tree instance) for gameplay reactions; null when unused. */
+  owner: unknown;
 }
 
 export interface ContactReport {
@@ -113,6 +115,7 @@ export class CollisionWorld {
       vz: 0,
       lastNearMiss: -999,
       enabled: true,
+      owner: null,
     };
   }
 
@@ -134,6 +137,26 @@ export class CollisionWorld {
     }
     this.count++;
     return c;
+  }
+
+  /** Removes a static collider (props of an unloaded cell). */
+  remove(c: Collider): void {
+    const x0 = Math.floor((Math.min(c.ax, c.bx) - c.radius) / this.cell);
+    const x1 = Math.floor((Math.max(c.ax, c.bx) + c.radius) / this.cell);
+    const z0 = Math.floor((Math.min(c.az, c.bz) - c.radius) / this.cell);
+    const z1 = Math.floor((Math.max(c.az, c.bz) + c.radius) / this.cell);
+    for (let z = z0; z <= z1; z++) {
+      for (let x = x0; x <= x1; x++) {
+        const list = this.cells.get(this.key(x, z));
+        if (!list) continue;
+        const i = list.indexOf(c);
+        if (i >= 0) {
+          list[i] = list[list.length - 1];
+          list.pop();
+        }
+      }
+    }
+    this.count--;
   }
 
   /** Colliders whose bounds overlap a circle (used by placement and hazards). */

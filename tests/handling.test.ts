@@ -9,7 +9,7 @@ const flat: GroundProvider = {
   sample(_x, _z, _y, out: GroundSample) {
     out.height = 0;
     out.normal.set(0, 1, 0);
-    out.surface = 'dirt';
+    out.surface = 'trail';
     out.onRoad = true;
     out.onBridge = false;
     out.s = 0;

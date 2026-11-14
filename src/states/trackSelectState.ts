@@ -21,7 +21,7 @@ export class TrackSelectState implements GameState<StateId> {
         () => ctx.states.go('mainMenu'),
         (choice) => {
           const save = ctx.save.data;
-          save.lastTrack = choice.trackId;
+          save.lastMountain = choice.mountainId;
           save.lastTime = choice.time;
           save.lastWeather = choice.weather;
           ctx.save.save();

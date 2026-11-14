@@ -1,13 +1,13 @@
 import type { GameContext, StateId } from '../core/context';
 import type { GameState } from '../core/stateMachine';
-import { createDailyTrack, todayKey } from '../data/tracks';
+import { createDailyMountain, todayKey } from '../data/mountains';
 import { createMainMenu } from '../ui/screens/mainMenu';
 import { createSettings } from '../ui/screens/settings';
 import { createRecords } from '../ui/screens/records';
 import { createCredits } from '../ui/screens/credits';
 import type { BackdropHost } from './backdropHost';
 import type { LoadingParams } from './loadingState';
-import { isTrackUnlocked } from '../game/progression';
+import { isMountainUnlocked } from '../game/progression';
 
 export function toggleFullscreen(): void {
   const doc = document as Document & {
@@ -56,12 +56,13 @@ export class MainMenuState implements GameState<StateId> {
         {
           play: () => {
             const save = ctx.save.data;
-            const trackId =
-              isTrackUnlocked(ctx, save.lastTrack) && ctx.registries.tracks.has(save.lastTrack)
-                ? save.lastTrack
-                : ctx.registries.tracks.all()[0].id;
+            const mountainId =
+              isMountainUnlocked(ctx, save.lastMountain) &&
+              ctx.registries.mountains.has(save.lastMountain)
+                ? save.lastMountain
+                : ctx.registries.mountains.all()[0].id;
             const params: LoadingParams = {
-              trackId,
+              mountainId,
               mode: 'freeDescent',
               time: save.lastTime,
               weather: save.lastWeather,
@@ -71,13 +72,13 @@ export class MainMenuState implements GameState<StateId> {
           garage: () => ctx.states.go('garage'),
           tracks: () => ctx.states.go('trackSelect'),
           daily: () => {
-            const track = createDailyTrack(todayKey());
+            const mountain = createDailyMountain(todayKey());
             const params: LoadingParams = {
-              trackId: track.id,
+              mountainId: mountain.id,
               mode: 'daily',
               time: 'default',
               weather: 'default',
-              track,
+              mountain,
             };
             ctx.states.go('loading', params);
           },

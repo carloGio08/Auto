@@ -21,12 +21,12 @@ export interface SaveData {
   ownedCars: string[];
   carColors: Record<string, string>;
   upgrades: Record<string, Partial<Record<UpgradeId, number>>>;
-  /** Keyed by `${trackId}:${modeId}`. */
+  /** Keyed by `${mountainId}:${modeId}`. */
   records: Record<string, TrackRecord>;
   achievements: string[];
   stats: AchievementStats;
   settings: Settings;
-  lastTrack: string;
+  lastMountain: string;
   lastTime: TimeOfDayId | 'default';
   lastWeather: WeatherId | 'default';
   daily: { date: string; bestScore: number; medal: MedalId };
@@ -61,7 +61,7 @@ export function defaultSave(): SaveData {
     achievements: [],
     stats: defaultStats(),
     settings: defaultSettings(),
-    lastTrack: 'pine_ridge',
+    lastMountain: 'alpine',
     lastTime: 'default',
     lastWeather: 'default',
     daily: { date: '', bestScore: 0, medal: 'none' },
@@ -76,7 +76,7 @@ type AnySave = Record<string, unknown>;
  * Never edit an existing migration: add a new one and bump CURRENT_SCHEMA.
  */
 export const migrations: Record<number, (old: AnySave) => AnySave> = {
-  // v1 (prototype): { version: 1, coins, car, best: { [trackId]: seconds }, volume }
+  // v1 (prototype): { version: 1, coins, car, best: { [mountainId]: seconds }, volume }
   1: (old) => {
     const best = (old.best as Record<string, number> | undefined) ?? {};
     const records: Record<string, TrackRecord> = {};
@@ -220,8 +220,8 @@ export class SaveManager {
     for (const key of this.ghostKeys()) this.storage.removeItem(key);
   }
 
-  record(trackId: string, modeId: string): TrackRecord {
-    const key = `${trackId}:${modeId}`;
+  record(mountainId: string, modeId: string): TrackRecord {
+    const key = `${mountainId}:${modeId}`;
     return (this.data.records[key] ??= { bestTime: null, bestScore: 0, medal: 'none', runs: 0 });
   }
 
@@ -229,28 +229,28 @@ export class SaveManager {
     return this.data.upgrades[carId]?.[upgrade] ?? 0;
   }
 
-  saveGhost(trackId: string, encoded: string): void {
+  saveGhost(mountainId: string, encoded: string): void {
     try {
-      this.storage.setItem(GHOST_PREFIX + trackId, encoded);
+      this.storage.setItem(GHOST_PREFIX + mountainId, encoded);
       const index = this.ghostIndex;
       // Daily challenge ghosts expire: keep only the current day's one.
-      if (trackId.startsWith('daily_')) {
+      if (mountainId.startsWith('daily_')) {
         for (const id of [...index]) {
-          if (id.startsWith('daily_') && id !== trackId) {
+          if (id.startsWith('daily_') && id !== mountainId) {
             this.storage.removeItem(GHOST_PREFIX + id);
             index.delete(id);
           }
         }
       }
-      index.add(trackId);
+      index.add(mountainId);
       this.storage.setItem(GHOST_PREFIX + '__index', JSON.stringify([...index]));
     } catch (err) {
       console.warn('Could not store ghost', err);
     }
   }
 
-  loadGhost(trackId: string): string | null {
-    return this.storage.getItem(GHOST_PREFIX + trackId);
+  loadGhost(mountainId: string): string | null {
+    return this.storage.getItem(GHOST_PREFIX + mountainId);
   }
 
   private get ghostIndex(): Set<string> {

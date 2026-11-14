@@ -3,16 +3,16 @@
  */
 
 export type SurfaceId =
-  'asphalt' | 'dirt' | 'gravel' | 'grass' | 'mud' | 'ice' | 'snow' | 'rock' | 'sand' | 'wood';
+  'trail' | 'grass' | 'forest' | 'snow' | 'scree' | 'rock' | 'mud' | 'sand' | 'ice' | 'wood';
 
 export interface SurfaceDef {
   id: SurfaceId;
-  /** Friction multiplier (1 = dirt road baseline). */
+  /** Friction multiplier (1 = packed dirt trail baseline). Always "good" by design. */
   grip: number;
   /** Extra rolling resistance (fraction of weight). */
   rollingDrag: number;
-  /** Visual tint applied to the road ribbon or particles. */
-  color: string;
+  /** Palette entry used for particles thrown up by the wheels. */
+  color: PaletteKey;
   /** Particle kind spawned when sliding / at speed. */
   particle: 'dust' | 'snow' | 'mud' | 'gravel' | 'none';
   /** Audio texture (0 = smooth, 1 = loud gravel crunch). */
@@ -140,92 +140,38 @@ export interface WeatherDef {
   overcast: number;
 }
 
-export interface SwitchbackLayout {
-  kind: 'switchback';
-  /** Number of traversing legs. */
-  legs: number;
-  /** Leg length range (m). */
-  legLength: [number, number];
-  /** Heading of the legs relative to the fall line (degrees, 90 = level traverse). */
-  legHeading: number;
-  hairpinRadius: number;
-  /** Random lateral wiggle amplitude on legs (m). */
-  wiggle: number;
-  /** Straight run-in from the start (m) and final run-out to the finish (m). */
-  runIn: number;
-  runOut: number;
-  /** First leg direction: 1 = towards +X, -1 = towards -X. */
-  firstDirection: 1 | -1;
-}
+/** Keys of the world palette (src/data/palette.ts). */
+export type PaletteKey =
+  | 'snow'
+  | 'rock'
+  | 'scree'
+  | 'alpine'
+  | 'meadow'
+  | 'forest'
+  | 'denseForest'
+  | 'trail'
+  | 'sand'
+  | 'water'
+  | 'wood'
+  | 'foliage'
+  | 'paint';
 
-export interface PointsLayout {
-  kind: 'points';
-  points: [number, number][];
-}
+/** A position along the main trail expressed as a fraction of its length (0..1). */
+export type TrailFraction = number;
 
-export type TrackLayout = SwitchbackLayout | PointsLayout;
-
-export interface TerrainDef {
-  summitHeight: number;
-  /** Fall-line slope of the mountain face. */
-  slope: number;
-  ridgeAmplitude: number;
-  noiseAmplitude: number;
-  /** Altitude where snow starts (m). */
-  snowLine: number;
-  /** Lake water level (m) and radius. */
-  lakeLevel: number;
-  lakeRadius: number;
-}
-
-export interface RiverDef {
-  /** X where the stream flows down the fall line. */
-  x: number;
-  /** Where the spring is, as a fraction of the course's Z extent (0 = start, 1 = finish). */
-  from: number;
-  width: number;
-  depth: number;
-  meander: number;
-}
-
-/** A position along the track expressed as a fraction of its length (0..1). */
-export type TrackFraction = number;
-
-export interface SurfaceZoneDef {
-  from: TrackFraction;
-  to: TrackFraction;
-  surface: SurfaceId;
-}
-
-export interface JumpDef {
-  at: TrackFraction;
-  /** Kicker height (m) and ramp length (m). */
-  height: number;
-  length: number;
-}
-
-export interface ShortcutDef {
-  /** Start and end along the road; the shortcut runs between them off-road. */
-  from: TrackFraction;
-  to: TrackFraction;
-  surface: SurfaceId;
-  /** Small kicker ramps along the shortcut. */
-  kickers: number;
-}
-
-export type HazardKind = 'boulder' | 'rockslide' | 'log' | 'mudPool' | 'icePatch';
+export type HazardKind = 'boulder' | 'rockslide' | 'mudPool' | 'icePatch';
 
 export interface HazardPlacement {
   kind: HazardKind;
-  at: TrackFraction;
-  /** Lateral offset from the road centre (m). */
+  at: TrailFraction;
+  /** Lateral offset from the trail centre (m). */
   offset?: number;
 }
 
 export interface HazardDef {
   kind: HazardKind;
   nameKey: string;
-  /** Distance ahead of the car (m along the road) at which it activates. */
+  /** Distance ahead of the car (m along the main trail) at which it activates. */
   triggerDistance: number;
   /** Radius of the collider / zone (m). */
   radius: number;
@@ -233,32 +179,93 @@ export interface HazardDef {
   surface?: SurfaceId;
 }
 
-export interface TrackDef {
+/** A trail is routed between waypoints with a grade-limited path search, then carved. */
+export interface TrailDef {
+  id: string;
+  kind: 'main' | 'branch' | 'shortcut';
+  /** World XZ waypoints the route must pass through (first = start, last = end). */
+  waypoints: [number, number][];
+  /** Snap the first/last waypoint onto another trail (junctions). */
+  startOn?: string;
+  endOn?: string;
+  /** Width range (m); the width varies smoothly along the trail and widens in hairpins. */
+  width: [number, number];
+  /** Preferred and maximum average grade of the route (0.12 = 12 %). */
+  targetGrade: number;
+  maxGrade: number;
+}
+
+export interface CliffDef {
+  /** Centre, direction (radians from +Z towards +X) and length of the wall (m). */
+  x: number;
+  z: number;
+  angle: number;
+  length: number;
+  /** Height of the step (m) and horizontal width over which it happens. */
+  height: number;
+  width: number;
+}
+
+export interface RiverDef {
+  /** Spring position; the stream follows the steepest descent down to the lake. */
+  spring: [number, number];
+  width: number;
+  depth: number;
+}
+
+/** Altitudes (m) of the biome bands, from the top. Bands wobble slightly to look organic. */
+export interface BiomeDef {
+  snowLine: number;
+  /** Above: bare rock, scree and alpine grass; below: meadows. */
+  rockLine: number;
+  treeLine: number;
+  /** Below: dense forest. */
+  denseForestLine: number;
+  /** Below: valley meadows near the base. */
+  valleyLine: number;
+}
+
+export interface MountainDef {
   id: string;
   nameKey: string;
   descriptionKey: string;
-  difficulty: 1 | 2 | 3;
   seed: number;
-  layout: TrackLayout;
-  roadWidth: number;
-  terrain: TerrainDef;
-  river?: RiverDef;
-  /** Default road surface outside of zones. */
-  roadSurface: SurfaceId;
-  surfaces: SurfaceZoneDef[];
-  jumps: JumpDef[];
-  /** Bumpy "whoops" sections. */
-  bumps: { from: TrackFraction; to: TrackFraction; amplitude: number }[];
-  arch?: TrackFraction;
-  shortcuts: ShortcutDef[];
+  /** Half size of the playable map (m): 4000 → 8 × 8 km. */
+  halfSize: number;
+  summit: { x: number; z: number; height: number; plateauRadius: number };
+  /** Altitude of the valley floor at the foot of the massif. */
+  baseHeight: number;
+  /** Extent of the massif from the summit in each direction (m). */
+  radii: { north: number; south: number; east: number; west: number };
+  /** Ridges radiating from the summit. */
+  spurs: { count: number; amplitude: number; twist: number };
+  noise: {
+    /** Domain warping strength (m) and scale (m). */
+    warp: number;
+    warpScale: number;
+    low: { amplitude: number; scale: number };
+    mid: { amplitude: number; scale: number };
+  };
+  /** Slope limit for normal terrain (rise/run); only cliffs exceed it. */
+  maxSlope: number;
+  cliffs: CliffDef[];
+  /** Natural boundary: ridges rising towards the map edge (m). */
+  rimHeight: number;
+  lake: { x: number; z: number; radius: number; level: number };
+  rivers: RiverDef[];
+  biomes: BiomeDef;
+  trails: TrailDef[];
+  /** Arrival zone at the base (village) and the start overlook on the summit. */
+  base: { x: number; z: number; radius: number };
+  start: { x: number; z: number };
+  props: { trees: number; rocks: number; bushes: number };
   hazards: HazardPlacement[];
   collectibles: { coins: number; crystals: number };
-  props: { trees: number; rocks: number; bushes: number };
   defaultTime: TimeOfDayId;
   defaultWeather: WeatherId;
   /** Medal thresholds in style score (higher is better). */
   medals: { gold: number; silver: number; bronze: number };
-  /** Track id whose bronze medal unlocks this track. */
+  /** Mountain id that must be descended once before this one unlocks. */
   unlockAfter?: string;
 }
 

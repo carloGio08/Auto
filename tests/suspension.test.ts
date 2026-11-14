@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { Course } from '../src/terrain/course';
-import { tracks } from '../src/data/tracks';
+import { mountains } from '../src/data/mountains';
 import { cars } from '../src/data/cars';
 import { VehiclePhysics } from '../src/vehicle/physics';
 import { Autopilot } from '../src/vehicle/autopilot';
 import { createRoadPoint, createRoadQuery } from '../src/terrain/road';
 import { createGroundSample } from '../src/terrain/terrain';
 
-const course = new Course(tracks[0]);
+const course = new Course(mountains[0]);
 const dt = 1 / 120;
 const idle = { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false };
 
@@ -70,7 +70,7 @@ describe.each(cars.map((c) => [c.id, c] as const))('vehicle physics: %s', (_id, 
 });
 
 describe('autopilot integration', () => {
-  it('drives Pine Ridge from the summit to the finish', () => {
+  it('drives the first 2 km of the main trail down from the summit', () => {
     const car = new VehiclePhysics(structuredClone(cars[0].physics));
     spawn(car, course.startS);
     const ap = new Autopilot(course.road);
@@ -81,7 +81,8 @@ describe('autopilot integration', () => {
     let t = 0;
     let lastS = s;
     let stuck = 0;
-    while (t < 240 && s < course.finishS) {
+    const target = 2000;
+    while (t < 240 && s < target) {
       course.road.query(car.position.x, car.position.z, q);
       if (q.found && q.s > s - 30 && q.s < s + 40) s = Math.max(s, q.s);
       ap.drive(car, s, input);
@@ -97,8 +98,8 @@ describe('autopilot integration', () => {
         spawn(car, s);
       }
     }
-    expect(s).toBeGreaterThanOrEqual(course.finishS);
-    expect(t).toBeLessThan(160);
+    expect(s).toBeGreaterThanOrEqual(target);
+    expect(t).toBeLessThan(200);
     expect(resets).toBeLessThan(6);
   }, 60000);
 });

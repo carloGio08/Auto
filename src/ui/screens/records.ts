@@ -10,7 +10,7 @@ export function createRecords(ctx: GameContext, onClose: () => void): Screen {
   const t = ctx.i18n.t;
   const tk = ctx.i18n.tk;
   const save = ctx.save.data;
-  const tracks = ctx.registries.tracks.all().map((tr) => {
+  const tracks = ctx.registries.mountains.all().map((tr) => {
     const rec = save.records[`${tr.id}:freeDescent`];
     return h(
       'div',

@@ -257,6 +257,13 @@ export const it: Dictionary = {
   'track.daily.name': 'Montagna del giorno',
   'track.daily.desc': 'Generata proceduralmente per oggi.',
 
+  'mountain.alpine.name': 'Monte Drop',
+  'mountain.alpine.desc':
+    'Un massiccio di 8 km: vetta innevata, creste rocciose, boschi di pini e un villaggio sul lago 1800 m più in basso.',
+  'mountain.granite.name': 'Massiccio del Granito',
+  'mountain.granite.desc': 'Più alto e roccioso, con canaloni ripidi, pareti e lunghi ghiaioni.',
+  'mountain.daily.name': 'Montagna del giorno',
+  'mountain.daily.desc': 'Un massiccio nuovo ogni giorno, con meteo e ora del giorno propri.',
   'hazard.boulder': 'Masso rotolante',
   'hazard.rockslide': 'Frana',
   'hazard.log': 'Tronco caduto',

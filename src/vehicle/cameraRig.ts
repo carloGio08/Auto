@@ -22,7 +22,7 @@ export class CameraRig {
   private fovBoost = 0;
 
   constructor(aspect: number) {
-    this.camera = new PerspectiveCamera(config.camera.fovBase, aspect, 0.3, 4200);
+    this.camera = new PerspectiveCamera(config.camera.fovBase, aspect, 0.5, 13000);
   }
 
   cycle(): CameraMode {

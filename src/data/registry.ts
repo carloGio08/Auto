@@ -1,6 +1,6 @@
-import type { AchievementDef, CarDef, ModeDef, ModeId, TrackDef, UpgradeDef } from './types';
+import type { AchievementDef, CarDef, ModeDef, ModeId, MountainDef, UpgradeDef } from './types';
 import { cars } from './cars';
-import { tracks } from './tracks';
+import { mountains } from './mountains';
 import { upgrades } from './upgrades';
 import { achievements } from './achievements';
 import { modes } from './modes';
@@ -47,7 +47,7 @@ export class Registry<T extends { id: string }> {
 
 export interface ContentRegistries {
   cars: Registry<CarDef>;
-  tracks: Registry<TrackDef>;
+  mountains: Registry<MountainDef>;
   upgrades: Registry<UpgradeDef>;
   achievements: Registry<AchievementDef>;
   modes: Registry<ModeDef & { id: ModeId }>;
@@ -56,7 +56,7 @@ export interface ContentRegistries {
 export function createRegistries(): ContentRegistries {
   return {
     cars: new Registry('car', cars),
-    tracks: new Registry('track', tracks),
+    mountains: new Registry('mountain', mountains),
     upgrades: new Registry('upgrade', upgrades),
     achievements: new Registry('achievement', achievements),
     modes: new Registry('mode', Object.values(modes)),

@@ -253,6 +253,13 @@ export const en = {
   'track.daily.name': 'Daily Mountain',
   'track.daily.desc': 'Procedurally generated for today.',
 
+  'mountain.alpine.name': 'Monte Drop',
+  'mountain.alpine.desc':
+    'An 8 km massif: snowy summit, rocky ridges, pine forests and a lake village 1800 m below.',
+  'mountain.granite.name': 'Granite Massif',
+  'mountain.granite.desc': 'Higher and rockier, with steep couloirs, cliffs and long scree slopes.',
+  'mountain.daily.name': 'Mountain of the day',
+  'mountain.daily.desc': 'A new massif every day, with its own weather and time of day.',
   'hazard.boulder': 'Rolling boulder',
   'hazard.rockslide': 'Rockslide',
   'hazard.log': 'Fallen log',

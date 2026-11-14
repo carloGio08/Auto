@@ -14,7 +14,7 @@ export class ResultsState implements GameState<StateId> {
     const playing = (params as { playing: PlayingState }).playing;
     const ctx = this.ctx;
     const s = playing.session;
-    const next = playing.nextTrack();
+    const next = playing.nextMountain();
     ctx.ui.openModal(
       createResults(ctx, s.summary!, s.cfg.mode, {
         retry: () => {

@@ -144,7 +144,7 @@ export class VehiclePhysics {
       spin: 0,
       spinRate: 0,
       prevSpin: 0,
-      surface: 'dirt',
+      surface: 'trail',
       onRoad: false,
       longSpeed: 0,
     });

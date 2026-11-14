@@ -1,207 +1,298 @@
 import {
+  BufferAttribute,
   BufferGeometry,
-  Color,
-  Float32BufferAttribute,
   Group,
   Mesh,
   MeshLambertMaterial,
-  type Texture,
+  Sphere,
+  Vector3,
 } from 'three';
 import { config } from '../config';
 import { hash2 } from '../math/rng';
-import { clamp, lerp, smoothstep } from '../math/util';
+import type { ResolvedPalette } from '../data/palette';
 import type { Terrain } from './terrain';
 
-interface Chunk {
-  cx: number;
-  cz: number;
-  centerX: number;
-  centerZ: number;
-  lods: (Mesh | null)[];
-  current: number;
+interface QuadNode {
+  key: number;
+  level: number;
+  x0: number;
+  z0: number;
+  size: number;
+  mesh: Mesh | null;
+  lastShown: number;
 }
 
-const PALETTE = {
-  snow: new Color('#eef3f8'),
-  snowShade: new Color('#cdd9e6'),
-  rock: new Color('#7f7a73'),
-  rockDark: new Color('#5d5852'),
-  alpine: new Color('#8aa456'),
-  grass: new Color('#679440'),
-  forest: new Color('#4b7a35'),
-  dirt: new Color('#9a7552'),
-  sand: new Color('#d3bd8a'),
-  lakebed: new Color('#6f8064'),
-};
+/** Incremental patch builder state (time-sliced across frames). */
+interface Build {
+  node: QuadNode;
+  n: number;
+  row: number;
+  H: Float32Array;
+  R: Float32Array;
+  W: Float32Array;
+}
 
-const tmp = new Color();
-const tmp2 = new Color();
+const MAX_DEPTH = 6;
 
 /**
- * Streams terrain chunks with three levels of detail around the camera. Geometry is
- * flat-shaded (non-indexed) with per-face colours from altitude, slope and road proximity.
+ * Quadtree terrain: square patches of N×N cells whose size halves near the camera (≈2.4–5 m
+ * cells at the finest level depending on quality). Patches are flat-shaded with per-face
+ * palette colours (two tones chosen by hash) and face normals (Int8), have skirts to hide LOD cracks, are built
+ * incrementally within a per-frame time budget and evicted when unused.
  */
 export class TerrainMesh {
   readonly group = new Group();
   readonly material: MeshLambertMaterial;
-  private readonly chunks: Chunk[] = [];
-  private readonly size = config.world.chunkSize;
-  readonly minX: number;
-  readonly maxX: number;
-  readonly minZ: number;
-  readonly maxZ: number;
-  private readonly snowLine: number;
+  private readonly nodes = new Map<number, QuadNode>();
+  private readonly rootSize: number;
+  private readonly rootMin: number;
+  private n: number;
+  private build: Build | null = null;
+  private readonly queue: QuadNode[] = [];
+  private readonly shown = new Set<QuadNode>();
+  private readonly desired: QuadNode[] = [];
+  private time = 0;
   private readonly lakeLevel: number;
-  /** Vertices of every LOD built (for stats). */
   builtTriangles = 0;
 
   constructor(
     private readonly terrain: Terrain,
-    detail: Texture,
+    private readonly palette: ResolvedPalette,
+    cellsPerPatch: number,
   ) {
     this.group.name = 'terrain';
-    this.material = new MeshLambertMaterial({ vertexColors: true, map: detail });
-    const road = terrain.road.bounds;
-    const s = this.size;
-    this.minX = Math.floor((road.minX - 640) / s) * s;
-    this.maxX = Math.ceil((road.maxX + 640) / s) * s;
-    this.minZ = Math.floor((road.minZ - 512) / s) * s;
-    this.maxZ = Math.ceil((road.maxZ + 768) / s) * s;
-    this.snowLine = terrain.mountain.def.snowLine;
-    this.lakeLevel = terrain.mountain.def.lakeLevel;
-    for (let z = this.minZ; z < this.maxZ; z += s) {
-      for (let x = this.minX; x < this.maxX; x += s) {
-        this.chunks.push({
-          cx: x,
-          cz: z,
-          centerX: x + s / 2,
-          centerZ: z + s / 2,
-          lods: [null, null, null],
-          current: -1,
-        });
-      }
+    this.material = new MeshLambertMaterial({ vertexColors: true });
+    const half = terrain.mountain.def.halfSize;
+    this.rootSize = half * 2.5;
+    this.rootMin = -this.rootSize / 2;
+    this.n = cellsPerPatch;
+    this.lakeLevel = terrain.mountain.def.lake.level;
+  }
+
+  /** Changes the patch resolution (quality); rebuilds progressively. */
+  setResolution(cellsPerPatch: number): void {
+    if (cellsPerPatch === this.n) return;
+    this.n = cellsPerPatch;
+    for (const node of this.nodes.values()) this.free(node);
+    this.nodes.clear();
+    this.build = null;
+    this.queue.length = 0;
+    this.shown.clear();
+  }
+
+  private node(level: number, i: number, j: number): QuadNode {
+    const key = level * 1e8 + i * 1e4 + j;
+    let nd = this.nodes.get(key);
+    if (!nd) {
+      const size = this.rootSize / (1 << level);
+      nd = {
+        key,
+        level,
+        x0: this.rootMin + i * size,
+        z0: this.rootMin + j * size,
+        size,
+        mesh: null,
+        lastShown: 0,
+      };
+      this.nodes.set(key, nd);
+    }
+    return nd;
+  }
+
+  private children(nd: QuadNode): QuadNode[] {
+    const i = Math.round((nd.x0 - this.rootMin) / nd.size) * 2;
+    const j = Math.round((nd.z0 - this.rootMin) / nd.size) * 2;
+    const l = nd.level + 1;
+    return [
+      this.node(l, i, j),
+      this.node(l, i + 1, j),
+      this.node(l, i, j + 1),
+      this.node(l, i + 1, j + 1),
+    ];
+  }
+
+  private parent(nd: QuadNode): QuadNode | null {
+    if (nd.level === 0) return null;
+    const size = nd.size * 2;
+    return this.node(
+      nd.level - 1,
+      Math.floor((nd.x0 - this.rootMin + 1e-3) / size),
+      Math.floor((nd.z0 - this.rootMin + 1e-3) / size),
+    );
+  }
+
+  /** Distance from the camera to the closest point of a node (horizontal + height above ground). */
+  private distance(nd: QuadNode, cx: number, cz: number, above: number): number {
+    const dx = Math.max(nd.x0 - cx, 0, cx - (nd.x0 + nd.size));
+    const dz = Math.max(nd.z0 - cz, 0, cz - (nd.z0 + nd.size));
+    return Math.hypot(dx, dz, above * 0.5);
+  }
+
+  private collect(nd: QuadNode, cx: number, cz: number, above: number): void {
+    if (
+      nd.level < MAX_DEPTH &&
+      this.distance(nd, cx, cz, above) < nd.size * config.world.lodSplit
+    ) {
+      for (const c of this.children(nd)) this.collect(c, cx, cz, above);
+    } else this.desired.push(nd);
+  }
+
+  /** Builds everything needed around a point synchronously (loading). */
+  *prebuild(x: number, y: number, z: number): Generator<number> {
+    this.ensureNow(this.node(0, 0, 0));
+    this.desired.length = 0;
+    this.collect(this.node(0, 0, 0), x, z, Math.max(0, y - this.terrain.height(x, z)));
+    let k = 0;
+    for (const nd of this.desired) {
+      this.ensureNow(nd);
+      yield ++k / this.desired.length;
+    }
+    this.update(x, y, z, 0);
+  }
+
+  private ensureNow(nd: QuadNode): void {
+    if (nd.mesh) return;
+    const b = this.startBuild(nd);
+    while (!this.step(b, Infinity)) {
+      /* build fully */
     }
   }
 
-  get chunkCount(): number {
-    return this.chunks.length;
-  }
-
-  /** Builds the coarsest LOD everywhere (call during loading, reports progress 0..1). */
-  *buildAll(): Generator<number> {
-    let i = 0;
-    for (const c of this.chunks) {
-      this.ensure(c, 2);
-      if (++i % 8 === 0) yield i / this.chunks.length;
-    }
-  }
-
-  /** Builds the detailed LODs around a point (loading). */
-  prebuildAround(x: number, z: number): void {
-    for (const c of this.chunks) {
-      const d = Math.hypot(c.centerX - x, c.centerZ - z);
-      const want = this.lodFor(d, -1);
-      this.ensure(c, want);
-      this.show(c, want);
-    }
-  }
-
-  private lodFor(d: number, current: number): number {
-    const [l0, l1] = config.world.lodDistances;
-    const hys = current >= 0 ? 12 : 0;
-    if (d < l0 + (current === 0 ? hys : -hys * 0)) return 0;
-    if (d < l1 + (current <= 1 ? hys : 0)) return 1;
-    return 2;
-  }
-
-  /** Per-frame streaming: chooses LODs and builds missing meshes within a time budget. */
+  /** Per frame: chooses the patches to show and advances the build queue. */
   update(
-    camX: number,
-    camZ: number,
+    cx: number,
+    cy: number,
+    cz: number,
     budgetMs: number = config.world.chunkBuildBudgetMs,
-    viewDistance = 1e9,
   ): void {
-    const start = performance.now();
-    const pending: [Chunk, number, number][] = [];
-    for (const c of this.chunks) {
-      const d = Math.hypot(c.centerX - camX, c.centerZ - camZ);
-      const visible = d < viewDistance + this.size;
-      if (!visible) {
-        this.show(c, -1);
+    this.time += 1;
+    const root = this.node(0, 0, 0);
+    this.desired.length = 0;
+    this.collect(root, cx, cz, Math.max(0, cy - this.terrain.height(cx, cz)));
+    const shown = this.shown;
+    shown.clear();
+    this.queue.length = 0;
+    for (const leaf of this.desired) {
+      if (leaf.mesh) {
+        shown.add(leaf);
         continue;
       }
-      const want = this.lodFor(d, c.current);
-      if (c.lods[want]) this.show(c, want);
-      else {
-        pending.push([c, want, d]);
-        // Keep showing whatever exists meanwhile.
-        if (c.current < 0) {
-          const any = c.lods.findIndex((m) => m !== null);
-          if (any >= 0) this.show(c, any);
+      this.queue.push(leaf);
+      // Finer patches already built cover the leaf completely?
+      const kids = leaf.level < MAX_DEPTH ? this.children(leaf) : [];
+      if (kids.length && kids.every((k) => k.mesh)) {
+        kids.forEach((k) => shown.add(k));
+        continue;
+      }
+      // Otherwise the closest built ancestor stands in.
+      let a = this.parent(leaf);
+      while (a && !a.mesh) a = this.parent(a);
+      if (a) shown.add(a);
+    }
+    // Remove anything covered by a shown ancestor (avoid overlapping LODs).
+    for (const nd of [...shown]) {
+      let a = this.parent(nd);
+      while (a) {
+        if (shown.has(a)) {
+          shown.delete(nd);
+          break;
         }
+        a = this.parent(a);
       }
-      // Free detailed meshes far away.
-      if (d > config.world.lodDistances[1] * 1.6 && c.lods[0]) this.free(c, 0);
     }
-    pending.sort((a, b) => a[2] - b[2]);
-    for (const [c, want] of pending) {
-      if (performance.now() - start > budgetMs) break;
-      this.ensure(c, want);
-      this.show(c, want);
+    for (const nd of this.nodes.values()) {
+      if (!nd.mesh) continue;
+      const vis = shown.has(nd);
+      nd.mesh.visible = vis;
+      if (vis) nd.lastShown = this.time;
+    }
+    // Build queue: closest first.
+    if (budgetMs > 0) {
+      const start = performance.now();
+      while (performance.now() - start < budgetMs) {
+        if (!this.build) {
+          let best: QuadNode | null = null;
+          let bd = Infinity;
+          for (const nd of this.queue) {
+            if (nd.mesh) continue;
+            const d = this.distance(nd, cx, cz, 0) + nd.size * 0.2;
+            if (d < bd) {
+              bd = d;
+              best = nd;
+            }
+          }
+          if (!best) break;
+          this.build = this.startBuild(best);
+        }
+        if (this.step(this.build, start + budgetMs)) this.build = null;
+      }
+    }
+    this.evict();
+  }
+
+  private evict(): void {
+    if (this.nodes.size < 320) return;
+    for (const nd of this.nodes.values()) {
+      if (nd.level === 0 || this.shown.has(nd)) continue;
+      if (nd.mesh && this.time - nd.lastShown > 600) this.free(nd);
+      if (!nd.mesh && this.build?.node !== nd) this.nodes.delete(nd.key);
     }
   }
 
-  private show(c: Chunk, lod: number): void {
-    if (c.current === lod) return;
-    c.lods.forEach((m, i) => {
-      if (m) m.visible = i === lod;
-    });
-    c.current = lod;
+  private startBuild(node: QuadNode): Build {
+    const n = this.n;
+    const s = (n + 1) * (n + 1);
+    return {
+      node,
+      n,
+      row: 0,
+      H: new Float32Array(s),
+      R: new Float32Array(s),
+      W: new Float32Array(s),
+    };
   }
 
-  private free(c: Chunk, lod: number): void {
-    const m = c.lods[lod];
-    if (!m) return;
-    m.geometry.dispose();
-    m.removeFromParent();
-    c.lods[lod] = null;
-    if (c.current === lod) c.current = -1;
-  }
-
-  private ensure(c: Chunk, lod: number): void {
-    if (c.lods[lod]) return;
-    const geo = this.buildGeometry(c.cx, c.cz, config.world.lodCellSizes[lod]);
-    const mesh = new Mesh(geo, this.material);
-    mesh.receiveShadow = lod < 2;
-    mesh.matrixAutoUpdate = false;
-    mesh.visible = false;
-    this.group.add(mesh);
-    c.lods[lod] = mesh;
-  }
-
-  private buildGeometry(x0: number, z0: number, cell: number): BufferGeometry {
-    const t = this.terrain;
-    const n = Math.round(this.size / cell);
+  /** Samples heights row by row; returns true when the patch mesh has been created. */
+  private step(b: Build, deadline: number): boolean {
+    const { node, n } = b;
+    const cell = node.size / n;
     const stride = n + 1;
-    const H = new Float32Array(stride * stride);
-    const R = new Float32Array(stride * stride); // distance beyond road edge
-    for (let j = 0; j <= n; j++) {
+    const t = this.terrain;
+    while (b.row <= n) {
+      const z = node.z0 + b.row * cell;
       for (let i = 0; i <= n; i++) {
-        const x = x0 + i * cell;
-        const z = z0 + j * cell;
-        H[j * stride + i] = t.height(x, z);
+        const k = b.row * stride + i;
+        b.H[k] = t.height(node.x0 + i * cell, z);
         const q = t.lastQuery;
-        R[j * stride + i] = q.found ? q.distance - q.halfWidth : 99;
+        b.R[k] = q.found ? q.distance : 1e4;
+        b.W[k] = q.found ? q.halfWidth : 0;
       }
+      b.row++;
+      if (performance.now() > deadline) return false;
     }
-    const tris = n * n * 2 + n * 4 * 2;
+    node.mesh = this.createMesh(b);
+    node.mesh.visible = false;
+    this.group.add(node.mesh);
+    return true;
+  }
+
+  private createMesh(b: Build): Mesh {
+    const { node, n, H, R, W } = b;
+    const cell = node.size / n;
+    const stride = n + 1;
+    const x0 = node.x0;
+    const z0 = node.z0;
+    const tris = n * n * 2 + n * 8;
     const pos = new Float32Array(tris * 9);
-    const nor = new Float32Array(tris * 9);
-    const col = new Float32Array(tris * 9);
-    const uv = new Float32Array(tris * 6);
+    const col = new Uint8Array(tris * 9);
+    const nor = new Int8Array(tris * 9);
     let k = 0;
-    const uvScale = 1 / 9;
-    const pushTri = (
+    let minY = Infinity;
+    let maxY = -Infinity;
+    const terrain = this.terrain;
+    const pal = this.palette;
+    const lake = this.lakeLevel;
+    const tri = (
       ax: number,
       ay: number,
       az: number,
@@ -211,22 +302,32 @@ export class TerrainMesh {
       cx: number,
       cy: number,
       cz: number,
-      color: Color,
+      rd: number,
+      hw: number,
+      skirt: boolean,
     ): void => {
-      // Face normal.
       const ux = bx - ax;
       const uy = by - ay;
       const uz = bz - az;
       const vx = cx - ax;
       const vy = cy - ay;
       const vz = cz - az;
-      let nx = uy * vz - uz * vy;
-      let ny = uz * vx - ux * vz;
-      let nz = ux * vy - uy * vx;
-      const l = Math.hypot(nx, ny, nz) || 1;
-      nx /= l;
-      ny /= l;
-      nz /= l;
+      const nx = uy * vz - uz * vy;
+      const ny = uz * vx - ux * vz;
+      const nz = ux * vy - uy * vx;
+      const ln = Math.hypot(nx, ny, nz) || 1;
+      const fx = (ax + bx + cx) / 3;
+      const fy = (ay + by + cy) / 3;
+      const fz = (az + bz + cz) / 3;
+      const nyn = skirt ? 0.9 : ny / ln;
+      const biome = fy < lake - 0.5 ? 'sand' : terrain.classify(fx, fz, fy, nyn, rd, hw).key;
+      // Two tones per biome: hash choice, steep faces lean towards the dark tone.
+      const hsh = hash2(Math.floor(fx * 0.37), Math.floor(fz * 0.37), 11);
+      const tone = hsh < (nyn < 0.86 ? 0.7 : 0.35) ? 1 : 0;
+      const c = pal[biome][tone];
+      const r = Math.round(Math.min(1, c.r) * 255);
+      const g = Math.round(Math.min(1, c.g) * 255);
+      const bl = Math.round(Math.min(1, c.b) * 255);
       const p = k * 9;
       pos[p] = ax;
       pos[p + 1] = ay;
@@ -237,119 +338,48 @@ export class TerrainMesh {
       pos[p + 6] = cx;
       pos[p + 7] = cy;
       pos[p + 8] = cz;
+      const qx = Math.round((nx / ln) * 127);
+      const qy = Math.round((ny / ln) * 127);
+      const qz = Math.round((nz / ln) * 127);
       for (let v = 0; v < 3; v++) {
-        nor[p + v * 3] = nx;
-        nor[p + v * 3 + 1] = ny;
-        nor[p + v * 3 + 2] = nz;
-        col[p + v * 3] = color.r;
-        col[p + v * 3 + 1] = color.g;
-        col[p + v * 3 + 2] = color.b;
+        col[p + v * 3] = r;
+        col[p + v * 3 + 1] = g;
+        col[p + v * 3 + 2] = bl;
+        nor[p + v * 3] = qx;
+        nor[p + v * 3 + 1] = qy;
+        nor[p + v * 3 + 2] = qz;
       }
-      const u = k * 6;
-      uv[u] = ax * uvScale;
-      uv[u + 1] = az * uvScale;
-      uv[u + 2] = bx * uvScale;
-      uv[u + 3] = bz * uvScale;
-      uv[u + 4] = cx * uvScale;
-      uv[u + 5] = cz * uvScale;
       k++;
     };
-    const faceColor = (
-      cx: number,
-      cz: number,
-      h: number,
-      ny: number,
-      road: number,
-      out: Color,
-    ): Color => this.colorFor(cx, cz, h, ny, road, out);
-
     for (let j = 0; j < n; j++) {
       for (let i = 0; i < n; i++) {
         const xa = x0 + i * cell;
         const za = z0 + j * cell;
         const xb = xa + cell;
         const zb = za + cell;
-        const h00 = H[j * stride + i];
-        const h10 = H[j * stride + i + 1];
-        const h01 = H[(j + 1) * stride + i];
-        const h11 = H[(j + 1) * stride + i + 1];
-        const r00 = R[j * stride + i];
-        const r10 = R[j * stride + i + 1];
-        const r01 = R[(j + 1) * stride + i];
-        const r11 = R[(j + 1) * stride + i + 1];
-        // Alternate the diagonal for a less regular look.
-        const flip = (i + j) % 2 === 0;
-        if (flip) {
-          // tri (00, 01, 10) and (10, 01, 11)  – counter-clockwise seen from above
-          const hA = (h00 + h01 + h10) / 3;
-          const nyA = faceNy(cell, h00, h10, h01, h00);
-          pushTri(
-            xa,
-            h00,
-            za,
-            xa,
-            h01,
-            zb,
-            xb,
-            h10,
-            za,
-            faceColor(xa + cell / 3, za + cell / 3, hA, nyA, (r00 + r01 + r10) / 3, tmp),
-          );
-          const hB = (h10 + h01 + h11) / 3;
-          const nyB = faceNy(cell, h01, h11, h10, h11);
-          pushTri(
-            xb,
-            h10,
-            za,
-            xa,
-            h01,
-            zb,
-            xb,
-            h11,
-            zb,
-            faceColor(
-              xa + (2 * cell) / 3,
-              za + (2 * cell) / 3,
-              hB,
-              nyB,
-              (r10 + r01 + r11) / 3,
-              tmp,
-            ),
-          );
+        const i00 = j * stride + i;
+        const i10 = i00 + 1;
+        const i01 = i00 + stride;
+        const i11 = i01 + 1;
+        const h00 = H[i00];
+        const h10 = H[i10];
+        const h01 = H[i01];
+        const h11 = H[i11];
+        minY = Math.min(minY, h00, h10, h01, h11);
+        maxY = Math.max(maxY, h00, h10, h01, h11);
+        const rd = (R[i00] + R[i10] + R[i01] + R[i11]) * 0.25;
+        const hw = Math.max(W[i00], W[i10], W[i01], W[i11]);
+        if ((i + j) % 2 === 0) {
+          tri(xa, h00, za, xa, h01, zb, xb, h10, za, rd, hw, false);
+          tri(xb, h10, za, xa, h01, zb, xb, h11, zb, rd, hw, false);
         } else {
-          const hA = (h00 + h01 + h11) / 3;
-          const nyA = faceNy(cell, h01, h11, h00, h01);
-          pushTri(
-            xa,
-            h00,
-            za,
-            xa,
-            h01,
-            zb,
-            xb,
-            h11,
-            zb,
-            faceColor(xa + cell / 3, za + (2 * cell) / 3, hA, nyA, (r00 + r01 + r11) / 3, tmp),
-          );
-          const hB = (h00 + h11 + h10) / 3;
-          const nyB = faceNy(cell, h00, h10, h10, h11);
-          pushTri(
-            xa,
-            h00,
-            za,
-            xb,
-            h11,
-            zb,
-            xb,
-            h10,
-            za,
-            faceColor(xa + (2 * cell) / 3, za + cell / 3, hB, nyB, (r00 + r11 + r10) / 3, tmp),
-          );
+          tri(xa, h00, za, xa, h01, zb, xb, h11, zb, rd, hw, false);
+          tri(xa, h00, za, xb, h11, zb, xb, h10, za, rd, hw, false);
         }
       }
     }
-    // Skirts hide cracks between neighbouring chunks of different LOD.
-    const depth = config.world.skirtDepth;
+    // Skirts (outward facing) hide cracks between patches of different size.
+    const depth = cell * 1.5 + 2;
     const skirt = (
       ax: number,
       az: number,
@@ -358,70 +388,49 @@ export class TerrainMesh {
       bz: number,
       hb: number,
     ): void => {
-      tmp2.copy(this.colorFor(ax, az, ha, 0.5, 99, tmp2)).multiplyScalar(0.8);
-      pushTri(ax, ha, az, bx, hb, bz, ax, ha - depth, az, tmp2);
-      pushTri(bx, hb, bz, bx, hb - depth, bz, ax, ha - depth, az, tmp2);
+      tri(ax, ha, az, bx, hb, bz, ax, ha - depth, az, 1e4, 0, true);
+      tri(bx, hb, bz, bx, hb - depth, bz, ax, ha - depth, az, 1e4, 0, true);
     };
+    const size = node.size;
     for (let i = 0; i < n; i++) {
       const xa = x0 + i * cell;
       const xb = xa + cell;
-      // Wound so each skirt faces outwards.
       skirt(xa, z0, H[i], xb, z0, H[i + 1]);
-      skirt(xb, z0 + this.size, H[n * stride + i + 1], xa, z0 + this.size, H[n * stride + i]);
+      skirt(xb, z0 + size, H[n * stride + i + 1], xa, z0 + size, H[n * stride + i]);
       const za = z0 + i * cell;
       const zb = za + cell;
       skirt(x0, zb, H[(i + 1) * stride], x0, za, H[i * stride]);
-      skirt(x0 + this.size, za, H[i * stride + n], x0 + this.size, zb, H[(i + 1) * stride + n]);
+      skirt(x0 + size, za, H[i * stride + n], x0 + size, zb, H[(i + 1) * stride + n]);
     }
     this.builtTriangles += k;
     const geo = new BufferGeometry();
-    geo.setAttribute('position', new Float32BufferAttribute(pos.subarray(0, k * 9), 3));
-    geo.setAttribute('normal', new Float32BufferAttribute(nor.subarray(0, k * 9), 3));
-    geo.setAttribute('color', new Float32BufferAttribute(col.subarray(0, k * 9), 3));
-    geo.setAttribute('uv', new Float32BufferAttribute(uv.subarray(0, k * 6), 2));
-    geo.computeBoundingSphere();
-    geo.computeBoundingBox();
-    return geo;
+    geo.setAttribute('position', new BufferAttribute(pos.subarray(0, k * 9), 3));
+    geo.setAttribute('color', new BufferAttribute(col.subarray(0, k * 9), 3, true));
+    geo.setAttribute('normal', new BufferAttribute(nor.subarray(0, k * 9), 3, true));
+    const c = new Vector3(x0 + size / 2, (minY + maxY) / 2, z0 + size / 2);
+    geo.boundingSphere = new Sphere(c, Math.hypot(size / 2, size / 2, (maxY - minY) / 2 + depth));
+    const mesh = new Mesh(geo, this.material);
+    mesh.matrixAutoUpdate = false;
+    mesh.receiveShadow = size < 400;
+    return mesh;
   }
 
-  /** Terrain colour from altitude, slope, road proximity and per-face jitter. */
-  colorFor(x: number, z: number, h: number, ny: number, roadDist: number, out: Color): Color {
-    const wobble = Math.sin(x * 0.05) * 8 + Math.cos(z * 0.043) * 8;
-    const jitter = 0.94 + hash2(Math.floor(x * 0.7), Math.floor(z * 0.7), 3) * 0.12;
-    const alt = clamp((h - this.lakeLevel) / Math.max(1, this.snowLine - this.lakeLevel), 0, 1.4);
-    // Vegetation gradient: forest floor at the bottom, meadow higher up.
-    out
-      .copy(PALETTE.forest)
-      .lerp(PALETTE.grass, smoothstep(0.15, 0.55, alt))
-      .lerp(PALETTE.alpine, smoothstep(0.6, 0.95, alt));
-    const sand = 1 - smoothstep(this.lakeLevel + 1, this.lakeLevel + 4, h);
-    if (sand > 0) out.lerp(PALETTE.sand, sand);
-    if (h < this.lakeLevel - 0.8) out.copy(PALETTE.lakebed);
-    const rock = 1 - smoothstep(0.72, 0.84, ny);
-    if (rock > 0) {
-      tmp2
-        .copy(PALETTE.rock)
-        .lerp(PALETTE.rockDark, hash2(Math.floor(x * 0.3), Math.floor(z * 0.3), 9));
-      out.lerp(tmp2, rock);
-    }
-    const snow =
-      smoothstep(this.snowLine - 12, this.snowLine + 14, h + wobble) * smoothstep(0.62, 0.78, ny);
-    if (snow > 0) out.lerp(ny > 0.9 ? PALETTE.snow : PALETTE.snowShade, snow);
-    const dirt = 1 - smoothstep(0.5, 3.2, roadDist);
-    if (dirt > 0) out.lerp(snow > 0.5 ? PALETTE.snowShade : PALETTE.dirt, dirt * 0.85);
-    return out.multiplyScalar(jitter * lerp(1, 0.9, rock));
+  private free(nd: QuadNode): void {
+    if (!nd.mesh) return;
+    nd.mesh.geometry.dispose();
+    nd.mesh.removeFromParent();
+    nd.mesh = null;
+  }
+
+  /** Number of patches currently drawn (stats). */
+  get visibleCount(): number {
+    return this.shown.size;
   }
 
   dispose(): void {
-    for (const c of this.chunks) for (let i = 0; i < 3; i++) this.free(c, i);
+    for (const nd of this.nodes.values()) this.free(nd);
+    this.nodes.clear();
     this.material.dispose();
     this.group.removeFromParent();
   }
-}
-
-/** Approximate face normal Y from the two edge height differences of a grid cell. */
-function faceNy(cell: number, a: number, b: number, c: number, d: number): number {
-  const dx = (b - a) / cell;
-  const dz = (c - d) / cell;
-  return 1 / Math.sqrt(1 + dx * dx + dz * dz);
 }

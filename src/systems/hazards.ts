@@ -11,7 +11,7 @@ import type { HazardPlacement } from '../data/types';
 import { createRoadPoint } from '../terrain/road';
 import type { SurfacePatch } from '../terrain/terrain';
 import type { Collider } from '../world/colliders';
-import { logGeometry, rockGeometry } from '../world/propGeometry';
+import { PropGeometry } from '../world/propGeometry';
 import { BaseSystem } from './system';
 
 interface Rolling {
@@ -27,8 +27,8 @@ interface Rolling {
 const n = new Vector3();
 
 /**
- * Dynamic dangers: boulders rolling down across the road, rockslides falling onto it,
- * fallen logs, mud pools and ice patches (surface overrides).
+ * Dynamic dangers along the main trail: boulders rolling down across it, rockslides falling
+ * onto it, mud pools and ice patches (surface overrides).
  */
 export class HazardsSystem extends BaseSystem {
   readonly id = 'hazards' as const;
@@ -39,17 +39,15 @@ export class HazardsSystem extends BaseSystem {
   private readonly patches: SurfacePatch[] = [];
   private readonly geometries: BufferGeometry[] = [];
   private readonly rockMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  private readonly mudMat = new MeshLambertMaterial({
+  private mudMat = new MeshLambertMaterial({
     color: '#4e3a28',
     transparent: true,
     opacity: 0.85,
     polygonOffset: true,
     polygonOffsetFactor: -3,
   });
-  private readonly iceMat = new MeshLambertMaterial({
+  private iceMat = new MeshLambertMaterial({
     color: '#d9f1ff',
-    emissive: '#6fb7d6',
-    emissiveIntensity: 0.2,
     transparent: true,
     opacity: 0.8,
     polygonOffset: true,
@@ -60,34 +58,18 @@ export class HazardsSystem extends BaseSystem {
 
   protected setup(): void {
     const { course, world } = this.session;
-    this.boulderGeo = this.keep(rockGeometry(1, '#7a746c'));
-    this.smallRockGeo = this.keep(rockGeometry(2, '#857f77'));
+    const geo = new PropGeometry(world.palette);
+    this.boulderGeo = this.keep(geo.rock(1));
+    this.smallRockGeo = this.keep(geo.rock(2));
+    this.mudMat.color.copy(world.palette.trail[1]).multiplyScalar(0.6);
+    this.iceMat.color.copy(world.palette.snow[1]);
     const p = createRoadPoint();
-    for (const h of course.track.hazards) {
+    for (const h of course.def.hazards) {
       const s = h.at * course.road.length;
       if (course.road.isBridgeAt(s, 15)) continue;
       const def = hazardDefs[h.kind];
       course.road.pointAt(s, p);
-      if (h.kind === 'log') {
-        const off = h.offset ?? 0;
-        const cx = p.x + p.tz * off;
-        const cz = p.z - p.tx * off;
-        const y = course.terrain.groundHeight(cx, cz, p.y + 2);
-        const geo = this.keep(logGeometry());
-        const log = new Mesh(geo, this.rockMat);
-        const angle = Math.atan2(p.tx, p.tz) + Math.PI / 2 + 0.25;
-        log.position.set(cx, y - 0.1, cz);
-        log.rotation.y = angle - Math.PI / 2;
-        log.castShadow = true;
-        this.group.add(log);
-        const dx = Math.sin(angle) * 3.4;
-        const dz = Math.cos(angle) * 3.4;
-        const c = world.colliders.addDynamic('hazard', cx, cz, def.radius, y - 1, y + 0.9);
-        c.ax = cx - dx;
-        c.az = cz - dz;
-        c.bx = cx + dx;
-        c.bz = cz + dz;
-      } else if (h.kind === 'mudPool' || h.kind === 'icePatch') {
+      if (h.kind === 'mudPool' || h.kind === 'icePatch') {
         const patch: SurfacePatch = { x: p.x, z: p.z, radius: def.radius, surface: def.surface! };
         course.terrain.patches.push(patch);
         this.patches.push(patch);
@@ -226,7 +208,7 @@ export class HazardsSystem extends BaseSystem {
       r.collider.yMax = r.pos.y + r.radius;
       r.collider.vx = r.vel.x;
       r.collider.vz = r.vel.z;
-      if (r.life <= 0 || r.pos.y < terrain.mountain.def.lakeLevel - 5) this.removeRock(i);
+      if (r.life <= 0 || r.pos.y < terrain.mountain.def.lake.level - 5) this.removeRock(i);
     }
   }
 

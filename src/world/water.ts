@@ -1,33 +1,33 @@
 import {
   BufferGeometry,
-  CircleGeometry,
-  Color,
   Float32BufferAttribute,
   Group,
   Mesh,
   MeshLambertMaterial,
+  RingGeometry,
 } from 'three';
+import type { ResolvedPalette } from '../data/palette';
 import type { Course } from '../terrain/course';
 
 /**
- * Lake plane and river ribbon. Gentle animated waves are added in the vertex shader through
- * onBeforeCompile (no CPU work per frame besides one uniform).
+ * Lake and river ribbons in the palette's water colour. Gentle animated waves come from the
+ * vertex shader (onBeforeCompile), so there is no CPU work per frame besides one uniform.
  */
 export class Water {
   readonly group = new Group();
   private readonly uniforms = { uTime: { value: 0 } };
   private readonly material: MeshLambertMaterial;
 
-  constructor(course: Course, tint: string) {
+  constructor(course: Course, palette: ResolvedPalette) {
     this.group.name = 'water';
-    const color = new Color('#3f8fb0').lerp(new Color(tint), 0.25);
+    const color = palette.water[0];
     this.material = new MeshLambertMaterial({
       color,
       transparent: true,
-      opacity: 0.82,
+      opacity: 0.86,
       flatShading: true,
-      emissive: color,
-      emissiveIntensity: 0.12,
+      emissive: palette.water[1],
+      emissiveIntensity: 0.25,
     });
     this.material.onBeforeCompile = (shader) => {
       shader.uniforms.uTime = this.uniforms.uTime;
@@ -37,48 +37,52 @@ export class Water {
           '#include <begin_vertex>',
           `#include <begin_vertex>
          vec4 wp = modelMatrix * vec4(position, 1.0);
-         transformed.y += sin(wp.x * 0.15 + uTime * 1.3) * 0.12 + cos(wp.z * 0.12 + uTime * 0.9) * 0.12;`,
+         transformed.y += sin(wp.x * 0.11 + uTime * 1.1) * 0.15 + cos(wp.z * 0.09 + uTime * 0.8) * 0.15;`,
         );
     };
-    const m = course.mountain;
-    const lake = new Mesh(
-      new CircleGeometry(m.def.lakeRadius * 2.4, 48, 0, Math.PI * 2).rotateX(-Math.PI / 2),
-      this.material,
-    );
-    lake.position.set(0, m.def.lakeLevel, m.lakeCenterZ);
-    lake.receiveShadow = true;
-    this.group.add(lake);
+    const lake = course.def.lake;
+    const geo = new RingGeometry(0, lake.radius * 1.25, 40, 10).rotateX(-Math.PI / 2);
+    geo.scale(1, 1, 1 / 1.15);
+    const lakeMesh = new Mesh(geo, this.material);
+    lakeMesh.position.set(lake.x, lake.level, lake.z);
+    lakeMesh.receiveShadow = true;
+    this.group.add(lakeMesh);
 
-    if (m.river) {
-      const r = m.river;
-      void r;
+    const m = course.mountain;
+    for (const river of m.rivers) {
       const pos: number[] = [];
       const idx: number[] = [];
-      let row = 0;
-      for (let z = 0; z <= m.riverEndZ; z += 6) {
-        if (m.riverStrength(z) < 0.15) {
-          if (row > 0) break;
-          continue;
+      const n = river.x.length;
+      for (let i = 0; i < n; i++) {
+        const a = Math.max(0, i - 1);
+        const b = Math.min(n - 1, i + 1);
+        let tx = river.x[b] - river.x[a];
+        let tz = river.z[b] - river.z[a];
+        const l = Math.hypot(tx, tz) || 1;
+        tx /= l;
+        tz /= l;
+        const w = river.width * 0.5 + 1;
+        const level = m.waterLevel(river.x[i], river.z[i]);
+        pos.push(
+          river.x[i] + tz * w,
+          level,
+          river.z[i] - tx * w,
+          river.x[i] - tz * w,
+          level,
+          river.z[i] + tx * w,
+        );
+        if (i > 0) {
+          const k = (i - 1) * 2;
+          idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3);
         }
-        const x = m.riverX(z);
-        const level = m.waterLevel(x, z);
-        const w = m.river.width * 0.5 + 1.2;
-        pos.push(x - w, level, z, x + w, level, z);
-        if (row > 0) {
-          const a = (row - 1) * 2;
-          idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
-        }
-        row++;
       }
-      if (row > 1) {
-        const geo = new BufferGeometry();
-        geo.setAttribute('position', new Float32BufferAttribute(pos, 3));
-        geo.setIndex(idx);
-        geo.computeVertexNormals();
-        const river = new Mesh(geo, this.material);
-        river.receiveShadow = true;
-        this.group.add(river);
-      }
+      const g = new BufferGeometry();
+      g.setAttribute('position', new Float32BufferAttribute(pos, 3));
+      g.setIndex(idx);
+      g.computeVertexNormals();
+      const mesh = new Mesh(g, this.material);
+      mesh.receiveShadow = true;
+      this.group.add(mesh);
     }
   }
 

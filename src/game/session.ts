@@ -5,7 +5,7 @@ import { EventBus } from '../core/eventBus';
 import type { GameEvents } from '../core/events';
 import type { MedalId } from '../core/save';
 import { timesOfDay, weathers } from '../data/environment';
-import type { ModeDef, TimeOfDayId, TrackDef, WeatherId } from '../data/types';
+import type { ModeDef, TimeOfDayId, MountainDef, WeatherId } from '../data/types';
 import { Course } from '../terrain/course';
 import { createRoadPoint, createRoadQuery } from '../terrain/road';
 import { createGroundSample } from '../terrain/terrain';
@@ -20,7 +20,7 @@ import { AudioDirector } from '../audio/director';
 import type { DriveState } from '../input/actions';
 
 export interface RunConfig {
-  track: TrackDef;
+  mountain: MountainDef;
   mode: ModeDef;
   carId: string;
   time: TimeOfDayId;
@@ -69,7 +69,7 @@ const up = new Vector3();
 const left = new Vector3();
 
 /**
- * Everything that exists for one run on one track: world, vehicle, camera, effects, audio
+ * Everything that exists for one descent of a mountain: world, vehicle, camera, effects, audio
  * and the gameplay systems chosen by the mode. Created by the Loading state, driven by
  * the Playing state.
  */
@@ -173,7 +173,7 @@ export class RunSession {
   /** Builds course, world and session incrementally (for the loading screen). */
   static *create(ctx: GameContext, cfg: RunConfig): Generator<BuildStep, RunSession> {
     yield { stage: 'loading.terrain', progress: 0 };
-    const course = new Course(cfg.track);
+    const course = new Course(cfg.mountain);
     const world = new World({
       course,
       time: timesOfDay[cfg.time],
@@ -314,17 +314,26 @@ export class RunSession {
     const p = ph.position;
     const q = this.course.road.query(p.x, p.z, this.q);
     if (this.phase === 'running') {
-      if (q.found && q.distance < 45 && q.s > this.progressS - 40 && q.s < this.progressS + 330) {
+      // Progress along the main trail (only used for the autopilot and statistics).
+      if (
+        q.found &&
+        q.trail === 0 &&
+        q.distance < 60 &&
+        q.s > this.progressS - 60 &&
+        q.s < this.progressS + 600
+      ) {
         this.progressS = Math.max(this.progressS, q.s);
       }
-      if (this.progressS >= this.course.finishS) this.finish();
+      // The descent ends when the car reaches the arrival zone at the base.
+      if (this.course.inBase(p.x, p.z)) this.finish();
       this.sampleSafeSpot(dt);
       this.stats.altitudeDrop = Math.max(this.stats.altitudeDrop, this.summitAltitude - p.y);
     }
     // Automatic resets: upside down and stopped, deep water, lost off the map.
     const ar = config.gameplay.autoReset;
     const terrainY = this.course.terrain.height(p.x, p.z);
-    const lost = !q.found || q.distance > 400 || p.y < terrainY - 6;
+    const half = this.course.def.halfSize;
+    const lost = Math.max(Math.abs(p.x), Math.abs(p.z)) > half * 1.02 || p.y < terrainY - 6;
     this.offMapTime = lost ? this.offMapTime + dt : 0;
     this.waterTime = ph.submerged > 0.7 ? this.waterTime + dt : 0;
     if (

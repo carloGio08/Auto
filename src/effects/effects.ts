@@ -30,7 +30,7 @@ export class Effects {
     private readonly session: RunSession,
     preset: QualityPreset,
   ) {
-    const sprite = session.world.textures.particle;
+    const sprite = session.world.particleTexture;
     this.dust = new ParticlePool(preset.particles, sprite, false);
     this.sparks = new ParticlePool(Math.round(preset.particles * 0.35), sprite, true);
     session.world.scene.add(this.dust.points, this.sparks.points);

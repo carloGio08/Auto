@@ -85,7 +85,7 @@ export class Sky {
     const grey = new Color('#9aa3ad');
     const mixGrey = (c: string): Color => new Color(c).lerp(grey, weather.overcast);
     this.dome = new Mesh(
-      new SphereGeometry(3000, 32, 16),
+      new SphereGeometry(5000, 32, 16),
       new ShaderMaterial({
         uniforms: {
           topColor: { value: mixGrey(time.skyTop) },
@@ -112,7 +112,7 @@ export class Sky {
     for (let i = 0; i < 900; i++) {
       const v = new Vector3(rng.range(-1, 1), rng.range(0.05, 1), rng.range(-1, 1))
         .normalize()
-        .multiplyScalar(2800);
+        .multiplyScalar(4800);
       starPos.push(v.x, v.y, v.z);
     }
     const starGeo = new BufferGeometry();
@@ -160,10 +160,10 @@ export class Sky {
     );
     for (let i = 0; i < n; i++) {
       this.cloudData.push({
-        x: center.x + rng.range(-1400, 1400),
-        y: rng.range(520, 760) + center.y * 0.3,
-        z: center.z + rng.range(-1400, 1400),
-        s: rng.range(28, 60),
+        x: center.x + rng.range(-6000, 6000),
+        y: rng.range(2300, 3100),
+        z: center.z + rng.range(-6000, 6000),
+        s: rng.range(90, 200),
         r: rng.range(0, Math.PI * 2),
         speed: rng.range(1.5, 4),
       });
@@ -177,16 +177,16 @@ export class Sky {
     const peaks = 46;
     for (let i = 0; i < peaks; i++) {
       const a = (i / peaks) * Math.PI * 2 + rng.range(-0.05, 0.05);
-      const r = rng.range(1700, 2300);
-      const h = rng.range(380, 900);
-      const cone = new ConeGeometry(rng.range(260, 480), h, 5 + (i % 3), 1);
+      const r = rng.range(9000, 11000);
+      const h = rng.range(1600, 3600);
+      const cone = new ConeGeometry(rng.range(1300, 2300), h, 5 + (i % 3), 1);
       const pos = cone.getAttribute('position');
       for (let k = 0; k < pos.count; k++) {
         if (pos.getY(k) > h / 2 - 1) continue;
         pos.setX(k, pos.getX(k) * rng.range(0.8, 1.2));
         pos.setZ(k, pos.getZ(k) * rng.range(0.8, 1.2));
       }
-      cone.translate(center.x + Math.cos(a) * r, h / 2 - 40, center.z + Math.sin(a) * r);
+      cone.translate(center.x + Math.cos(a) * r, h / 2 - 100, center.z + Math.sin(a) * r);
       ring.push(cone.toNonIndexed());
       cone.dispose();
     }
@@ -209,9 +209,6 @@ export class Sky {
     );
     this.backdrop.renderOrder = -5;
     this.group.add(this.backdrop);
-    // Snow caps on the backdrop.
-    if (weather.overcast < 0.6)
-      this.backdrop.material = this.backdrop.material as MeshLambertMaterial;
   }
 
   private updateClouds(t: number): void {

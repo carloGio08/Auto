@@ -33,8 +33,8 @@ export class MenuBackdrop {
   };
 
   constructor(private readonly ctx: GameContext) {
-    const track = ctx.registries.tracks.all()[0];
-    const course = new Course(track);
+    const mountain = ctx.registries.mountains.all()[0];
+    const course = new Course(mountain);
     this.world = new World({
       course,
       time: timesOfDay.sunset,
@@ -43,14 +43,14 @@ export class MenuBackdrop {
     });
     this.world.buildNow();
     // Park the car on the outside of the first bend, facing down the mountain.
-    const p = course.road.pointAt(course.startS + 82, createRoadPoint());
+    const p = course.road.pointAt(course.startS + 14, createRoadPoint());
     const side = -1;
     const off = side * (p.halfWidth - 1.5);
     this.carPos.set(p.x + p.tz * off, 0, p.z - p.tx * off);
     this.carPos.y = course.terrain.groundHeight(this.carPos.x, this.carPos.z, p.y + 2);
     this.downhill.set(p.tx, 0, p.tz);
     this.car = this.makeCar();
-    this.camera = new PerspectiveCamera(55, ctx.renderer.width / ctx.renderer.height, 0.3, 4200);
+    this.camera = new PerspectiveCamera(55, ctx.renderer.width / ctx.renderer.height, 0.3, 13000);
     this.world.update(0, this.carPos, this.carPos, 50);
     window.addEventListener('pointermove', this.onPointer);
     window.addEventListener('deviceorientation', this.onOrientation);

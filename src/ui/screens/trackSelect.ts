@@ -1,6 +1,6 @@
 import type { GameContext } from '../../core/context';
-import type { ModeId, TimeOfDayId, TrackDef, WeatherId } from '../../data/types';
-import { isTrackUnlocked } from '../../game/progression';
+import type { ModeId, TimeOfDayId, MountainDef, WeatherId } from '../../data/types';
+import { isMountainUnlocked } from '../../game/progression';
 import type { I18nKey } from '../../i18n/en';
 import { h } from '../dom';
 import { button, header, medalBadge, stepper } from '../components';
@@ -8,7 +8,7 @@ import { icon } from '../icons';
 import type { Screen } from '../uiManager';
 
 export interface TrackChoice {
-  trackId: string;
+  mountainId: string;
   mode: ModeId;
   time: TimeOfDayId | 'default';
   weather: WeatherId | 'default';
@@ -23,11 +23,11 @@ export function createTrackSelect(
   const t = ctx.i18n.t;
   const tk = ctx.i18n.tk;
   const save = ctx.save.data;
-  const tracks = ctx.registries.tracks.all();
+  const tracks = ctx.registries.mountains.all();
   let selected =
-    tracks.find((tr) => tr.id === save.lastTrack && isTrackUnlocked(ctx, tr.id)) ?? tracks[0];
+    tracks.find((tr) => tr.id === save.lastMountain && isMountainUnlocked(ctx, tr.id)) ?? tracks[0];
   const choice: TrackChoice = {
-    trackId: selected.id,
+    mountainId: selected.id,
     mode: 'freeDescent',
     time: save.lastTime,
     weather: save.lastWeather,
@@ -35,13 +35,13 @@ export function createTrackSelect(
 
   const details = h('div', { class: 'track-details' });
   const cards = tracks.map((tr) => {
-    const unlocked = isTrackUnlocked(ctx, tr.id);
+    const unlocked = isMountainUnlocked(ctx, tr.id);
     const rec = save.records[`${tr.id}:freeDescent`];
     const card = h(
       'button',
       { class: `track-card ${unlocked ? '' : 'locked'}`, type: 'button', 'aria-pressed': 'false' },
       h('span', { class: 'track-name' }, tk(tr.nameKey)),
-      h('span', { class: 'track-diff' }, '◆'.repeat(tr.difficulty) + '◇'.repeat(3 - tr.difficulty)),
+      h('span', { class: 'track-diff' }, `▲ ${Math.round(tr.summit.height)} m`),
       h(
         'span',
         { class: 'track-best' },
@@ -53,7 +53,7 @@ export function createTrackSelect(
     );
     card.addEventListener('click', () => {
       if (!unlocked) {
-        const prev = ctx.registries.tracks.get(tr.unlockAfter!);
+        const prev = ctx.registries.mountains.get(tr.unlockAfter!);
         ctx.ui.toast(t('tracks.locked', { track: tk(prev.nameKey) }), 'bad');
         ctx.audio.sfx?.uiError();
         return;
@@ -64,9 +64,9 @@ export function createTrackSelect(
     return card;
   });
 
-  const select = (tr: TrackDef): void => {
+  const select = (tr: MountainDef): void => {
     selected = tr;
-    choice.trackId = tr.id;
+    choice.mountainId = tr.id;
     cards.forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.track === tr.id)));
     const m = tr.medals;
     details.replaceChildren(

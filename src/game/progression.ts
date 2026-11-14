@@ -2,7 +2,7 @@ import { config } from '../config';
 import type { GameContext } from '../core/context';
 import type { MedalId } from '../core/save';
 import type { AchievementDef } from '../data/types';
-import { todayKey } from '../data/tracks';
+import { todayKey } from '../data/mountains';
 import type { RunSession, RunSummary } from './session';
 
 const MEDAL_RANK: Record<MedalId, number> = { none: 0, bronze: 1, silver: 2, gold: 3 };
@@ -28,7 +28,7 @@ export function finalizeRun(ctx: GameContext, session: RunSession): RunSummary {
   const save = ctx.save.data;
   const { cfg } = session;
   const finished = session.phase === 'finished';
-  const record = ctx.save.record(cfg.track.id, cfg.mode.id);
+  const record = ctx.save.record(cfg.mountain.id, cfg.mode.id);
   const previousBest = record.runs > 0 ? record.bestScore : null;
   record.runs++;
   let newRecord = false;
@@ -78,9 +78,9 @@ export function finalizeRun(ctx: GameContext, session: RunSession): RunSummary {
 }
 
 /** Whether a track is unlocked for the current save. */
-export function isTrackUnlocked(ctx: GameContext, trackId: string): boolean {
-  const track = ctx.registries.tracks.get(trackId);
-  if (!track.unlockAfter) return true;
-  const rec = ctx.save.data.records[`${track.unlockAfter}:freeDescent`];
+export function isMountainUnlocked(ctx: GameContext, mountainId: string): boolean {
+  const mountain = ctx.registries.mountains.get(mountainId);
+  if (!mountain.unlockAfter) return true;
+  const rec = ctx.save.data.records[`${mountain.unlockAfter}:freeDescent`];
   return !!rec && rec.runs > 0 && rec.bestScore > 0;
 }
