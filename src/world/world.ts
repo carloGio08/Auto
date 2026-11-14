@@ -198,7 +198,12 @@ export class World {
     this.structures.build();
     this.scene.add(this.structures.group);
     yield { stage: 'loading.props', progress: 0.75 };
-    this.props = new Props(course, this.colliders, this.preset, this.palette, backend);
+    const sun = new Vector3().setFromSphericalCoords(
+      1,
+      Math.PI / 2 - this.time.sunElevation,
+      this.time.sunAzimuth,
+    );
+    this.props = new Props(course, this.colliders, this.preset, this.palette, backend, sun);
     this.scene.add(this.props.group);
     if (async)
       for (const p of this.props.prebuildAsync(st.x, st.z))

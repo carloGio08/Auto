@@ -1,4 +1,4 @@
-import { Color, type BufferGeometry } from 'three';
+import { Color, Vector3, type BufferGeometry } from 'three';
 import {
   BoxGeometry,
   ConeGeometry,
@@ -11,7 +11,7 @@ import {
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Rng } from '../math/rng';
 import type { ResolvedPalette } from '../data/palette';
-import type { TreeShape, UndergrowthKind } from '../data/vegetation';
+import type { UndergrowthKind } from '../data/vegetation';
 
 /** Paints a (non-indexed) geometry with one colour; `alt` gives some faces the second tone. */
 function paint(
@@ -32,6 +32,56 @@ function paint(
       colors[(i + v) * 3] = c.r;
       colors[(i + v) * 3 + 1] = c.g;
       colors[(i + v) * 3 + 2] = c.b;
+    }
+  }
+  g.setAttribute('color', new Float32BufferAttribute(colors, 3));
+  g.deleteAttribute('uv');
+  return g;
+}
+
+const fn = new Vector3();
+const fa = new Vector3();
+const fb = new Vector3();
+const shadeC = new Color();
+
+/**
+ * Two-tone stylised shading in the vertex colours: each face gets a mix of `dark` and `light`
+ * from how much it faces the sun (horizontal part) and the sky; undersides go darkest.
+ * `lift` brightens (upper tiers catch more light).
+ */
+function shadeFaces(
+  geo: BufferGeometry,
+  dark: Color,
+  light: Color,
+  sun: Vector3,
+  lift = 0,
+): BufferGeometry {
+  const g = geo.index ? geo.toNonIndexed() : geo;
+  if (g !== geo) geo.dispose();
+  const pos = g.getAttribute('position');
+  const colors = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i += 3) {
+    fa.set(
+      pos.getX(i + 1) - pos.getX(i),
+      pos.getY(i + 1) - pos.getY(i),
+      pos.getZ(i + 1) - pos.getZ(i),
+    );
+    fb.set(
+      pos.getX(i + 2) - pos.getX(i),
+      pos.getY(i + 2) - pos.getY(i),
+      pos.getZ(i + 2) - pos.getZ(i),
+    );
+    fn.crossVectors(fa, fb).normalize();
+    let k = 0;
+    if (fn.y > -0.3) {
+      const side = fn.x * sun.x + fn.z * sun.z;
+      k = Math.min(1, Math.max(0, 0.32 + 0.75 * side + 0.2 * fn.y + lift));
+    }
+    shadeC.copy(dark).lerp(light, k);
+    for (let v = 0; v < 3; v++) {
+      colors[(i + v) * 3] = shadeC.r;
+      colors[(i + v) * 3 + 1] = shadeC.g;
+      colors[(i + v) * 3 + 2] = shadeC.b;
     }
   }
   g.setAttribute('color', new Float32BufferAttribute(colors, 3));
@@ -74,122 +124,86 @@ export type TreeTier = 'young' | 'medium' | 'old';
 export class PropGeometry {
   constructor(private readonly pal: ResolvedPalette) {}
 
-  private trunk(height: number, radius: number): BufferGeometry {
-    const t = new CylinderGeometry(radius * 0.7, radius, height, 5);
-    t.translate(0, height / 2, 0);
-    return paint(t, this.pal.wood[1]);
-  }
-
-  /** Pine of stacked cones. Origin at the trunk base, ~1 m reference trunk radius 0.2. */
+  /**
+   * Pine at the reference size of a tier (debris pieces): the stylised pine, scaled to
+   * 3.2 / 6.5 / 10.5 m tall and 0.45 × as wide.
+   */
   pine(tier: TreeTier, variant: number, snow = false): BufferGeometry {
-    const greens = [this.pal.foliage[2], this.pal.foliage[1], this.pal.foliage[0]];
-    const tiers = tier === 'young' ? 1 : tier === 'medium' ? 2 : 3;
-    const height = tier === 'young' ? 3.2 : tier === 'medium' ? 6.5 : 10.5;
-    const parts: BufferGeometry[] = [
-      this.trunk(height * 0.3, tier === 'old' ? 0.42 : tier === 'medium' ? 0.28 : 0.16),
-    ];
-    for (let k = 0; k < tiers; k++) {
-      const f = k / tiers;
-      const r = (tier === 'young' ? 1.1 : tier === 'medium' ? 2 : 2.8) * (1 - f * 0.32);
-      const h = height * (tiers === 1 ? 0.8 : 0.5) * (1 - f * 0.2);
-      const cone = new ConeGeometry(r, h, 6, 1);
-      cone.rotateY(variant * 0.7 + k);
-      cone.translate(0, height * 0.22 + f * height * 0.5 + h / 2, 0);
-      wobble(cone, 0.12 + 0.05 * k, variant * 13 + k);
-      const c = greens[(variant + k) % greens.length];
-      parts.push(paint(cone, c, greens[(variant + k + 1) % greens.length], 0.25, variant + k));
-      if (snow) {
-        const cap = new ConeGeometry(r * 0.55, h * 0.36, 6, 1);
-        cap.translate(0, height * 0.22 + f * height * 0.5 + h * 0.84, 0);
-        parts.push(paint(cap, this.pal.snow[4]));
-      }
-    }
-    return merge(parts);
+    const hgt = tier === 'young' ? 3.2 : tier === 'medium' ? 6.5 : 10.5;
+    const form = tier === 'young' ? 0 : tier === 'medium' ? 1 : 2;
+    const g = this.pineTree(
+      form,
+      this.pal.foliage[0],
+      this.pal.foliage[3],
+      new Vector3(0.6, 0.6, 0.5).normalize(),
+      snow,
+      variant,
+    );
+    g.scale(hgt * 0.45, hgt, hgt * 0.45);
+    g.computeBoundingSphere();
+    return g;
   }
 
   /**
-   * Full tree of a species at unit size: 1 m tall, crown 1 m wide, origin at the trunk base
-   * (instances scale it to the real width and height). `snowy` adds snow on the crown.
+   * Stylised low-poly pine at unit size (1 m tall, crown 1 m wide, origin at the trunk base;
+   * instances scale it to the real width and height): a short visible trunk and 4–6 stacked
+   * faceted cone tiers, wider and taller at the bottom, each turned and slightly irregular.
+   * `form` 0 = young (4 tiers, stocky), 1 = medium (5), 2 = tall (6, slender). Two greens per
+   * tree in the vertex colours: faces turned to the sun lighter, undersides and the shaded
+   * side darker (instances are not turned around Y, so the baked sun side stays true).
    */
-  species(shape: TreeShape, tones: Color[], variant: number, snowy: boolean): BufferGeometry {
+  pineTree(
+    form: number,
+    dark: Color,
+    light: Color,
+    sun: Vector3,
+    snowy: boolean,
+    seed: number,
+    spruce = false,
+  ): BufferGeometry {
     const parts: BufferGeometry[] = [];
-    const trunk = (h: number, r: number): void => {
-      const t = new CylinderGeometry(r * 0.7, r, h, 5);
-      t.translate(0, h / 2, 0);
-      parts.push(paint(t, this.pal.wood[1]));
-    };
-    const crownCone = (y0: number, h: number, r: number, k: number): void => {
-      const cone = new ConeGeometry(r, h, 6, 1);
-      cone.rotateY(variant * 0.7 + k);
-      cone.translate(0, y0 + h / 2, 0);
-      wobble(cone, 0.03, variant * 13 + k);
-      parts.push(paint(cone, tones[k % tones.length], tones[(k + 1) % tones.length], 0.3, k));
+    const rng = new Rng(4100 + seed * 31 + form * 7);
+    const n = 4 + form + (spruce ? 1 : 0);
+    const trunkVis = form === 0 ? 0.1 : 0.12;
+    const t = new CylinderGeometry(0.024, 0.036, trunkVis + 0.22, 5);
+    t.translate(0, (trunkVis + 0.22) / 2, 0);
+    parts.push(paint(t, this.pal.wood[0], this.pal.wood[1], 0.5, seed));
+    const topH = spruce ? 0.24 : 0.28;
+    const span = 1 - trunkVis - topH;
+    for (let k = 0; k < n; k++) {
+      const f = n === 1 ? 0 : k / (n - 1);
+      const y0 = trunkVis + span * f * 0.94;
+      const h = Math.min(topH + (1 - f) * (spruce ? 0.16 : 0.2) + rng.range(-0.02, 0.02), 1 - y0);
+      const r = 0.5 * (1 - f * (spruce ? 0.8 : 0.74)) * rng.range(0.93, 1.05);
+      const cone = new ConeGeometry(r, h, 7, 1);
+      cone.rotateY(rng.range(0, Math.PI * 2));
+      cone.translate(rng.range(-0.012, 0.012), y0 + h / 2, rng.range(-0.012, 0.012));
+      wobble(cone, 0.022, seed * 13 + k + form * 101);
+      parts.push(shadeFaces(cone, dark, light, sun, 0.06 * f));
       if (snowy) {
-        const cap = new ConeGeometry(r * 0.5, h * 0.32, 6, 1);
-        cap.rotateY(variant * 0.7 + k);
-        cap.translate(0, y0 + h * 0.84, 0);
-        parts.push(paint(cap, this.pal.snow[4]));
-      }
-    };
-    if (shape === 'spruce' || shape === 'larch') {
-      const n = shape === 'spruce' ? 5 : 4;
-      trunk(0.22, 0.035);
-      for (let k = 0; k < n; k++) {
-        const f = k / n;
-        crownCone(0.12 + f * 0.7, 0.3 - f * 0.06, 0.5 * (1 - f * 0.75), k);
-      }
-    } else if (shape === 'pine') {
-      trunk(0.45, 0.04);
-      for (let k = 0; k < 3; k++) {
-        const f = k / 3;
-        crownCone(0.38 + f * 0.36, 0.34 - f * 0.08, 0.5 * (1 - f * 0.45), k);
-      }
-    } else if (shape === 'broadleaf') {
-      trunk(0.45, 0.045);
-      const rng = new Rng(300 + variant);
-      for (let i = 0; i < 4; i++) {
-        const o = new OctahedronGeometry(0.27 - i * 0.025, 0);
-        o.scale(1, 1.1, 1);
-        o.rotateY(rng.next() * 3);
-        o.translate(rng.range(-0.14, 0.14), 0.52 + i * 0.12, rng.range(-0.14, 0.14));
-        wobble(o, 0.03, variant * 7 + i);
-        parts.push(paint(o, tones[i % tones.length], tones[(i + 1) % tones.length], 0.3, i));
-      }
-    } else {
-      // Dwarf mountain pine: a low, wide clump.
-      const rng = new Rng(700 + variant);
-      for (let i = 0; i < 4; i++) {
-        const o = new OctahedronGeometry(0.3, 0);
-        o.scale(1, 0.75, 1);
-        o.translate(rng.range(-0.22, 0.22), 0.35 + rng.range(0, 0.2), rng.range(-0.22, 0.22));
-        parts.push(paint(o, tones[i % tones.length], tones[(i + 1) % tones.length], 0.3, i));
-      }
-      if (snowy) {
-        const cap = new OctahedronGeometry(0.28, 0);
-        cap.scale(1, 0.45, 1);
-        cap.translate(0, 0.62, 0);
-        parts.push(paint(cap, this.pal.snow[4]));
+        const ch = h * 0.34;
+        const cap = new ConeGeometry(r * 0.48, ch, 7, 1);
+        cap.rotateY(rng.range(0, Math.PI * 2));
+        cap.translate(0, y0 + h - ch / 2 + 0.005, 0);
+        parts.push(paint(cap, this.pal.snow[4], this.pal.snow[2], 0.35, k));
       }
     }
     return merge(parts);
   }
 
-  /** Simplified tree for the middle distance: one crown shape, no trunk detail. */
-  speciesLow(shape: TreeShape, tone: Color): BufferGeometry {
-    let g: BufferGeometry;
-    if (shape === 'broadleaf') {
-      g = new OctahedronGeometry(0.42, 0);
-      g.scale(1, 1.15, 1);
-      g.translate(0, 0.58, 0);
-    } else if (shape === 'dwarf') {
-      g = new OctahedronGeometry(0.5, 0);
-      g.scale(1, 0.6, 1);
-      g.translate(0, 0.32, 0);
-    } else {
-      g = new ConeGeometry(0.42, 0.9, 5, 1);
-      g.translate(0, 0.55, 0);
+  /** Middle-distance pine: three tiers, same silhouette and two-tone shading. */
+  pineLow(dark: Color, light: Color, sun: Vector3): BufferGeometry {
+    const parts: BufferGeometry[] = [];
+    for (let k = 0; k < 3; k++) {
+      const f = k / 2;
+      const y0 = 0.1 + f * 0.5;
+      const h = Math.min(0.3 + (1 - f) * 0.18, 1 - y0);
+      const cone = new ConeGeometry(0.5 * (1 - f * 0.72), h, 6, 1);
+      cone.rotateY(k * 0.9);
+      cone.translate(0, y0 + h / 2, 0);
+      parts.push(shadeFaces(cone, dark, light, sun, 0.05 * f));
     }
-    return merge([paint(g, tone)]);
+    return merge(parts);
   }
 
   /** Canopy mass of a patch of forest (far LOD): unit radius and height, base at 0. */

@@ -215,10 +215,10 @@ export const config = {
         propDistance: 420,
         /** Trees: detailed within (m), canopy masses up to (m), undergrowth within (m),
          * visible trees and canopy masses at most. */
-        treeNear: 120,
+        treeNear: 90,
         canopyDistance: 1500,
         undergrowthDistance: 60,
-        treeLimit: 3000,
+        treeLimit: 1500,
         canopyLimit: 3000,
         /** Far-field ring: grid spacing (m) and half extent (m). */
         farSpacing: 192,
@@ -241,10 +241,10 @@ export const config = {
         propDistance: 650,
         /** Trees: detailed within (m), canopy masses up to (m), undergrowth within (m),
          * visible trees and canopy masses at most. */
-        treeNear: 170,
+        treeNear: 130,
         canopyDistance: 2400,
         undergrowthDistance: 100,
-        treeLimit: 5000,
+        treeLimit: 3500,
         canopyLimit: 6000,
         /** Far-field ring: grid spacing (m) and half extent (m). */
         farSpacing: 128,
@@ -267,7 +267,7 @@ export const config = {
         propDistance: 900,
         /** Trees: detailed within (m), canopy masses up to (m), undergrowth within (m),
          * visible trees and canopy masses at most. */
-        treeNear: 230,
+        treeNear: 180,
         canopyDistance: 3200,
         undergrowthDistance: 140,
         treeLimit: 8000,

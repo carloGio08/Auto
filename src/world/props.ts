@@ -58,7 +58,15 @@ export interface PropCell {
   trees: TreeRef[];
   /** Detailed meshes (near): one per species variant, plus stumps. */
   near: InstancedMesh[] | null;
-  slots: { mesh: InstancedMesh; slot: number }[];
+  /** Instance slot of each tree in the near meshes (null: not instanced, out of range). */
+  slots: ({ mesh: InstancedMesh; slot: number } | null)[];
+  /** Tree indices per near mesh (same order as `near`, stumps excluded). */
+  groups: number[][];
+  /** Camera position of the last fill and the number of instanced trees. */
+  nearX: number;
+  nearZ: number;
+  nearCount: number;
+  nearReach: number;
   rocks: InstancedMesh[] | null;
   under: InstancedMesh[] | null;
   colliders: Collider[] | null;
@@ -72,6 +80,7 @@ const q = new Quaternion();
 const sv = new Vector3();
 const pv = new Vector3();
 const yAxis = new Vector3(0, 1, 0);
+const leanAxis = new Vector3();
 const tmpC = new Color();
 
 interface FadeUniforms {
@@ -170,6 +179,8 @@ export class Props {
   private globalDirty = true;
   /** Middle-range scale under the tree limit (1 = preset distance). */
   midScale = 1;
+  /** Detailed-range scale, shrunk only once the middle range is at its minimum. */
+  nearScale = 1;
   /** Visible tree instances (near + middle). */
   visibleTrees = 0;
   private shadows: boolean;
@@ -185,17 +196,22 @@ export class Props {
     private preset: QualityPreset,
     palette: ResolvedPalette,
     private readonly backend: PatchBackend | null = null,
+    /** Direction to the sun: baked into the two-tone colours of the pines. */
+    sun: Vector3 = new Vector3(0.5, 0.7, 0.5).normalize(),
   ) {
     this.group.name = 'props';
     const g = new PropGeometry(palette);
-    for (const sp of treeSpecies) {
-      const tones = sp.foliage.tones.map((t) => palette[sp.foliage.key][t]);
-      this.speciesGeo.push(
-        g.species(sp.shape, tones, 0, false),
-        g.species(sp.shape, tones, 1, true),
-      );
-      this.lowGeo.push(g.speciesLow(sp.shape, tones[0]));
-    }
+    // Per species: 3 forms (young, medium, tall) × plain / snowy, and a middle-distance model.
+    treeSpecies.forEach((sp, si) => {
+      const dark = palette[sp.foliage.key][sp.foliage.tones[0]];
+      const light = palette[sp.foliage.key][sp.foliage.tones[1]];
+      for (let form = 0; form < 3; form++)
+        for (let snowy = 0; snowy < 2; snowy++)
+          this.speciesGeo.push(
+            g.pineTree(form, dark, light, sun, snowy === 1, si * 5 + form, sp.shape === 'spruce'),
+          );
+      this.lowGeo.push(g.pineLow(dark, light, sun));
+    });
     this.rockGeo = ROCK_TYPES.map((t) =>
       t === 'rockSlab'
         ? g.rockSlab()
@@ -244,8 +260,8 @@ export class Props {
   private get ranges(): { near: number; mid: number; far: number; under: number; col: number } {
     const p = this.preset;
     return {
-      near: p.treeNear,
-      mid: Math.max(p.treeNear + 80, p.propDistance * this.midScale),
+      near: p.treeNear * this.nearScale,
+      mid: Math.max(p.treeNear * this.nearScale + 80, p.propDistance * this.midScale),
       far: p.canopyDistance,
       under: p.undergrowthDistance,
       col: config.world.colliderRadius,
@@ -282,6 +298,11 @@ export class Props {
       trees: [],
       near: null,
       slots: [],
+      groups: [],
+      nearX: 0,
+      nearZ: 0,
+      nearCount: 0,
+      nearReach: 0,
       rocks: null,
       under: null,
       colliders: null,
@@ -314,31 +335,36 @@ export class Props {
 
   // --- Near (detailed) ------------------------------------------------------------------
 
-  private buildNear(cell: PropCell): void {
-    if (cell.near || !cell.data?.full) return;
+  private buildNear(cell: PropCell, camX: number, camZ: number): void {
+    if (!cell.data?.full) return;
+    if (cell.near) {
+      // Refill when the camera has moved: only trees within the near range are instanced.
+      if (
+        Math.hypot(camX - cell.nearX, camZ - cell.nearZ) > 40 ||
+        Math.abs(this.ranges.near - cell.nearReach) > 8
+      )
+        this.fillNear(cell, camX, camZ);
+      return;
+    }
     this.ensureTrees(cell);
-    const t = cell.data.trees;
     const byGeo = new Map<number, number[]>();
     cell.trees.forEach((tr, i) => {
       const sp = treeSpecies[tr.species];
       const snowy = sp.snowCap !== undefined && tr.y > this.snowLine - sp.snowCap ? 1 : 0;
-      const gi = tr.species * 2 + snowy;
+      const form = tr.tier === 'young' ? 0 : tr.tier === 'medium' ? 1 : 2;
+      const gi = (tr.species * 3 + form) * 2 + snowy;
       const l = byGeo.get(gi) ?? [];
       l.push(i);
       byGeo.set(gi, l);
     });
     cell.near = [];
-    cell.slots = new Array(cell.trees.length);
+    cell.groups = [];
+    cell.slots = new Array(cell.trees.length).fill(null);
     for (const [gi, list] of byGeo) {
       const im = new InstancedMesh(this.speciesGeo[gi], this.nearMat, list.length);
-      list.forEach((ti, slot) => {
-        const k = ti * TREE_STRIDE;
-        this.compose(t[k + 2], t[k + 3], t[k + 4], t[k + 6], t[k + 5], t[k + 7]);
-        im.setMatrixAt(slot, m);
-        cell.slots[ti] = { mesh: im, slot };
-      });
       this.finish(im, true);
       cell.near.push(im);
+      cell.groups.push(list);
     }
     // Stumps: one slot per tree so breaking never allocates.
     const stumps = new InstancedMesh(this.stumpGeo, this.rockMat, Math.max(1, cell.trees.length));
@@ -346,11 +372,54 @@ export class Props {
     stumps.userData.stump = true;
     this.finish(stumps, false);
     cell.near.push(stumps);
+    this.fillNear(cell, camX, camZ);
+  }
+
+  /**
+   * Instances the trees of a near cell that lie within the near range (+ margin) of the
+   * camera: the GPU never processes the detailed models of trees that are faded out.
+   */
+  private fillNear(cell: PropCell, camX: number, camZ: number): void {
+    if (!cell.near || !cell.data) return;
+    const t = cell.data.trees;
+    const reach = this.ranges.near + 40;
+    const r2 = reach * reach;
+    cell.nearX = camX;
+    cell.nearZ = camZ;
+    cell.nearReach = this.ranges.near;
+    cell.nearCount = 0;
+    cell.slots.fill(null);
+    cell.groups.forEach((list, g) => {
+      const im = cell.near![g];
+      let n = 0;
+      for (const ti of list) {
+        const k = ti * TREE_STRIDE;
+        const dx = t[k + 2] - camX;
+        const dz = t[k + 4] - camZ;
+        if (dx * dx + dz * dz > r2) continue;
+        this.compose(t[k + 2], t[k + 3], t[k + 4], t[k + 6], t[k + 5], t[k + 7]);
+        im.setMatrixAt(n, m);
+        cell.slots[ti] = { mesh: im, slot: n };
+        n++;
+      }
+      im.count = n;
+      im.instanceMatrix.needsUpdate = true;
+      im.computeBoundingSphere();
+      cell.nearCount += n;
+    });
+    const stumps = cell.near[cell.near.length - 1];
+    stumps.count = 0;
     for (const tr of cell.trees) if (this.broken.has(tr.id)) this.applyBroken(tr);
   }
 
+  /**
+   * Tree instance matrix: never turned around Y (the sun side is baked in the colours), a
+   * slight lean (2–5°) towards a direction derived from `rot`, non-uniform width/height.
+   */
   private compose(x: number, y: number, z: number, w: number, h: number, rot: number): void {
-    q.setFromAxisAngle(yAxis, rot);
+    const lean = 0.035 + 0.05 * (rot * 7.31 - Math.floor(rot * 7.31));
+    leanAxis.set(Math.cos(rot), 0, Math.sin(rot));
+    q.setFromAxisAngle(leanAxis, lean);
     m.compose(pv.set(x, y, z), q, sv.set(w, h, w));
   }
 
@@ -371,6 +440,8 @@ export class Props {
     }
     cell.near = null;
     cell.slots = [];
+    cell.groups = [];
+    cell.nearCount = 0;
   }
 
   // --- Rocks, undergrowth, colliders ----------------------------------------------------
@@ -464,7 +535,8 @@ export class Props {
   private rebuildGlobal(camX: number, camZ: number): void {
     const r = this.ranges;
     const counts = this.mid.map(() => 0);
-    const cap = this.preset.treeLimit;
+    // Hard cap: the middle layer gets what the detailed trees leave of the preset limit.
+    const cap = Math.max(0, this.preset.treeLimit - this.nearTrees);
     let total = 0;
     const midR = r.mid + 60;
     for (const cell of this.cells.values()) {
@@ -475,7 +547,7 @@ export class Props {
         if (d > midR || d < r.near - 40) continue;
         if (this.broken.has(cell.key * 8192 + i)) continue;
         const sp = t[k];
-        if (counts[sp] >= cap) continue;
+        if (total >= cap) break;
         this.compose(t[k + 2], t[k + 3], t[k + 4], t[k + 6], t[k + 5], t[k + 7]);
         this.mid[sp].setMatrixAt(counts[sp]++, m);
         total++;
@@ -506,10 +578,14 @@ export class Props {
     this.far.count = nb;
     this.far.instanceMatrix.needsUpdate = true;
     colors.needsUpdate = true;
-    // Visible trees: detailed ones of the near cells plus the middle layer.
-    let near = 0;
-    for (const cell of this.cells.values()) if (cell.near) near += cell.trees.length;
-    this.visibleTrees = total + near;
+    this.visibleTrees = total + this.nearTrees;
+  }
+
+  /** Detailed trees currently instanced (within the near range). */
+  private get nearTrees(): number {
+    let n = 0;
+    for (const cell of this.cells.values()) if (cell.near) n += cell.nearCount;
+    return n;
   }
 
   // --- Streaming --------------------------------------------------------------------------
@@ -580,7 +656,7 @@ export class Props {
         continue;
       }
       if (!cell.data?.full) continue;
-      if (d < r.near + 30 + diag) this.buildNear(cell);
+      if (d < r.near + 30 + diag) this.buildNear(cell, camX, camZ);
       else if (d > r.near + 80 + diag) this.dropNear(cell);
       if (d < r.mid + 60 + diag) this.buildRocks(cell);
       else cell.rocks = this.dropList(cell.rocks);
@@ -600,8 +676,13 @@ export class Props {
       this.globalDirty = false;
       // Tree limit: shrink the middle range when over, relax it when well under.
       const limit = this.preset.treeLimit;
-      if (this.visibleTrees > limit) this.midScale = Math.max(0.35, this.midScale * 0.9);
-      else if (this.visibleTrees < limit * 0.8) this.midScale = Math.min(1, this.midScale * 1.05);
+      if (this.visibleTrees > limit) {
+        if (this.midScale > 0.35) this.midScale = Math.max(0.35, this.midScale * 0.9);
+        else this.nearScale = Math.max(0.5, this.nearScale * 0.92);
+      } else if (this.visibleTrees < limit * 0.8) {
+        if (this.nearScale < 1) this.nearScale = Math.min(1, this.nearScale * 1.04);
+        else this.midScale = Math.min(1, this.midScale * 1.05);
+      }
     }
   }
 
@@ -626,9 +707,11 @@ export class Props {
     const cell = t.cell;
     if (cell.near) {
       const slot = cell.slots[t.index];
-      m.makeScale(0, 0, 0);
-      slot.mesh.setMatrixAt(slot.slot, m);
-      slot.mesh.instanceMatrix.needsUpdate = true;
+      if (slot) {
+        m.makeScale(0, 0, 0);
+        slot.mesh.setMatrixAt(slot.slot, m);
+        slot.mesh.instanceMatrix.needsUpdate = true;
+      }
       const stumps = cell.near[cell.near.length - 1];
       if (stumps.count < stumps.instanceMatrix.count) {
         const k = Math.max(0.4, t.width * 0.06);
@@ -679,6 +762,7 @@ export class Props {
   setTreeScale(t: TreeRef, k: number): void {
     if (this.broken.has(t.id) || !t.cell.near) return;
     const slot = t.cell.slots[t.index];
+    if (!slot) return;
     const r = t.cell.data!.trees[t.index * TREE_STRIDE + 7];
     this.compose(t.x, t.y, t.z, t.width * k, t.height * k, r);
     slot.mesh.setMatrixAt(slot.slot, m);

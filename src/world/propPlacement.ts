@@ -3,7 +3,13 @@ import { Simplex2 } from '../math/noise';
 import { smoothstep } from '../math/util';
 import type { Course } from '../terrain/course';
 import { Mat } from '../terrain/biome';
-import { ecology, treeSpecies, undergrowth, type UndergrowthKind } from '../data/vegetation';
+import {
+  ecology,
+  MIN_TREE_HEIGHT,
+  treeSpecies,
+  undergrowth,
+  type UndergrowthKind,
+} from '../data/vegetation';
 
 /** Rock prop types (instanced per cell). */
 export const ROCK_TYPES = [
@@ -141,7 +147,10 @@ export function placeCell(
       const cl = cluster.fbm(x / ecology.clusterScale, z / ecology.clusterScale, 2);
       dens *= smoothstep(-0.35, 0.25, cl) * (0.75 + 0.5 * Math.max(0, cl));
       dens *= 1 - (1 - ecology.treeLineDensity) * smoothstep(0.75, 1.05, alt01);
-      // Dwarf pines and larches just above the tree line.
+      // A few lone trees in open meadows.
+      if (!dry && slope < ecology.maxSlope * 0.8 && alt01 < 0.95)
+        dens = Math.max(dens, ecology.loneTrees * (weights[Mat.Grass] + weights[Mat.Flowers]));
+      // Scattered larches just above the tree line.
       if (alt01 > 1 && alt01 < 1.2 && !dry && slope < ecology.maxSlope)
         dens = Math.max(
           dens,
@@ -288,7 +297,10 @@ export function placeCell(
       const age = ageRoll < 0.38 ? 0 : ageRoll < 0.82 ? 1 : 2;
       const range = treeSpecies[sp].heights[TREE_AGES[age]];
       const lineK = 1 - (1 - ecology.treeLineHeight) * smoothstep(0.8, 1.05, alt01);
-      const height = (range[0] + (range[1] - range[0]) * hash2(gi, gj, seed + 7)) * lineK;
+      const height = Math.max(
+        MIN_TREE_HEIGHT,
+        (range[0] + (range[1] - range[0]) * hash2(gi, gj, seed + 7)) * lineK,
+      );
       const width = height * treeSpecies[sp].width * (0.85 + 0.3 * hash2(gi, gj, seed + 8));
       trees.push(
         sp,

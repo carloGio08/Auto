@@ -10,7 +10,7 @@ import {
   type CellData,
 } from '../src/world/propPlacement';
 import { config } from '../src/config';
-import { ecology, treeSpecies } from '../src/data/vegetation';
+import { ecology, MIN_TREE_HEIGHT, treeSpecies } from '../src/data/vegetation';
 
 const course = new Course(mountains[0]);
 const SIZE = config.world.propCellSize;
@@ -98,9 +98,12 @@ describe('props placement', () => {
         const sp = treeSpecies[c.trees[k]];
         const h = c.trees[k + 5];
         heights.push(h);
-        expect(h).toBeGreaterThan(sp.shape === 'dwarf' ? 1 : 3);
+        expect(h).toBeGreaterThanOrEqual(MIN_TREE_HEIGHT);
         expect(h).toBeLessThanOrEqual(25.01);
-        expect(c.trees[k + 6]).toBeGreaterThan(0.2);
+        // Crown width coherent with the height (species ratio ± 15 %).
+        const ratio = c.trees[k + 6] / h;
+        expect(ratio).toBeGreaterThan(sp.width * 0.84);
+        expect(ratio).toBeLessThan(sp.width * 1.16);
       }
     heights.sort((a, b) => a - b);
     const p = (f: number): number => heights[Math.floor(heights.length * f)];

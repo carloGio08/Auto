@@ -33,7 +33,7 @@ export const defaultPalette: Palette = {
   water: ['#2f6f91', '#3a87ab', '#4aa3c7'],
   // Props.
   wood: ['#5e3f26', '#734d2f', '#9a6a42'],
-  foliage: ['#1e4a35', '#26603f', '#30744a', '#3f8a56'],
+  foliage: ['#163d2c', '#1d4f35', '#296441', '#3a7c4d'],
   paint: ['#d4473a', '#efe9df'],
 };
 
