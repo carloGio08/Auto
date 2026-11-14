@@ -5,6 +5,16 @@ import type { DenseLine } from './trailRouter';
 
 export const ROAD_BRIDGE = 1;
 export const ROAD_HAIRPIN = 2;
+/** Shallow ford across a stream (the trail dips into the water). */
+export const ROAD_FORD = 4;
+/** Lay-by / viewpoint: the trail widens on one side. */
+export const ROAD_LAYBY = 8;
+
+/** Surface of a stretch of trail. */
+export const SURF_DIRT = 0;
+export const SURF_GRAVEL = 1;
+/** Old two-track with grass in the middle. */
+export const SURF_GRASSY = 2;
 
 /** Result of a nearest-trail query. Pre-allocate and reuse. */
 export interface RoadQuery {
@@ -23,6 +33,12 @@ export interface RoadQuery {
   halfWidth: number;
   bank: number;
   carve: number;
+  /** Lateral shift of the flat band (lay-bys, meander of the edges) (m). */
+  offset: number;
+  /** Rut depth (m) and surface kind (SURF_*) of the stretch. */
+  rut: number;
+  surf: number;
+  flags: number;
   found2: boolean;
   s2: number;
   distance2: number;
@@ -47,6 +63,10 @@ export function createRoadQuery(): RoadQuery {
     halfWidth: 0,
     bank: 0,
     carve: 1,
+    offset: 0,
+    rut: 0,
+    surf: 0,
+    flags: 0,
     found2: false,
     s2: 0,
     distance2: Infinity,
@@ -108,9 +128,15 @@ export class Road {
   readonly halfWidth: Float32Array;
   readonly bank: Float32Array;
   readonly carve: Float32Array;
+  readonly offset: Float32Array;
+  readonly rut: Float32Array;
+  readonly surf: Uint8Array;
   readonly flags: Uint8Array;
   readonly trailOf: Int16Array;
   readonly bridges: { trail: number; from: number; to: number }[] = [];
+  readonly fords: { trail: number; from: number; to: number }[] = [];
+  /** Lay-bys / viewpoints: trail, distance along it and widened side (+1 left). */
+  readonly laybys: { trail: number; s: number; side: number }[] = [];
   readonly maxHalfWidth: number;
   readonly influence: number;
   readonly bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
@@ -143,6 +169,9 @@ export class Road {
     this.halfWidth = new Float32Array(n);
     this.bank = new Float32Array(n);
     this.carve = new Float32Array(n).fill(1);
+    this.offset = new Float32Array(n);
+    this.rut = new Float32Array(n);
+    this.surf = new Uint8Array(n);
     this.flags = new Uint8Array(n);
     this.trailOf = new Int16Array(n);
     let maxHalf = 0;
@@ -163,6 +192,7 @@ export class Road {
     this.maxHalfWidth = maxHalf;
     // Profiles: main first, then branches anchored to the trails they join.
     this.trails.forEach((tr) => this.buildProfile(tr, mountain));
+    this.trails.forEach((tr, k) => this.buildSurface(tr, k, mountain));
 
     // Spatial grid (must cover the widest adaptive shoulder: terrain.ts MAX_SHOULDER = 30 m).
     this.influence = maxHalf + 30 + 10;
@@ -259,7 +289,11 @@ export class Road {
       const tight = smoothstep(1 / 60, 1 / 16, k);
       if (tight > 0.5) this.flags[g] |= ROAD_HAIRPIN;
       const s = i * ds;
-      this.halfWidth[g] = lerp(w0, w1, 0.5 + 0.5 * Math.sin(s / 110 + phase)) * 0.5 + tight * 2;
+      // Width wanders between the def's limits (two incommensurate waves), wider in hairpins.
+      const wv = 0.5 + 0.3 * Math.sin(s / 97 + phase) + 0.2 * Math.sin(s / 41 + phase * 2.3);
+      this.halfWidth[g] = lerp(w0, w1, wv) * 0.5 + tight * 1.6;
+      // The flat band meanders a little inside the corridor.
+      this.offset[g] = 0.3 * Math.sin(s / 37 + phase * 1.7) * (1 - tight);
       // Banking: the outside of a bend is higher (left turn → left side lower).
       this.bank[g] = clamp((-ks / 13) * 4.5, -0.08, 0.08);
     }
@@ -363,6 +397,35 @@ export class Road {
       const b = Math.min(count - 2, j + 3);
       const ya = prof[a - 1];
       const yb = prof[b + 1];
+      // Ford: the trail dips into the stream (shallow water) with gentle ramps. Where the
+      // trail runs high above the stream (a gorge), or on the main trail, a bridge instead.
+      // Water level where the trail meets the stream (closest sample).
+      let water = -Infinity;
+      let closest = Infinity;
+      for (let k = a; k <= b; k++) {
+        const d = mountain.riverDistance(this.x[start + k], this.z[start + k]);
+        if (d < closest) {
+          closest = d;
+          water = mountain.waterLevel(this.x[start + k], this.z[start + k]);
+        }
+      }
+      const fordY = water - 0.35;
+      const dropA = ya - fordY;
+      const dropB = yb - fordY;
+      if (tr.def.kind !== 'main' && Math.max(dropA, dropB) < 7 && Math.min(dropA, dropB) > -1.5) {
+        const rampA = clamp(Math.ceil(Math.abs(dropA) / (0.12 * ds)) + 3, 8, 60);
+        const rampB = clamp(Math.ceil(Math.abs(dropB) / (0.12 * ds)) + 3, 8, 60);
+        for (let k = Math.max(0, a - rampA); k <= Math.min(count - 1, b + rampB); k++) {
+          const f =
+            k < a ? smoothstep(a - rampA, a, k) : k > b ? 1 - smoothstep(b, b + rampB, k) : 1;
+          prof[k] += (fordY - prof[k]) * f;
+          if (f > 0.5) this.flags[start + k] |= ROAD_FORD;
+        }
+        for (let k = a; k <= b; k++) this.bank[start + k] = 0;
+        this.fords.push({ trail: this.trails.indexOf(tr), from: a * ds, to: b * ds });
+        i = j;
+        continue;
+      }
       // The deck must clear the water: lift it (with gentle ramps on both banks) if needed.
       let lift = 0;
       for (let k = a; k <= b; k++) {
@@ -370,7 +433,7 @@ export class Road {
         lift = Math.max(lift, w + 1.6 - lerp(ya, yb, (k - a) / Math.max(1, b - a)));
       }
       if (lift > 0) {
-        const ramp = 15;
+        const ramp = clamp(Math.ceil(lift / (0.1 * ds)), 15, 60);
         for (let k = Math.max(0, a - ramp); k <= Math.min(count - 1, b + ramp); k++) {
           const f = k < a ? smoothstep(a - ramp, a, k) : k > b ? 1 - smoothstep(b, b + ramp, k) : 1;
           prof[k] += lift * f;
@@ -382,11 +445,91 @@ export class Road {
         this.carve[start + k] = 0;
         this.halfWidth[start + k] = Math.min(this.halfWidth[start + k], 2.9);
         this.bank[start + k] = 0;
+        this.offset[start + k] = 0;
       }
       this.bridges.push({ trail: this.trails.indexOf(tr), from: a * ds, to: b * ds });
       i = j;
     }
+    // Grade limit with the junctions fixed: forward and backward passes, bridge decks and
+    // fords fixed too (anchoring alone could leave short ramps steeper than the trail allows).
+    const gl = tr.def.maxGrade * 1.08 * ds;
+    const lock = (i: number): boolean =>
+      (!!tr.def.startOn && i < 6) ||
+      (!!tr.def.endOn && i > count - 7) ||
+      (this.flags[start + i] & (ROAD_BRIDGE | ROAD_FORD)) !== 0;
+    for (let pass = 0; pass < 3; pass++) {
+      for (let i = 1; i < count; i++)
+        if (!lock(i)) prof[i] = clamp(prof[i], prof[i - 1] - gl, prof[i - 1] + gl);
+      for (let i = count - 2; i >= 0; i--)
+        if (!lock(i)) prof[i] = clamp(prof[i], prof[i + 1] - gl, prof[i + 1] + gl);
+    }
     for (let k = 0; k < count; k++) this.y[start + k] = prof[k];
+  }
+
+  /**
+   * Surface stretches (packed dirt, gravel, grassy two-track), rut depth and lay-bys /
+   * viewpoints. Deterministic from the trail position: the look never repeats for long.
+   */
+  private buildSurface(tr: TrailInfo, k: number, mountain: Mountain): void {
+    const { start, count } = tr;
+    const ds = SPACING;
+    const ph = k * 2.71 + mountain.def.seed * 0.013;
+    const branchy = tr.def.kind === 'main' ? 0 : 0.35;
+    for (let i = 0; i < count; i++) {
+      const g = start + i;
+      const s = i * ds;
+      const v = Math.sin(s / 173 + ph) + 0.6 * Math.sin(s / 71 + ph * 1.9) + branchy;
+      this.surf[g] = v > 0.75 ? SURF_GRASSY : v < -0.65 ? SURF_GRAVEL : SURF_DIRT;
+      const r = 0.5 + 0.5 * Math.sin(s / 53 + ph * 0.7);
+      this.rut[g] =
+        this.surf[g] === SURF_GRAVEL || this.flags[g] & (ROAD_BRIDGE | ROAD_FORD)
+          ? 0
+          : 0.025 + 0.05 * r;
+    }
+    // Smooth the rut depth across stretch changes.
+    for (let i = 1; i < count; i++) {
+      const g = start + i;
+      this.rut[g] = this.rut[g - 1] + (this.rut[g] - this.rut[g - 1]) * 0.15;
+    }
+    // Lay-bys: every ~400–800 m on a straight, gentle stretch, widened on the downhill side
+    // (a viewpoint over the valley).
+    let next = 300 + ((k * 137) % 250);
+    for (let i = 20; i < count - 20; i++) {
+      const s = i * ds;
+      if (s < next) continue;
+      const g = start + i;
+      let straight = true;
+      for (let o = -10; o <= 10; o += 2) {
+        const gg = start + clamp(i + o, 0, count - 1);
+        if (Math.abs(this.curvature[gg]) > 1 / 70 || this.flags[gg] & (ROAD_BRIDGE | ROAD_FORD))
+          straight = false;
+      }
+      if (!straight) continue;
+      // Downhill side: compare the natural ground 8 m to the left and right.
+      const nx = this.tz[g];
+      const nz = -this.tx[g];
+      const hl = mountain.heightNoWater(this.x[g] + nx * 8, this.z[g] + nz * 8);
+      const hr = mountain.heightNoWater(this.x[g] - nx * 8, this.z[g] - nz * 8);
+      const side = hl < hr ? 1 : -1;
+      const len = 18;
+      const ramp = 8;
+      for (let o = -len - ramp; o <= len + ramp; o++) {
+        const gg = start + clamp(i + o, 0, count - 1);
+        const w = 1 - smoothstep(len, len + ramp, Math.abs(o));
+        const extra = 1.4 * w;
+        this.halfWidth[gg] += extra;
+        this.offset[gg] += side * extra;
+        if (w > 0.02) this.flags[gg] |= ROAD_LAYBY;
+      }
+      this.laybys.push({ trail: k, s, side });
+      next = s + 400 + ((s * 7.3 + k * 31) % 400);
+    }
+  }
+
+  isFordAt(s: number, margin = 0, trail = 0): boolean {
+    for (const b of this.fords)
+      if (b.trail === trail && s >= b.from - margin && s <= b.to + margin) return true;
+    return false;
   }
 
   isBridgeAt(s: number, margin = 0, trail = 0): boolean {
@@ -395,8 +538,12 @@ export class Road {
     return false;
   }
 
+  /** Physics surface of the trail centre at a sample index. */
   surfaceAt(index: number): SurfaceId {
-    return this.flags[index] & ROAD_BRIDGE ? 'wood' : 'trail';
+    const i = clamp(Math.round(index), 0, this.count - 1);
+    if (this.flags[i] & ROAD_BRIDGE) return 'wood';
+    if (this.flags[i] & ROAD_FORD || this.surf[i] === SURF_GRAVEL) return 'gravel';
+    return 'trail';
   }
 
   /** Interpolated point at distance s along a trail (default: main). */
@@ -560,6 +707,11 @@ export class Road {
       out.halfWidth = hw;
       out.bank = bank;
       out.carve = this.carve[i] + (this.carve[i + 1] - this.carve[i]) * t;
+      out.offset = this.offset[i] + (this.offset[i + 1] - this.offset[i]) * t;
+      out.rut = this.rut[i] + (this.rut[i + 1] - this.rut[i]) * t;
+      const near = t < 0.5 ? i : i + 1;
+      out.surf = this.surf[near];
+      out.flags = this.flags[near];
     } else {
       out.found2 = true;
       out.s2 = s;

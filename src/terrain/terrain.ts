@@ -4,7 +4,16 @@ import { smoothstep } from '../math/util';
 import { config } from '../config';
 import type { PaletteKey, SurfaceId } from '../data/types';
 import type { Mountain } from './mountain';
-import { createRoadQuery, ROAD_BRIDGE, type Road, type RoadQuery } from './road';
+import { hash2 } from '../math/rng';
+import {
+  createRoadQuery,
+  ROAD_BRIDGE,
+  ROAD_FORD,
+  SURF_GRASSY,
+  SURF_GRAVEL,
+  type Road,
+  type RoadQuery,
+} from './road';
 
 /** A temporary/zone surface override (mud pool, ice patch). */
 export interface SurfacePatch {
@@ -57,8 +66,27 @@ const SURFACE_OF: Record<PaletteKey, SurfaceId> = {
   paint: 'rock',
 };
 
+/** Kind of ground on the worn band of a trail (colours and physics). */
+export type TrailGround = 'dirt' | 'gravel' | 'grass' | 'rut' | 'mud' | 'snow' | 'ford';
+
+const TRAIL_SURFACE: Record<TrailGround, SurfaceId> = {
+  dirt: 'trail',
+  rut: 'trail',
+  gravel: 'gravel',
+  grass: 'grass',
+  mud: 'mud',
+  snow: 'snow',
+  ford: 'gravel',
+};
+
 /** Upper bound of the adaptive trail shoulder (m). Road.influence must cover it. */
 export const MAX_SHOULDER = 30;
+/** Flat strip beside the trail before the ditch / embankment (m). */
+const SHOULDER = 0.7;
+/** Depth of the drainage ditch on the cut side (m). */
+const DITCH = 0.32;
+const PUDDLE_CELL = 40;
+const PUDDLE_DEPTH = 0.12;
 
 /**
  * Final terrain: natural mountain + trails carved in with banking, crown and soft embankments.
@@ -72,12 +100,17 @@ export class Terrain {
   private readonly crown = config.world.roadCrown;
   private readonly snowNoise: Simplex2;
   private readonly biome: BiomeResult = { key: 'meadow', surface: 'grass' };
+  private readonly seed: number;
+  /** No puddles above this altitude (snow, frozen ground). */
+  private readonly puddleLine: number;
 
   constructor(
     readonly mountain: Mountain,
     readonly road: Road,
   ) {
     this.snowNoise = new Simplex2(mountain.def.seed ^ 0x51f0);
+    this.seed = mountain.def.seed & 0xffff;
+    this.puddleLine = mountain.def.biomes.snowLine - 150;
   }
 
   /** Trail query filled by the last `height()` call (read-only, reused). */
@@ -95,13 +128,17 @@ export class Terrain {
     this.road.query(x, z, q);
     if (!q.found) return n;
     const hw = q.halfWidth;
-    const d1 = q.distance;
+    // Distance to the flat band (shifted by lay-bys and the meander of the edges).
+    const latB = q.lateral - q.offset;
+    const d1 = Math.abs(latB) + Math.max(0, q.distance - Math.abs(q.lateral));
     if (d1 >= hw + MAX_SHOULDER) return n;
-    const lat1 = Math.max(-hw, Math.min(hw, q.lateral));
-    const r1 = q.y + q.bank * lat1 - this.crown * Math.min(1, (d1 / hw) * (d1 / hw));
+    const lat1 = Math.max(-hw, Math.min(hw, latB)) + q.offset;
+    let r1 = q.y + q.bank * lat1 - this.crown * Math.min(1, (d1 / hw) * (d1 / hw));
+    // Micro relief inside the band: wheel ruts, grass hump of old two-tracks, puddles.
+    if (d1 < hw + 0.5) r1 -= this.microRelief(q, q.lateral);
     // Embankments widen with the cut/fill height so they stay below ~50°.
     const sh = Math.min(MAX_SHOULDER, Math.max(this.shoulder, Math.abs(r1 - n) * 1.25));
-    if (d1 >= hw + sh) return n;
+    if (d1 >= hw + SHOULDER + sh) return n;
     let hr = r1;
     if (q.found2) {
       const hw2 = q.halfWidth2;
@@ -117,8 +154,53 @@ export class Terrain {
         hr = (r1 * k1 + r2 * k2) / (k1 + k2);
       }
     }
-    const blend = (1 - smoothstep(hw, hw + sh, d1)) * q.carve;
+    // Drainage ditch on the cut side (the natural ground is above the trail), after a
+    // narrow flat shoulder.
+    const e = d1 - hw;
+    if (e > SHOULDER * 0.6 && n > hr + 0.4 && !(q.flags & ROAD_FORD)) {
+      const u = (e - SHOULDER * 0.6 - 0.8) / 0.8;
+      if (u > -1 && u < 1) hr -= DITCH * (1 - u * u) * smoothstep(0.4, 1.4, n - hr);
+    }
+    // Cut and fill blend into the natural slope with rounded crest and toe.
+    const t = smoothstep(hw + SHOULDER, hw + SHOULDER + sh, d1);
+    const blend = (1 - t) * q.carve;
     return n + (hr - n) * blend;
+  }
+
+  /** Depth (m) of ruts, puddles and the grassy hump at a lateral position on the trail. */
+  microRelief(q: RoadQuery, lateral: number): number {
+    if (q.flags & (ROAD_BRIDGE | ROAD_FORD)) return 0;
+    let d = 0;
+    const a = Math.abs(lateral);
+    // Two wheel ruts ±0.85 m from the centre line.
+    const u = (a - 0.85) / 0.38;
+    if (u > -1 && u < 1) d += q.rut * (1 - u * u) * (1 - u * u);
+    // Grass hump in the middle of old two-tracks.
+    if (q.surf === SURF_GRASSY && a < 0.6) d -= 0.05 * (1 - (a / 0.6) ** 2);
+    if (q.y < this.puddleLine) d += this.puddle(q.trail, q.s, lateral, q.surf) * PUDDLE_DEPTH;
+    return d;
+  }
+
+  /**
+   * Puddle strength (0..1) at a point of a trail: a few shallow muddy hollows, one per
+   * ~40 m cell at most, off-centre, never on gravel or in the snow.
+   */
+  puddle(trail: number, s: number, lateral: number, surf: number): number {
+    if (surf === SURF_GRAVEL) return 0;
+    const cell = Math.floor(s / PUDDLE_CELL);
+    let best = 0;
+    for (let c = cell - 1; c <= cell + 1; c++) {
+      const hsh = hash2(c, trail, this.seed);
+      if (hsh > 0.24) continue;
+      const sc = (c + 0.3 + hsh * 1.7) * PUDDLE_CELL;
+      const lc = (hash2(c, trail + 7, this.seed) - 0.5) * 1.8;
+      const len = 1.6 + hsh * 6;
+      const du = (s - sc) / len;
+      const dv = (lateral - lc) / 1.25;
+      const r2 = du * du + dv * dv;
+      if (r2 < 1) best = Math.max(best, (1 - r2) * (1 - r2));
+    }
+    return best;
   }
 
   private onBridgeSegment(i: number): boolean {
@@ -169,7 +251,10 @@ export class Terrain {
     out.s = q.found ? q.s : -1;
     out.lateral = q.found ? q.lateral : 0;
     this.normal(x, z, out.normal, yRef);
+    const tg =
+      q.found && !onBridge ? this.trailGround(q.trail, q.s, q.lateral, x, z, out.height) : null;
     if (onBridge) out.surface = 'wood';
+    else if (tg && !this.patchAt(x, z)) out.surface = TRAIL_SURFACE[tg];
     else
       out.surface = this.surfaceAt(
         x,
@@ -180,6 +265,52 @@ export class Terrain {
         q.found ? q.halfWidth : 0,
       );
     return out;
+  }
+
+  /**
+   * Ground on the worn band of trail `trail` at distance `s` and lateral offset `lateral`
+   * (null off the band or on a bridge deck). The band edge is irregular, stretches change
+   * between packed dirt, gravel and grassy two-tracks, with ruts, puddles and snow up high.
+   */
+  trailGround(
+    trail: number,
+    s: number,
+    lateral: number,
+    x: number,
+    z: number,
+    h: number,
+  ): TrailGround | null {
+    if (trail < 0) return null;
+    const road = this.road;
+    const tr = road.trails[trail];
+    if (!tr) return null;
+    const g = tr.start + Math.max(0, Math.min(tr.count - 1, Math.round(s / road.spacing)));
+    const hw = road.halfWidth[g];
+    const latB = lateral - road.offset[g];
+    const edge =
+      hw * 0.94 +
+      0.22 * Math.sin(s / 3.7 + (latB > 0 ? 2.1 : 0)) +
+      0.12 * Math.sin(s / 1.9 + x * 0.3);
+    if (Math.abs(latB) > edge) return null;
+    const f = road.flags[g];
+    if (f & ROAD_BRIDGE) return null;
+    if (f & ROAD_FORD) return 'ford';
+    if (this.trailSnow(x, z, h)) return 'snow';
+    const surf = road.surf[g];
+    if (h < this.puddleLine && this.puddle(trail, s, lateral, surf) > 0.2) return 'mud';
+    const a = Math.abs(lateral);
+    if (surf === SURF_GRASSY && a < 0.42) return 'grass';
+    if (surf !== SURF_GRAVEL && road.rut[g] > 0.045 && Math.abs(a - 0.85) < 0.2) return 'rut';
+    return surf === SURF_GRAVEL ? 'gravel' : 'dirt';
+  }
+
+  private patchAt(x: number, z: number): boolean {
+    for (const p of this.patches) {
+      const dx = x - p.x;
+      const dz = z - p.z;
+      if (dx * dx + dz * dz < p.radius * p.radius) return true;
+    }
+    return false;
   }
 
   /** Physics surface at a point (patches > trail > biome). */
@@ -228,16 +359,6 @@ export class Terrain {
     const r = this.biome;
     const b = this.mountain.def.biomes;
     const hw = h + this.wobble(x, z);
-    if (roadDistance < halfWidth * 0.8) {
-      if (this.trailSnow(x, z, h)) {
-        r.key = 'snow';
-        r.surface = 'snow';
-      } else {
-        r.key = 'trail';
-        r.surface = 'trail';
-      }
-      return r;
-    }
     let key: PaletteKey;
     if (h < this.mountain.def.lake.level + 2.5) key = 'sand';
     else if (ny < 0.7) key = 'rock';

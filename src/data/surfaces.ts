@@ -14,6 +14,15 @@ export const surfaces: Record<SurfaceId, SurfaceDef> = {
     roughness: 0.45,
     bumpiness: 0.01,
   },
+  gravel: {
+    id: 'gravel',
+    grip: 1.0,
+    rollingDrag: 0.008,
+    color: 'scree',
+    particle: 'gravel',
+    roughness: 0.85,
+    bumpiness: 0.015,
+  },
   grass: {
     id: 'grass',
     grip: 0.95,

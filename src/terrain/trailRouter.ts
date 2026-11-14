@@ -9,7 +9,7 @@ export interface DenseLine {
   h: number[];
 }
 
-const CELL = 32;
+const CELL = 24;
 // 16-neighbourhood: straight, diagonal and knight moves give smoother angles.
 const OFFSETS: [number, number][] = [
   [1, 0],
@@ -78,9 +78,10 @@ class Heap {
 }
 
 /**
- * Routes trails across the natural terrain. The cost favours the target grade and heavily
- * penalises grades above the limit, so routes follow the contour lines and form hairpins
- * where the face is steep – exactly how real mountain tracks are built.
+ * Routes trails across the natural terrain with a minimum-cost search. The cost favours the
+ * target grade (so routes follow the contour lines and only form hairpins where the face is
+ * steep), heavily penalises grades above the limit, sharp turns, steep side slopes (big
+ * cuts: routes prefer terraces, saddles and valley floors) and stream crossings.
  */
 export class TrailRouter {
   private readonly n: number;
@@ -88,6 +89,8 @@ export class TrailRouter {
   private readonly min: number;
   /** Cells already used by routed trails: new routes avoid running alongside them. */
   private readonly occupied: Uint8Array;
+  /** Cells within reach of a stream (crossings cost extra). */
+  private readonly wet: Uint8Array;
 
   constructor(private readonly mountain: Mountain) {
     const half = mountain.def.halfSize;
@@ -101,6 +104,25 @@ export class TrailRouter {
           this.min + i * CELL,
           this.min + j * CELL,
         );
+    this.wet = new Uint8Array(this.n * this.n);
+    for (let j = 0; j < this.n; j++)
+      for (let i = 0; i < this.n; i++)
+        if (mountain.riverDistance(this.min + i * CELL, this.min + j * CELL) < CELL * 0.75)
+          this.wet[j * this.n + i] = 1;
+  }
+
+  /** Terrain slope across a move direction (0 along contour lines on a uniform face). */
+  private sideSlope(c: number, ox: number, oz: number): number {
+    const n = this.n;
+    const H = this.heights;
+    const i = c % n;
+    const j = (c - i) / n;
+    if (i < 1 || j < 1 || i >= n - 1 || j >= n - 1) return 0;
+    const gx = (H[c + 1] - H[c - 1]) / (2 * CELL);
+    const gz = (H[c + n] - H[c - n]) / (2 * CELL);
+    const l = Math.hypot(ox, oz) || 1;
+    // Gradient component perpendicular to the move.
+    return Math.abs((gx * -oz + gz * ox) / l);
   }
 
   private node(x: number, z: number): number {
@@ -153,7 +175,16 @@ export class TrailRouter {
         const grade = Math.abs(H[nb] - H[cur]) / len;
         let c = len * (1 + 3 * (Math.max(0, grade - def.targetGrade) / span) ** 2);
         if (grade > def.maxGrade * 1.15) c *= 40;
-        if (par >= 0) c += len * 0.45 * (1 - (oi * pdx + oj * pdz) / Math.hypot(oi, oj));
+        if (par >= 0) {
+          // Turns cost more the sharper they are: straight legs, hairpins only when needed.
+          const turn = 1 - (oi * pdx + oj * pdz) / Math.hypot(oi, oj);
+          c += len * (0.3 * turn + 0.6 * turn * turn);
+        }
+        // Side slope: a trail across a steep face needs deep cuts and high fills.
+        const side = this.sideSlope(nb, oi, oj);
+        c *= 1 + (side / 0.55) ** 2 * 0.8;
+        // Stream crossings (bridges, fords) only where they save a long detour.
+        if (this.wet[nb] && !this.wet[cur]) c += 260;
         // Keep away from the lake, the map rim and very steep cross slopes.
         const wx = this.min + ni * CELL;
         const wz = this.min + nj * CELL;
@@ -235,7 +266,22 @@ export class TrailRouter {
     let pts: [number, number][] = [];
     for (let k = 0; k < wps.length - 1; k++) {
       const leg = this.route(wps[k][0], wps[k][1], wps[k + 1][0], wps[k + 1][1], def);
-      pts = pts.concat(k === 0 ? leg : leg.slice(1));
+      if (k > 0) {
+        // A waypoint reached and left the same way is a dead-end spike: snip the part where
+        // the two legs run back over each other.
+        const jw = pts.length - 1;
+        let m = 0;
+        while (
+          m + 1 < Math.min(jw, leg.length - 1) &&
+          Math.hypot(pts[jw - m - 1][0] - leg[m + 1][0], pts[jw - m - 1][1] - leg[m + 1][1]) <
+            CELL * 1.6
+        )
+          m++;
+        if (m > 0) {
+          pts = pts.slice(0, jw - m + 1);
+          pts = pts.concat(leg.slice(m + 1));
+        } else pts = pts.concat(leg.slice(1));
+      } else pts = pts.concat(leg);
       this.markOccupied(leg);
     }
     // Remove the grid staircase first, then round corners into curves and hairpins.
@@ -254,7 +300,9 @@ export class TrailRouter {
       out.push(pts[pts.length - 1]);
       pts = out;
     }
-    return densify(relax(densify(pts), 9));
+    // Relax bends to a drivable radius; the last resampling smooths only lightly so it does
+    // not tighten hairpins again.
+    return densify(relax(densify(relax(densify(pts), 11), 4), 12), 3);
   }
 }
 
@@ -267,7 +315,7 @@ export function relax(line: DenseLine, minRadius: number): [number, number][] {
   const z = line.z.slice();
   const n = x.length;
   const k = 6;
-  for (let it = 0; it < 40; it++) {
+  for (let it = 0; it < 80; it++) {
     let moved = false;
     for (let i = k; i < n - k; i++) {
       const ax = x[i - k];
@@ -281,8 +329,8 @@ export function relax(line: DenseLine, minRadius: number): [number, number][] {
       const b = Math.hypot(bx - x[i], bz - z[i]);
       const c = Math.hypot(bx - ax, bz - az);
       const area = Math.abs((x[i] - ax) * (bz - az) - (z[i] - az) * (bx - ax)) / 2;
-      if (area < 1e-6) continue;
-      const r = (a * b * c) / (4 * area);
+      // Collinear points: a straight line, or a reversal (spike) that must be opened up.
+      const r = area < 1e-6 ? (c < (a + b) * 0.5 ? 0 : Infinity) : (a * b * c) / (4 * area);
       if (r < minRadius) {
         x[i] += (mx - x[i]) * 0.3;
         z[i] += (mz - z[i]) * 0.3;
@@ -295,7 +343,7 @@ export function relax(line: DenseLine, minRadius: number): [number, number][] {
 }
 
 /** Resamples a polyline at 1 m and computes smoothed headings. */
-export function densify(pts: [number, number][]): DenseLine {
+export function densify(pts: [number, number][], window = 10): DenseLine {
   const xs: number[] = [pts[0][0]];
   const zs: number[] = [pts[0][1]];
   let acc = 0;
@@ -312,8 +360,8 @@ export function densify(pts: [number, number][]): DenseLine {
     }
     acc = d - (pos - 1);
   }
-  // Positional smoothing (two passes of ±10 m) removes the last kinks; the window shrinks
-  // near the ends so junction points stay where they are.
+  // Positional smoothing (two passes of ±window m) removes the last kinks; the window
+  // shrinks near the ends so junction points stay where they are.
   const n = xs.length;
   let sx = xs.slice();
   let sz = zs.slice();
@@ -321,7 +369,7 @@ export function densify(pts: [number, number][]): DenseLine {
     const nx = new Array<number>(n);
     const nz = new Array<number>(n);
     for (let i = 0; i < n; i++) {
-      const w = Math.min(10, i, n - 1 - i);
+      const w = Math.min(window, i, n - 1 - i);
       let ax = 0;
       let az = 0;
       for (let o = -w; o <= w; o++) {

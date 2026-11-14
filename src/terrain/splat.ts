@@ -1,7 +1,7 @@
 import type { ResolvedPalette } from '../data/palette';
 import type { PaletteKey } from '../data/types';
 import { hash2 } from '../math/rng';
-import type { Terrain } from './terrain';
+import type { Terrain, TrailGround } from './terrain';
 
 /** Palette in transferable form: key → RGB triples of its tones (0..1). */
 export type PatchPalette = Record<string, Float32Array>;
@@ -40,6 +40,16 @@ export interface VertexInfo {
   trail: number;
 }
 
+const TRAIL_KEY: Record<TrailGround, PaletteKey> = {
+  dirt: 'trail',
+  rut: 'wood',
+  gravel: 'scree',
+  grass: 'alpine',
+  mud: 'wood',
+  snow: 'snow',
+  ford: 'sand',
+};
+
 /** Colours terrain vertices from the biome classification and the palette. */
 export class TerrainColorer {
   constructor(
@@ -51,8 +61,12 @@ export class TerrainColorer {
   vertex(v: VertexInfo, out: Float32Array, o: number): void {
     const t = this.terrain;
     const lake = t.mountain.def.lake.level;
-    const key =
-      v.h < lake - 0.5 ? 'sand' : t.classify(v.x, v.z, v.h, v.ny, v.roadDistance, v.halfWidth).key;
+    const tg = t.trailGround(v.trail, v.s, v.lateral, v.x, v.z, v.h);
+    const key: PaletteKey = tg
+      ? TRAIL_KEY[tg]
+      : v.h < lake - 0.5
+        ? 'sand'
+        : t.classify(v.x, v.z, v.h, v.ny, v.roadDistance, v.halfWidth).key;
     const ramp = this.palette[key];
     const hsh = hash2(Math.floor(v.x * 0.37), Math.floor(v.z * 0.37), 11);
     const tone = hsh < (v.ny < 0.86 ? 0.7 : 0.35) ? 1 : 0;

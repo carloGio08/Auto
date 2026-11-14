@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { Course } from '../src/terrain/course';
 import { mountains, createDailyMountain } from '../src/data/mountains';
-import { createRoadQuery } from '../src/terrain/road';
+import {
+  createRoadPoint,
+  createRoadQuery,
+  ROAD_BRIDGE,
+  ROAD_FORD,
+  ROAD_HAIRPIN,
+  ROAD_LAYBY,
+} from '../src/terrain/road';
 import { distanceToSegment } from '../src/terrain/terrain';
 import { Rng } from '../src/math/rng';
 
@@ -32,14 +39,82 @@ describe.each(defs.map((d) => [d.id, d] as const))('trail network: %s', (_id, de
     const y0 = road.y[main.start];
     const y1 = road.y[main.start + main.count - 1];
     expect(y0 - y1).toBeGreaterThan(1400);
-    // A long descent: 6–14 km of trail.
-    expect(main.length).toBeGreaterThan(6000);
-    expect(main.length).toBeLessThan(14000);
-    let steep = 0;
-    for (let i = main.start + 1; i < main.start + main.count; i++) {
-      if (Math.abs(road.y[i] - road.y[i - 1]) / road.spacing > main.def.maxGrade * 1.4) steep++;
+    // A long descent at ~8–12 % on average: 10–19 km of trail.
+    expect(main.length).toBeGreaterThan(10000);
+    expect(main.length).toBeLessThan(19000);
+    const avg = (y0 - y1) / main.length;
+    expect(avg).toBeGreaterThan(0.075);
+    expect(avg).toBeLessThan(0.13);
+  });
+
+  it('keeps every trail within its grade limit (20 m windows) and its bends drivable', () => {
+    const W = 10;
+    for (const tr of road.trails) {
+      let worst = 0;
+      let minRadius = Infinity;
+      // Junction ends (first/last 30 m of branches) follow the trail they join.
+      const skip = tr.def.kind === 'main' ? W : 20;
+      for (let i = tr.start + skip; i < tr.start + tr.count - skip; i++) {
+        // Bridge decks and ford dips are checked separately.
+        let special = 0;
+        for (let k = i - W; k <= i + W; k++) special |= road.flags[k] & (ROAD_BRIDGE | ROAD_FORD);
+        if (special) continue;
+        worst = Math.max(worst, Math.abs(road.y[i + W] - road.y[i - W]) / (2 * W * road.spacing));
+        minRadius = Math.min(minRadius, 1 / Math.max(1e-6, Math.abs(road.curvature[i])));
+      }
+      // Main trail: ~20 % at most; shortcuts up to ~30 %.
+      expect(worst).toBeLessThan(tr.def.maxGrade * 1.25);
+      expect(minRadius).toBeGreaterThan(5.5);
     }
-    expect(steep / main.count).toBeLessThan(0.01);
+  });
+
+  it('crosses streams on bridges (main trail) or fords with gentle ramps', () => {
+    const q = createRoadPoint();
+    for (const f of road.fords) {
+      const tr = road.trails[f.trail];
+      expect(tr.def.kind).not.toBe('main');
+      // The sample of the ford closest to the stream.
+      let best = Infinity;
+      let depth = 0;
+      for (let s = f.from; s <= f.to; s += road.spacing) {
+        const p = road.pointAt(s, q, f.trail);
+        const d = course.mountain.riverDistance(p.x, p.z);
+        if (d < best) {
+          best = d;
+          depth = course.terrain.waterLevel(p.x, p.z) - p.y;
+        }
+      }
+      // Shallow: wheels in the water, chassis dry.
+      expect(depth).toBeGreaterThan(0.1);
+      expect(depth).toBeLessThan(0.8);
+    }
+  });
+
+  it('varies the trail: width 4–7 m, surfaces, lay-bys', () => {
+    const main = road.main;
+    let minW = Infinity;
+    let maxW = 0;
+    const kinds = new Set<number>();
+    let longest = 0;
+    let run = 0;
+    for (let i = main.start + 1; i < main.start + main.count; i++) {
+      if (road.flags[i] & (ROAD_HAIRPIN | ROAD_LAYBY | ROAD_BRIDGE)) continue;
+      minW = Math.min(minW, road.halfWidth[i] * 2);
+      // Bends widen a little: the 4–7 m range is for the straights.
+      let bend = false;
+      for (let k = Math.max(main.start, i - 10); k < Math.min(main.start + main.count, i + 10); k++)
+        if (Math.abs(road.curvature[k]) > 1 / 70) bend = true;
+      if (!bend) maxW = Math.max(maxW, road.halfWidth[i] * 2);
+      kinds.add(road.surf[i]);
+      run = road.surf[i] === road.surf[i - 1] ? run + road.spacing : 0;
+      longest = Math.max(longest, run);
+    }
+    expect(minW).toBeGreaterThan(3.9);
+    expect(maxW).toBeLessThan(7.6);
+    expect(kinds.size).toBe(3);
+    // The surface never stays the same for kilometres.
+    expect(longest).toBeLessThan(900);
+    expect(road.laybys.length).toBeGreaterThan(5);
   });
 
   it('ends the main trail in the arrival zone at the base', () => {

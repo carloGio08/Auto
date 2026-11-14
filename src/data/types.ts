@@ -4,7 +4,17 @@ import type { ObjectiveDef } from './objectives';
  */
 
 export type SurfaceId =
-  'trail' | 'grass' | 'forest' | 'snow' | 'scree' | 'rock' | 'mud' | 'sand' | 'ice' | 'wood';
+  | 'trail'
+  | 'gravel'
+  | 'grass'
+  | 'forest'
+  | 'snow'
+  | 'scree'
+  | 'rock'
+  | 'mud'
+  | 'sand'
+  | 'ice'
+  | 'wood';
 
 export interface SurfaceDef {
   id: SurfaceId;

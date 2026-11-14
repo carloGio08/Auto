@@ -40,8 +40,8 @@ export class Autopilot {
       k = Math.max(k, Math.abs(this.road.curvature[i]));
     }
     const grip = Math.min(
-      surfaces[this.road.surfaceAt(s)].grip,
-      surfaces[this.road.surfaceAt(s + 30)].grip,
+      surfaces[this.road.surfaceAt(s / this.road.spacing)].grip,
+      surfaces[this.road.surfaceAt((s + 30) / this.road.spacing)].grip,
     );
     const vTarget = Math.min(this.maxSpeed, Math.sqrt((this.cornering * grip) / Math.max(k, 1e-4)));
     out.throttle = speed < vTarget ? clamp((vTarget - speed) * 0.4, 0.25, 1) : 0;
