@@ -37,8 +37,10 @@ relief, rugged })` like `granite.ts` and the daily challenge do.
      follows the stepped profile, mixed by noise), `noise` (`warp`, `broad` undulations baked
      in the heightmap, analytic `detail` stronger on rugged ground), `rimHeight`;
    - `landforms` (see below), `erosion` (`thermalIterations`, `talus`, `hydraulicPasses`,
-     `hydraulicStrength`, `floorSmoothing`), `lake`, `rivers` (springs: streams are traced
-     down the flow graph to the lake);
+     `hydraulicStrength`, `floorSmoothing`, `droplets`, `dropletStrength`), `relief`
+     (intermediate relief by zone: `warp`, ridged `spurs`, smoothed `terraces`, `hummocks`,
+     `gullies`), optional `farRanges` (see below), `lake`, `rivers` (springs: streams are
+     traced down the flow graph to the lake);
    - `biomes`: altitude lines for snow, rock, tree line, dense forest and valley;
    - `trails`: a `main` trail from `start` to `base` plus `branch`/`shortcut` trails with
      waypoints (put them on terraces, saddles and valley floors), `width: [min, max]` (4–7 m),
@@ -114,6 +116,40 @@ Tip: static compression = `mass × 15 / 4 / stiffness`; keep it around 25–35 %
    use `PropGeometry` and palette colours for its look.
 3. Place it on a mountain with `{ kind, at }` (`at` = fraction of the main trail).
 4. Add `hazard.<kind>` strings to both dictionaries.
+
+## How to add a distant range
+
+Distant ranges are landforms too, listed in the mountain's `farRanges` (usually large
+`ridge`s with a `path`, a `radius` of a few km and a `height` of 700–2000 m). They are only
+evaluated by the far-field ring (`terrain/farField.ts`), never by the playable heightmap, so
+they cannot change the drivable terrain. Put the nearer, smaller ranges first-to-last in the
+order you like: the aerial perspective gives each distance its own tone. Far-field spacing
+and extent per quality preset are `farSpacing` / `farExtent` in `src/config.ts`.
+
+## How to add a tree species
+
+Add a `TreeSpeciesDef` to `treeSpecies` in `src/data/vegetation.ts`:
+
+- `shape`: one of the crown shapes built in `PropGeometry.species()` (`pine`, `spruce`,
+  `broadleaf`, `larch`, `dwarf`) — a new shape needs a case there and in `speciesLow()`;
+- `heights` per age in metres (young / medium / old: the ages are also the destructible
+  tiers of `data/trees.ts`), crown `width` as a fraction of the height;
+- `zone`: normalised altitude band (0 = valley line, 1 = tree line), `moisture` band and
+  relative `weight`; `foliage` palette ramp and tones; optional `snowCap` (m below the snow
+  line where the crown gets snow).
+
+`tests/props.test.ts` checks heights, spacing and placement rules for every tree placed.
+
+## How to add an ecology rule
+
+The density of trees is computed per 8 m grid point in `placeCell()`
+(`src/world/propPlacement.ts`) from `BiomeModel.forestDensity()` (altitude, slope, wetness,
+clearings) and the knobs of `ecology` in `src/data/vegetation.ts`: `minTreeDistance`
+(Poisson disk), `clumping` (exponent: larger = more compact woods and wider glades),
+`clusterScale`, `treeLineDensity` / `treeLineHeight`, `maxSlope` and `trailClearance`. To add
+a rule, change the grid density `D[o]` (e.g. fewer trees on scree: multiply by
+`1 - weights[Mat.Scree]`) or a species weight in `speciesWeights()`. Undergrowth kinds and
+habitats are the `undergrowth` list in the same data file.
 
 ## How to add a palette material or theme
 

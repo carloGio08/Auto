@@ -4,11 +4,42 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.2.0] - 2026-11-14
+
+Landscape update: distant ranges, atmosphere, finer and calmer terrain, varied relief and
+real forests.
+
+### Added
+
+- Far-field terrain ring (to 20 / 16 / 12 km by preset) built in the worker from the same
+  landforms plus distant ranges declared in the data (`farRanges`), one draw call, seamless
+  with the quadtree.
+- Aerial perspective and height fog in every shader (replacing three.js' fog), sun halo and
+  horizon glow, clouds on three layers.
+- Intermediate relief by zone (`relief`): ridged spurs, smoothed terraces, hummocks,
+  gullies from the flow accumulation, droplet erosion, moraine landform.
+- Tree species as data (`data/vegetation.ts`), Poisson-disk forests with ecological,
+  clumped density, realistic heights (6–25 m), three LODs with dithered cross-fades, canopy
+  masses far away, undergrowth (bushes, grass, ferns, flowers, logs, stumps), tree limits per
+  preset; placement in the worker.
+- Baked ambient occlusion (`config.world.ao`).
+- Tests: far-field continuity, triangle aspect ratio, shared jittered borders, neighbouring
+  face colours, AO range, relief variation per 200 m window, tree placement rules, Poisson
+  spacing, clustering, heights, LOD limits and colliders.
+- `scripts/compare-screenshots.mjs`: before/after screenshots from fixed viewpoints.
 
 ### Changed
 
 - Every jeep is 35 % faster (`config.driving.speedScale`: engine power × 1.35, drag ÷ 1.35²).
+- LOD0 faces 0.85 / 1.25 / 2 m with deterministic XZ jitter and steep-edge refinement (> 90 %
+  of triangles under 3:1); the budget shrinks the far rings first.
+- Colours: no per-face noise, materials from the slope over ±3 m, low-frequency tone patches,
+  warm grey and ochre rock emerging gradually (no grey-violet).
+- Tree and rock colliders only within 180 m of the jeep; terrain is cut under bridge decks.
+
+### Removed
+
+- The ring of grey cones around the map and the flat fog band.
 
 ## [2.1.0] - 2026-11-14
 

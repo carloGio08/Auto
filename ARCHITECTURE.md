@@ -65,23 +65,27 @@ steering). Visuals are `lerp(prev, curr, alpha)` / `slerp`, so 60, 90 and 144 Hz
 look smooth while the simulation stays deterministic. The hot paths (physics, particles,
 debris, camera) reuse pre-allocated scratch objects — no allocations per step.
 
-## 3. Generation pipeline: landforms → heightmap → erosion → trails → colours → props
+## 3. Generation pipeline: landforms → heightmap → erosion → far field → colours and AO → ecology → props
 
 ```
 MountainDef (data)                                    terrain worker (terrainWorker.ts)
-  profile, landforms, erosion, rivers, trails  ──▶  generateTerrain():
-                                                       1. LandformField on a 24 m grid,
+  profile, landforms, relief, erosion,         ──▶  generateTerrain():
+  farRanges, rivers, trails                            1. LandformField on a 24 m grid,
                                                           Catmull-Rom upsampled to 12 m
-                                                       2. talus limiter + thermal erosion
-                                                       3. priority-flood flow routing,
-                                                          stream-power incision, floor
-                                                          smoothing, thermal again
-                                                       4. moisture (flow), rockiness,
+                                                          (+ rockiness and flat-zone maps)
+                                                       2. intermediate relief by zone
+                                                       3. talus limiter + thermal erosion
+                                                       4. priority-flood flow routing,
+                                                          stream-power incision, gullies,
+                                                          droplet erosion, floor smoothing,
+                                                          talus + thermal again
+                                                       5. moisture (flow), rockiness,
                                                           streams traced spring → lake
                                                      routeTrails()  (A* on 24 m grid)
                          CourseData (typed arrays) ◀─┘
-  main thread: Course(def, data) → Mountain, Road, Terrain, BiomeModel, placement
-  terrain worker keeps the same Course to build terrain patches on request
+  main thread: Course(def, data) → Mountain, Road, Terrain, BiomeModel
+  the worker keeps the same Course and builds on request:
+    terrain patches (colours + baked AO) · the far-field ring · props cells (ecology)
 ```
 
 `TerrainService` (app lifetime, in `GameContext`) owns the worker, reports progress to the
@@ -100,6 +104,20 @@ they cross terrace edges), cirques carve a bowl whose back wall is steep only on
 side, plateaus and meadows flatten towards the altitude measured at their centre with a ramp
 that widens with the height to absorb (no walls), saddles lower ridges. Each landform also
 writes a **rockiness** used for detail amplitude, colours and outcrops.
+
+### Intermediate relief (`terrain/relief.ts`, data in `MountainDef.relief`)
+
+So no slope stays a smooth uniform sheet, a relief layer (tens to hundreds of metres) is
+added by zone before erosion: domain-warped **ridged multifractal** spurs and small crests on
+slopes (stronger on rugged ground), **smoothed terrace steps** on slopes in noise-drawn
+patches, **rolling hummocks** and hollows on gentle ground (also the natural ramps for
+moderate jumps), almost nothing on the **declared flats** (meadows, plateaus, valley floors,
+basins — the landforms export a flat-zone map). After the flow routing, **gullies** are cut
+along the flow lines of slopes and a deterministic **droplet (particle) erosion** carves
+rills and leaves small fans; talus and thermal erosion then settle the debris. The `moraine`
+landform adds crescents of mounds below the cirques. A test checks that every 200 m window
+outside the flats has slope and curvature variation above a minimum, and the slope mix stays
+in its targets.
 
 ### Heightmap and erosion (`terrain/generator.ts`, `terrain/erosion.ts`)
 
@@ -167,40 +185,63 @@ irregular band edge.
 
 ### Placement (`terrain/course.ts`, `world/propPlacement.ts`)
 
-Pure data: start, base zone, waymarks, cairns, signs, fences, coins and crystals; rocks only
-as outcrops (crests, faces), talus (scree under faces), stream beds, a few trailside stones
-and rare erratics (~120 per km², 86 % fewer than before), never on a trail band; trees from
-the same forest density as the ground colour; young (breakable) ones near the trails.
+Course: start, base zone, waymarks, cairns, signs, fences, coins and crystals. Props (per
+320 m cell, in the worker) — see §5 "Vegetation".
 
 ## 5. Rendering the world
 
 - **Terrain LOD** (`terrain/terrainMesh.ts`): a quadtree whose depth and cells per patch are
-  chosen so the finest faces are `terrainCell` (1 m high, 1.5 m medium, 2.5 m low). A node
+  chosen so the finest faces are `terrainCell` (0.85 m high, 1.25 m medium, 2 m low). A node
   splits while its face size exceeds the target for its distance: LOD0 within `lod0Radius`
   (200/180/160 m), ~2.5 m to 600 m, ~6 m to 1.5 km, ~16 m to 3.5 km, ~48 m beyond (actual
-  faces are power-of-two multiples, ≤ 1.45 × the target). Visible triangles are kept under
-  the preset budget (1.5 M / 1 M / 0.6 M) by shrinking the rings (`lodScale`), LOD0 first in
-  practice. Coarser ancestors stand in until finer patches arrive; skirts lit like the
-  ground above hide cracks; fog hides the far LODs.
-- **Patch building** (`terrain/patchBuilder.ts`, pure): heights and trail data on an
-  (n + 3)² grid, colours per vertex, then non-indexed flat-shaded triangles split along the
-  diagonal that follows the surface. Attributes are compact: `Int16` positions in 1/128 of a
-  cell around the patch origin (the mesh is translated and scaled), normalised `Uint8`
-  colours and `Int8` normals (≈ 36 B per triangle). Built in the worker; buffers of evicted
-  patches are transferred back and pooled; the main thread only creates `BufferGeometry`.
-  Without a worker the same builder runs time-sliced (`chunkBuildBudgetMs`).
-- **Colours** (`data/palette.ts`, `terrain/biome.ts`, `terrain/splat.ts`): ramps of tones
-  per material. `BiomeModel.weights()` gives smooth weights for snow (wobbling snow line,
-  shaded on north faces and in hollows), snow-rock, light/dark rock (steep, rugged, convex
-  crests), scree (concave under faces), rock-grass, dry alpine grass, grass, flowering
-  meadows, undergrowth and forest floor (forest density), moss and mud (wet), sand (shore),
-  earth (trail fringe, cuts). Each material's tone is chosen continuously along its ramp by
-  large patches, curvature and wetness; faces average their corners with a tiny shade step.
-  The trail band blends in over 0.8 m. Time-of-day and weather themes recolour the palette.
-  The dominant material is also the physics surface (what you see is what you drive on).
-- **Props** (`world/props.ts`): streamed per 320 m cell, one `InstancedMesh` per type per
-  cell, cheap far cones beyond `treeDetailDistance`, colliders added and removed with their
-  cell. Rock shapes: faceted boulders, layered slabs, leaning crags, rounded stream boulders.
+  faces are power-of-two multiples, ≤ 1.45 × the target). Under the triangle budget
+  (1.8 M / 1.3 M / 0.65 M) the far rings shrink first (`farScale`), the near ones only last
+  (`nearScale`). Coarser ancestors stand in until finer patches arrive; skirts lit like the
+  ground above hide cracks.
+- **Patch building** (`terrain/patchBuilder.ts`, pure): vertices on the grid moved by a
+  deterministic **XZ jitter** (≤ 25 % of a cell, from the global grid index, only along the
+  border on patch edges, so neighbours share it) and sampled on the true surface; quads split
+  along the diagonal giving the better shaped triangles (ties: along the contour lines); on
+  the finest level, **edges steeper than 25°** get a midpoint on the surface and their cells
+  a centre vertex, fanned into 5–8 triangles (> 90 % of triangles under 3:1 edge ratio even
+  on 42° slopes; the split belongs to the edge, so there are no cracks). Compact attributes:
+  `Int16` positions in 1/128 of a cell, `Uint8` colours, `Int8` normals; arrays pooled in
+  buckets; built in the worker (time-sliced on the main thread without one).
+- **Colours and AO** (`data/palette.ts`, `terrain/biome.ts`, `terrain/splat.ts`): ramps of
+  tones per material; `BiomeModel.weights()` gives smooth weights (snow line, aspect, slope
+  over ±3 m — the same at every LOD — curvature, wetness, forest density, trail fringe).
+  Each material's tone moves along its ramp with low-frequency patches only (≈ 10–40 m and
+  larger): no per-face noise; faces average their corners. Rock emerges with a wide
+  smoothstep in warm greys and ochre. **Baked ambient occlusion** per vertex compares the
+  height with two rings of the heightmap (hollows and the foot of slopes darker) and darkens
+  the trail edges, bounded by `config.world.ao.strength`.
+- **Far field** (`terrain/farField.ts`): one indexed mesh from the quadtree's edge to
+  20 / 16 / 12 km (112 / 128 / 192 m grid), built in the worker: the real terrain near the
+  map, then the same landforms evaluated analytically plus the `farRanges` of the mountain and
+  a broad ridged noise. The grid is aligned to the quadtree edge (cells inside are skipped)
+  and the real terrain is kept past it, so the two meet without seams. Coloured by altitude
+  and slope from the palette, flat shaded from derivatives.
+- **Atmosphere** (`world/atmosphere.ts`): three.js' fog chunks are replaced for every
+  material: **aerial perspective** (exponential with distance: lighter, less saturated, shifted
+  to the sky's horizon colour — overlapping ridges read as tone steps, no hard band) and
+  **height fog** integrated analytically along the view ray (dense in the valleys, thin on the
+  crests). One set of shared uniforms updated per frame, driven by time and weather themes.
+  The sky has a sun halo and horizon glow; clouds float on three layers (high, at the summit,
+  low banks below it) and take the haze.
+- **Vegetation** (`data/vegetation.ts`, `world/propPlacement.ts`, `world/props.ts`):
+  species are data (beech, spruce, pine, larch, dwarf pine: realistic heights per age,
+  crown width, altitude band, wetness, colours). Trees sit on a **global Poisson disk** (a
+  jittered grid whose candidates yield to higher-priority ones closer than the minimum
+  distance: seamless across cells) accepted by an ecological density — the forest density
+  of the biome model raised to a clumping exponent and drawn by a low-frequency cluster
+  noise — so woods are compact, glades open, edges soft, and trees shrink and thin out at
+  the tree line; never on trails, in water or on slopes over ~40°. Three LODs cross-fade with
+  an ordered dither on the instance distance: full models per cell near the jeep
+  (destructible; colliders only within `colliderRadius`), simplified crowns in the middle
+  range and merged canopy masses far away in a few global instanced meshes. Undergrowth
+  (bushes, grass tufts, ferns, flowers, logs, stumps) by habitat, near the jeep only, growing
+  in with distance. Limits per preset (8000 / 5000 / 3000 trees) shrink the middle range.
+  Rocks: outcrops, talus, stream beds, a few trailside stones (~120 per km²).
 - **Structures** (`world/structures.ts`): waymarks, cairns, signs, fences, footbridges, the
   village houses and the summit overlook, each a single instanced draw call.
 
@@ -326,10 +367,14 @@ writes only `textContent`/`transform`.
 
 ## 12. Performance strategy
 
-- Terrain: generation and patch building in a Web Worker, compact attributes, pooled
-  buffers, a triangle budget per preset (rings shrink, faces keep their size), frustum
-  culling per patch, fog over the far LODs.
-- Props as `InstancedMesh` per cell, near/far variants, cells streamed around the camera.
+- Terrain: generation, patch building, far field and props placement in a Web Worker,
+  compact attributes, pooled buffers, a triangle budget per preset (far rings shrink first,
+  faces keep their size), steep-edge refinement only on the finest level, frustum culling
+  per patch; the far field is one draw call.
+- Vegetation: detailed trees only near the jeep (per cell), the middle and far layers in a
+  few global instanced meshes rebuilt only when cells change, dithered LOD cross-fades,
+  undergrowth near the jeep only, tree limits per preset, colliders only near the jeep.
+- Atmosphere: computed in the existing fog step of every shader (a few ALU, no extra pass).
 - Shadows: one directional light following the jeep, map size from the preset.
 - Dynamic resolution within `[0.55, 1]` × capped pixel ratio; "Auto" quality steps the preset
   down/up and records the level it settles on in Settings for the next start.
@@ -351,10 +396,16 @@ Vitest:
   preset, patch skirts and exact grid positions;
 - trails: spacing, grade (average and over 20 m windows), minimum bend radius, shallow fords,
   width range, surface variety and lay-bys, query vs brute force;
-- props: rock density (≤ 30 % of the old one), rocks with a reason, nothing on trail bands,
-  forests on slopes rather than flats;
+- relief: slope and curvature variation in every 200 m window outside the declared flats;
+- mesh: LOD0 face size, > 90 % of triangles under a 3:1 edge ratio on steep ground, vertices
+  on the true surface, jittered borders shared by neighbouring patches;
+- far field: height at the quadtree edge equal to the terrain, continuity outwards, extent;
+- props: rock density, trees never on trails, in water or on slopes over ~40°, Poisson
+  minimum distance (also across cells), clustered density (variance/mean ≫ 1, glades),
+  realistic height distribution, tree and canopy limits per preset, colliders only near the
+  jeep;
 - palette: valid ramps, every material/surface colour declared, splat colours within the
-  palette and smooth between neighbouring vertices;
+  palette, smooth between neighbouring vertices and faces, AO within its range;
 - tyre tracks: capacity, ring order, pooling, dirty ranges, ground-following vertices, none in
   water;
 - drivability: a bot drives every mountain's whole main trail with the real jeep physics, no
@@ -365,4 +416,5 @@ Vitest:
 `scripts/e2e-screenshots.mjs` drives the built game with Playwright on desktop (1280×720) and
 mobile landscape (844×390): menu → garage with the test coins (buys an upgrade, a paint and an
 accessory) → summit → trail → off-trail with tyre tracks → trees (desktop) → results, failing
-on console errors, and captures the README screenshots.
+on console errors, and captures the README screenshots. `scripts/compare-screenshots.mjs`
+captures fixed viewpoints (same seed, trail position and camera) for before/after comparisons.

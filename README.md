@@ -21,15 +21,34 @@ follows the repository name, e.g. `/mountain-drop/` if the repository is renamed
 | **Mobile (landscape, touch)**                  | **Mobile off-road**                                     |
 | ![Mobile](docs/screenshots/mobile-drive.png)   | ![Mobile off-road](docs/screenshots/mobile-offroad.png) |
 
+### Before / after (landscape update, same seed, position and camera)
+
+| Before                                                               | After                                                              |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| ![Summit before](docs/screenshots/compare-before-desktop-summit.png) | ![Summit after](docs/screenshots/compare-after-desktop-summit.png) |
+| ![Slope before](docs/screenshots/compare-before-desktop-slope.png)   | ![Slope after](docs/screenshots/compare-after-desktop-slope.png)   |
+| ![Valley before](docs/screenshots/compare-before-desktop-valley.png) | ![Valley after](docs/screenshots/compare-after-desktop-valley.png) |
+| ![Mobile before](docs/screenshots/compare-before-mobile-slope.png)   | ![Mobile after](docs/screenshots/compare-after-mobile-slope.png)   |
+
 ## Features
+
+- **Distant ranges and atmosphere**: a far-field ring of terrain to ~20 km built from the
+  same landforms plus distant ranges in the data; aerial perspective (ridges fade into the
+  sky's blue in tone steps) and height fog thick in the valleys, sun halo, clouds on three
+  layers — no painted backdrop, no fog band.
+- **Real forests**: tree species with realistic heights (6–25 m), Poisson-disk woods with
+  glades and soft edges by ecology, larches and dwarf pines at the tree line, undergrowth
+  near the jeep, canopy masses far away, dithered LOD transitions.
 
 - **A designed, organic mountain**: data-driven landforms (crests, valleys, cirques,
   terraces, high meadows, saddles, steep faces, foothills, lake basin) blended with smooth
   min/max, baked into a heightmap and eroded (talus, thermal, flow routing and stream
   incision) in a Web Worker. About a quarter of the ground is flat, most of it gentle or
   medium, a quarter steep, almost no walls.
-- **Small faces**: ~1 m flat-shaded triangles around the jeep (1.5 / 2.5 m on medium / low),
-  coarser rings farther away, a triangle budget per quality level.
+- **Small, well-shaped faces**: ~0.85 m flat-shaded triangles around the jeep (1.25 / 2 m on
+  medium / low), jittered so no stripes show, refined on steep slopes; varied relief by zone
+  (spurs, terraces, gullies, hummocks, moraines); smooth low-frequency colours with baked
+  ambient occlusion.
 - **Organic trails carved into the terrain**: minimum-cost routing that follows contours,
   terraces, saddles and valley floors; hairpins only where needed; 4–7 m wide with lay-bys
   and viewpoints, camber, ditches and embankments; packed dirt, gravel, grassy two-tracks,
@@ -90,6 +109,8 @@ npm run e2e       # Playwright smoke test + screenshots (needs `npm run preview`
 Debug helpers: `?autopilot` (the built-in driver follows the main trail), `?e2e` (skips the
 fly-over and exposes `window.__md`), **F3** (FPS / draw-call overlay), **F4** in dev builds or
 with `?debug` (map of slopes, trails, fords, landforms and the jeep).
+`node scripts/compare-screenshots.mjs <label>` captures fixed viewpoints (needs the preview
+server) for before/after comparisons.
 
 ## Tuning
 
