@@ -1,3 +1,4 @@
+import { config } from '../src/config';
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
 import { cars } from '../src/data/cars';
@@ -70,12 +71,33 @@ describe.each(cars.map((c) => [c.id, c] as const))('handling: %s', (_id, def) =>
     expect(lat).toBeGreaterThan(10);
   });
 
-  it('tops out like an off-roader on the flat (90–125 km/h)', () => {
-    const car = fresh(def, 0);
-    const input: DriveInput = { throttle: 1, brake: 0, steer: 0, handbrake: false, nitro: false };
-    for (let i = 0; i < 120 * 40; i++) car.step(dt, input, flat);
-    expect(car.speed * 3.6).toBeGreaterThan(90);
-    expect(car.speed * 3.6).toBeLessThan(125);
+  it('tops out 35 % faster than the off-roader baseline on the flat', () => {
+    const drv = config.driving as { speedScale: number };
+    const top = (k: number): number => {
+      const saved = drv.speedScale;
+      drv.speedScale = k;
+      try {
+        const car = fresh(def, 0);
+        const input: DriveInput = {
+          throttle: 1,
+          brake: 0,
+          steer: 0,
+          handbrake: false,
+          nitro: false,
+        };
+        for (let i = 0; i < 120 * 90; i++) car.step(dt, input, flat);
+        return car.speed * 3.6;
+      } finally {
+        drv.speedScale = saved;
+      }
+    };
+    const base = top(1);
+    const now = top(config.driving.speedScale);
+    // Baseline: an off-roader (90–125 km/h); now about 35 % more.
+    expect(base).toBeGreaterThan(90);
+    expect(base).toBeLessThan(125);
+    expect(now / base).toBeGreaterThan(1.3);
+    expect(now / base).toBeLessThan(1.4);
   });
 
   it('drifts on a handbrake flick and recovers without spinning', () => {

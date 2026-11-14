@@ -51,6 +51,11 @@ export const config = {
     handbrakeYaw: 2.2,
     /** Yaw torque assist while drifting, makes drifts easier to hold (N·m per rad of slip). */
     driftAssist: 2.0,
+    /**
+     * Global speed multiplier of every jeep: engine power × k and aerodynamic drag ÷ k², so
+     * the top speed (power-limited, v³ ∝ power / drag) scales by k. 1.35 = 35 % faster.
+     */
+    speedScale: 1.35,
     /** Global grip multiplier – raise for more control, lower for more chaos. */
     gripScale: 1.05,
     /** Rolling resistance coefficient. */

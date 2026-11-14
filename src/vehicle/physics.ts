@@ -410,7 +410,7 @@ export class VehiclePhysics {
       if (w.driven) {
         const drivenCount = def.engine.drive === 'awd' ? 4 : 2;
         const engineF = Math.min(
-          def.engine.power / Math.max(Math.abs(vFwd), 6),
+          (def.engine.power * drv.speedScale) / Math.max(Math.abs(vFwd), 6),
           def.engine.maxForce,
         );
         if (input.throttle > 0) fx += (input.throttle * engineF * tractionAssist) / drivenCount;
@@ -473,7 +473,8 @@ export class VehiclePhysics {
       // Over crests the stick lingers briefly; on long jumps it fades out completely.
       this.stick = Math.max(0, this.stick - dt / config.physics.stickAirDecay);
     }
-    force.addScaledVector(this.velocity, -def.aero.drag * speed);
+    const k = config.driving.speedScale;
+    force.addScaledVector(this.velocity, (-def.aero.drag / (k * k)) * speed);
     if (this.nitroActive) force.addScaledVector(fwd, def.nitro.force);
 
     // --- Engine telemetry (for sound): automatic gearbox ------------------------------------

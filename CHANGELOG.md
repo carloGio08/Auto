@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Every jeep is 35 % faster (`config.driving.speedScale`: engine power × 1.35, drag ÷ 1.35²).
+
 ## [2.1.0] - 2026-11-14
 
 Terrain update: an organic, designed mountain with smaller faces, organic trails, richer

@@ -101,6 +101,7 @@ The most useful knobs for the driving feel:
 
 | Parameter                                              | Effect                                                     |
 | ------------------------------------------------------ | ---------------------------------------------------------- |
+| `driving.speedScale`                                   | Speed of every jeep (1.35 = 35 % faster top speed).        |
 | `driving.gripScale` / jeep `tires.grip`                | Overall grip: raise for control, lower for slides.         |
 | `driving.slideFactor` / `slideFalloff`                 | How much grip is left past the peak (tolerance of slides). |
 | `driving.handbrakeGrip` / `handbrakeYaw`               | How eagerly the tail steps out on the handbrake.           |
