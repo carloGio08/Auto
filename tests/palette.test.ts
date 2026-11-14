@@ -6,6 +6,8 @@ import { Course } from '../src/terrain/course';
 import { mountains } from '../src/data/mountains';
 import { TerrainColorer, toPatchPalette, type VertexInfo } from '../src/terrain/splat';
 import { Rng } from '../src/math/rng';
+import { buildPatch } from '../src/terrain/patchBuilder';
+import { config } from '../src/config';
 
 describe('palette', () => {
   it('declares ramps of valid colours, a few dozen in all', () => {
@@ -76,5 +78,63 @@ describe('palette', () => {
     jumps.sort((a, b) => a - b);
     // No hard bands: between vertices 1 m apart the colour changes only a little.
     expect(jumps[Math.floor(jumps.length * 0.99)]).toBeLessThan(0.12);
+  });
+
+  it('keeps neighbouring faces close in colour (no per-face noise) off the trails', () => {
+    const course2 = new Course(mountains[0]);
+    const pal2 = toPatchPalette(resolvePalette(defaultPalette));
+    const n = 48;
+    const cell = 1;
+    const jumps: number[] = [];
+    for (const [x0, z0] of [
+      [-900, 300],
+      [700, -900],
+      [1200, 1500],
+    ]) {
+      const r = buildPatch(course2.terrain, pal2, { key: 1, gen: 0, x0, z0, size: n * cell, n });
+      const c = r.color;
+      const tris = r.count / 3 - n * 8;
+      for (let t = 1; t < tris; t++) {
+        // Consecutive triangles share a cell (or a neighbouring one).
+        const a = t * 9;
+        const b = (t - 1) * 9;
+        const x = x0 + r.position[a] * r.unit;
+        const z = z0 + r.position[a + 2] * r.unit;
+        course2.terrain.height(x, z);
+        const q = course2.terrain.lastQuery;
+        if (q.found && q.distance < q.halfWidth + 4) continue;
+        jumps.push(
+          Math.max(
+            Math.abs(c[a] - c[b]),
+            Math.abs(c[a + 1] - c[b + 1]),
+            Math.abs(c[a + 2] - c[b + 2]),
+          ) / 255,
+        );
+      }
+    }
+    jumps.sort((p, q) => p - q);
+    expect(jumps[Math.floor(jumps.length * 0.99)]).toBeLessThan(0.08);
+  });
+
+  it('bakes ambient occlusion within its configured range', () => {
+    const course2 = new Course(mountains[0]);
+    const colorer = new TerrainColorer(
+      course2.terrain,
+      toPatchPalette(resolvePalette(defaultPalette)),
+    );
+    const rng = new Rng(11);
+    let lo = 1;
+    let hi = 0;
+    for (let i = 0; i < 3000; i++) {
+      const ao = colorer.occlusion(rng.range(-3000, 3000), rng.range(-3000, 3000), 1e4);
+      lo = Math.min(lo, ao);
+      hi = Math.max(hi, ao);
+    }
+    expect(lo).toBeGreaterThanOrEqual(1 - config.world.ao.strength - 1e-6);
+    expect(hi).toBeLessThanOrEqual(1);
+    // It actually varies: hollows darker than open ground.
+    expect(hi - lo).toBeGreaterThan(config.world.ao.strength * 0.4);
+    // Beside a trail it darkens.
+    expect(colorer.occlusion(0, 0, 0.5)).toBeLessThan(colorer.occlusion(0, 0, 10));
   });
 });

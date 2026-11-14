@@ -31,15 +31,19 @@ export class FarHeight {
   private readonly inner: number;
   private readonly outer: number;
 
-  constructor(private readonly course: Course) {
+  /** @param hole half size of the quadtree area: the real terrain is kept up to past it. */
+  constructor(
+    private readonly course: Course,
+    hole = 0,
+  ) {
     const def = course.def;
     this.field = new LandformField({
       ...def,
       landforms: [...def.landforms, ...(def.farRanges ?? [])],
     });
     this.noise = new Simplex2(def.seed ^ 0xfa4f);
-    this.outer = heightmapHalfExtent(def) - 60;
-    this.inner = this.outer - 400;
+    this.outer = heightmapHalfExtent(def) - 20;
+    this.inner = Math.min(this.outer - 60, Math.max(hole + 40, this.outer - 400));
   }
 
   height(x: number, z: number): number {
@@ -64,7 +68,7 @@ export function buildFarField(
   palette: PatchPalette,
   req: FarFieldRequest,
 ): FarFieldArrays {
-  const fh = new FarHeight(course);
+  const fh = new FarHeight(course, req.hole);
   const k = Math.max(1, Math.round(req.hole / req.spacing));
   const s = req.hole / k;
   const half = Math.ceil(req.extent / s);
