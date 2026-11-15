@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Mobile: a steer (or any touch) button stayed stuck on after pressing it and sliding the
+  finger off before lifting it. Releases are now heard on the whole window, and stale touches
+  are cleared when the last finger lifts, when a new first touch starts, and when the page
+  loses focus or is hidden. Checked in the mobile e2e run.
+
 ## [2.4.0] - 2026-11-14
 
 Richness update: no bland zones. Diagnosis in `docs/bland-zones-diagnosis.md`, sweep in

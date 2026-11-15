@@ -4,6 +4,13 @@ import type { InputManager, InputSource, RawInput } from './inputManager';
 /**
  * On-screen touch controls. The HUD creates buttons with `data-touch="<action>"`; this source
  * tracks every active pointer (multitouch) and which button it is over.
+ *
+ * Presses start on the buttons, but releases are listened for on the whole window: the HUD
+ * layer lets touches through everywhere except on the buttons, so a finger that slides off a
+ * button and lifts over the game would otherwise never report its release and the action
+ * would stay held. Safety nets clear stale pointers when the last finger lifts (touchend with
+ * no touches left), when a new primary pointer starts, and when the page loses focus or is
+ * hidden.
  */
 export class TouchSource implements InputSource {
   readonly id = 'touch';
@@ -17,11 +24,14 @@ export class TouchSource implements InputSource {
     private readonly root: HTMLElement,
   ) {
     root.addEventListener('pointerdown', this.onDown, { passive: false });
-    root.addEventListener('pointermove', this.onMove, { passive: false });
-    root.addEventListener('pointerup', this.onUp);
-    root.addEventListener('pointercancel', this.onUp);
-    root.addEventListener('lostpointercapture', this.onUp);
     root.addEventListener('contextmenu', this.prevent);
+    window.addEventListener('pointermove', this.onMove, { passive: false, capture: true });
+    window.addEventListener('pointerup', this.onUp, true);
+    window.addEventListener('pointercancel', this.onUp, true);
+    window.addEventListener('touchend', this.onTouchEnd, true);
+    window.addEventListener('touchcancel', this.onTouchEnd, true);
+    window.addEventListener('blur', this.releaseAll);
+    document.addEventListener('visibilitychange', this.onVisibility);
   }
 
   private readonly prevent = (e: Event): void => e.preventDefault();
@@ -45,6 +55,8 @@ export class TouchSource implements InputSource {
     if (!a) return;
     e.preventDefault();
     this.manager.lastDevice = 'touch';
+    // A primary pointer means no other finger is down: anything still recorded is stale.
+    if (e.isPrimary) this.pointers.clear();
     this.pointers.set(e.pointerId, a);
     this.tapped.add(a);
     try {
@@ -70,6 +82,27 @@ export class TouchSource implements InputSource {
     if (this.pointers.delete(e.pointerId)) this.setActive();
   };
 
+  /** Some mobile browsers drop pointer events: no touches left means nothing is held. */
+  private readonly onTouchEnd = (e: TouchEvent): void => {
+    if (e.touches.length === 0) this.releaseAll();
+  };
+
+  private readonly onVisibility = (): void => {
+    if (document.hidden) this.releaseAll();
+  };
+
+  /** Releases every held button (focus lost, page hidden, all fingers lifted). */
+  readonly releaseAll = (): void => {
+    if (this.pointers.size === 0) return;
+    this.pointers.clear();
+    this.setActive();
+  };
+
+  /** Actions currently held by a finger (tests, debugging). */
+  get held(): ActionId[] {
+    return [...this.pointers.values()];
+  }
+
   update(_dt: number, out: RawInput): void {
     for (const a of this.tapped) if (![...this.pointers.values()].includes(a)) out.held.add(a);
     this.tapped.clear();
@@ -90,11 +123,14 @@ export class TouchSource implements InputSource {
 
   dispose(): void {
     this.root.removeEventListener('pointerdown', this.onDown);
-    this.root.removeEventListener('pointermove', this.onMove);
-    this.root.removeEventListener('pointerup', this.onUp);
-    this.root.removeEventListener('pointercancel', this.onUp);
-    this.root.removeEventListener('lostpointercapture', this.onUp);
     this.root.removeEventListener('contextmenu', this.prevent);
+    window.removeEventListener('pointermove', this.onMove, true);
+    window.removeEventListener('pointerup', this.onUp, true);
+    window.removeEventListener('pointercancel', this.onUp, true);
+    window.removeEventListener('touchend', this.onTouchEnd, true);
+    window.removeEventListener('touchcancel', this.onTouchEnd, true);
+    window.removeEventListener('blur', this.releaseAll);
+    document.removeEventListener('visibilitychange', this.onVisibility);
     this.pointers.clear();
   }
 }

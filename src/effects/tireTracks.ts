@@ -33,6 +33,8 @@ export class TrackBuffer {
   private next = 0;
   /** Live segments. */
   count = 0;
+  /** Segments laid since creation (monotonic: culling and expiry never lower it). */
+  laid = 0;
   /** Dirty slot range since the last upload (inclusive), -1 when clean. */
   dirtyMin = -1;
   dirtyMax = -1;
@@ -57,6 +59,7 @@ export class TrackBuffer {
       this.next = (this.next + 1) % this.capacity;
     }
     if (!this.alive[i]) this.count++;
+    this.laid++;
     this.alive[i] = 1;
     this.mark(i);
     return i;

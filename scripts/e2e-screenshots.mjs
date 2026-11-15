@@ -107,6 +107,32 @@ async function run(name, viewport, touch) {
   await page.waitForTimeout(touch ? 2500 : 4000);
   await shot('summit');
 
+  // Touch: a steer button pressed, slid off onto the game view and released there must not
+  // stay held (the release happens outside the button).
+  if (touch) {
+    const cdp = await page.context().newCDPSession(page);
+    const btn = page.locator('.tbtn[data-touch="steerLeft"]');
+    const box = await btn.boundingBox();
+    const bx = box.x + box.width / 2;
+    const by = box.y + box.height / 2;
+    const send = (type, x, y) =>
+      cdp.send('Input.dispatchTouchEvent', {
+        type,
+        touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 7 }],
+      });
+    await send('touchStart', bx, by);
+    await page.waitForTimeout(150);
+    if (!(await btn.evaluate((el) => el.classList.contains('active'))))
+      throw new Error(`[${name}] steer button not active while pressed`);
+    await send('touchMove', bx + 150, by - 120);
+    await send('touchMove', viewport.width / 2, viewport.height / 3);
+    await send('touchEnd');
+    await page.waitForTimeout(150);
+    if (await btn.evaluate((el) => el.classList.contains('active')))
+      throw new Error(`[${name}] steer button stuck after sliding off and releasing`);
+    await cdp.detach();
+  }
+
   // On the trail: the autopilot follows the main trail for a while, mid-mountain.
   await page.evaluate(() => window.__md.trail(6000));
   await page.waitForTimeout(touch ? 6000 : 8000);
@@ -115,8 +141,9 @@ async function run(name, viewport, touch) {
   // Off the trail: full throttle across the slope, tyre tracks must be laid in the grass.
   await page.evaluate(() => window.__md.offroad(9800, 45));
   await page.waitForTimeout(2500);
+  // Segments laid (monotonic: far-away tracks culled meanwhile do not count against it).
   const laidBefore = await page.evaluate(
-    () => window.__md.session.effects.tracks?.buffer.count ?? 0,
+    () => window.__md.session.effects.tracks?.buffer.laid ?? 0,
   );
   await page.keyboard.down('KeyW');
   await page.waitForTimeout(3500);
@@ -128,7 +155,7 @@ async function run(name, viewport, touch) {
   await page.waitForTimeout(700);
   await shot('offroad');
   await page.keyboard.up('KeyW');
-  const laid = await page.evaluate(() => window.__md.session.effects.tracks?.buffer.count ?? 0);
+  const laid = await page.evaluate(() => window.__md.session.effects.tracks?.buffer.laid ?? 0);
   if (laid <= laidBefore + 10)
     throw new Error(`[${name}] no tyre tracks laid (${laidBefore} → ${laid})`);
 
